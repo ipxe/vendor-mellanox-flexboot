@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014-2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -521,6 +526,7 @@ void ib_refill_recv ( struct ib_device *ibdev, struct ib_queue_pair *qp ) {
 		/* Allocate I/O buffer */
 		iobuf = qp->op->alloc_iob ( IB_MAX_PAYLOAD_SIZE );
 		if ( ! iobuf ) {
+			DBGC ( ibdev, "IBDEV %p failed to allocate new buffer\n", ibdev );
 			/* Non-fatal; we will refill on next attempt */
 			return;
 		}
@@ -622,7 +628,7 @@ int ib_open ( struct ib_device *ibdev ) {
 		       ibdev, strerror ( rc ) );
 		goto err_open;
 	}
-
+#if 0
 	/* Create subnet management interface */
 	ibdev->smi = ib_create_mi ( ibdev, IB_QPT_SMI );
 	if ( ! ibdev->smi ) {
@@ -637,7 +643,7 @@ int ib_open ( struct ib_device *ibdev ) {
 		       ibdev, strerror ( rc ) );
 		goto err_create_sma;
 	}
-
+#endif
 	/* Create general services interface */
 	ibdev->gsi = ib_create_mi ( ibdev, IB_QPT_GSI );
 	if ( ! ibdev->gsi ) {
@@ -654,13 +660,15 @@ int ib_open ( struct ib_device *ibdev ) {
 
 	assert ( ibdev->open_count == 1 );
 	return 0;
-
+#if 0
 	ib_destroy_mi ( ibdev, ibdev->gsi );
  err_create_gsi:
 	ib_destroy_sma ( ibdev, ibdev->smi );
  err_create_sma:
 	ib_destroy_mi ( ibdev, ibdev->smi );
  err_create_smi:
+#endif
+ err_create_gsi:
 	ibdev->op->close ( ibdev );
  err_open:
 	assert ( ibdev->open_count == 1 );
@@ -683,8 +691,10 @@ void ib_close ( struct ib_device *ibdev ) {
 		ib_notify ( ibdev );
 		list_del ( &ibdev->open_list );
 		ib_destroy_mi ( ibdev, ibdev->gsi );
+#if 0
 		ib_destroy_sma ( ibdev, ibdev->smi );
 		ib_destroy_mi ( ibdev, ibdev->smi );
+#endif
 		ibdev->op->close ( ibdev );
 		ibdev->port_state = IB_PORT_STATE_DOWN;
 	}
@@ -745,13 +755,13 @@ int ib_mcast_attach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
  */
 void ib_mcast_detach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
 		       union ib_gid *gid ) {
-	struct ib_multicast_gid *mgid;
+	struct ib_multicast_gid *mgid, *tmp;
 
 	/* Remove from hardware multicast GID list */
 	ibdev->op->mcast_detach ( ibdev, qp, gid );
 
 	/* Remove from software multicast GID list */
-	list_for_each_entry ( mgid, &qp->mgids, list ) {
+	list_for_each_entry_safe ( mgid, tmp, &qp->mgids, list ) {
 		if ( memcmp ( &mgid->gid, gid, sizeof ( mgid->gid ) ) == 0 ) {
 			list_del ( &mgid->list );
 			free ( mgid );
@@ -902,9 +912,10 @@ struct ib_device * alloc_ibdev ( size_t priv_size ) {
 		INIT_LIST_HEAD ( &ibdev->open_list );
 		INIT_LIST_HEAD ( &ibdev->cqs );
 		INIT_LIST_HEAD ( &ibdev->qps );
-		ibdev->port_state = IB_PORT_STATE_DOWN;
-		ibdev->lid = IB_LID_NONE;
-		ibdev->pkey = IB_PKEY_DEFAULT;
+		ibdev->port_state	= IB_PORT_STATE_DOWN;
+		ibdev->lid			= IB_LID_NONE;
+		ibdev->pkey			= IB_PKEY_DEFAULT;
+		ibdev->pkey_index	= IB_PKEY_DEFAULT_IDX;
 	}
 	return ibdev;
 }
@@ -994,6 +1005,12 @@ struct ib_device * last_opened_ibdev ( void ) {
 	assert ( ibdev->open_count != 0 );
 	return ibdev;
 }
+
+/* Drag in objects via register_ibdev() */
+REQUIRING_SYMBOL ( register_ibdev );
+
+/* Drag in Infiniband configuration */
+REQUIRE_OBJECT ( config_infiniband );
 
 /* Drag in IPoIB */
 REQUIRE_OBJECT ( ipoib );

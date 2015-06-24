@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <time.h>
@@ -160,6 +160,41 @@ struct asn1_builder_header {
 	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
 	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 1 )
 
+/** ASN.1 OID for id-sha384 (2.16.840.1.101.3.4.2.2) */
+#define ASN1_OID_SHA384						\
+	ASN1_OID_INITIAL ( 2, 16 ), ASN1_OID_DOUBLE ( 840 ),	\
+	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 101 ),		\
+	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
+	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 2 )
+
+/** ASN.1 OID for id-sha512 (2.16.840.1.101.3.4.2.3) */
+#define ASN1_OID_SHA512						\
+	ASN1_OID_INITIAL ( 2, 16 ), ASN1_OID_DOUBLE ( 840 ),	\
+	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 101 ),		\
+	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
+	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 3 )
+
+/** ASN.1 OID for id-sha224 (2.16.840.1.101.3.4.2.4) */
+#define ASN1_OID_SHA224						\
+	ASN1_OID_INITIAL ( 2, 16 ), ASN1_OID_DOUBLE ( 840 ),	\
+	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 101 ),		\
+	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
+	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 4 )
+
+/** ASN.1 OID for id-sha512-224 (2.16.840.1.101.3.4.2.5) */
+#define ASN1_OID_SHA512_224						\
+	ASN1_OID_INITIAL ( 2, 16 ), ASN1_OID_DOUBLE ( 840 ),	\
+	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 101 ),		\
+	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
+	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 5 )
+
+/** ASN.1 OID for id-sha512-256 (2.16.840.1.101.3.4.2.6) */
+#define ASN1_OID_SHA512_256						\
+	ASN1_OID_INITIAL ( 2, 16 ), ASN1_OID_DOUBLE ( 840 ),	\
+	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 101 ),		\
+	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 4 ),		\
+	ASN1_OID_SINGLE ( 2 ), ASN1_OID_SINGLE ( 6 )
+
 /** ASN.1 OID for commonName (2.5.4.3) */
 #define ASN1_OID_COMMON_NAME					\
 	ASN1_OID_INITIAL ( 2, 5 ), ASN1_OID_SINGLE ( 4 ),	\
@@ -221,6 +256,11 @@ struct asn1_builder_header {
 	ASN1_OID_SINGLE ( 1 ), ASN1_OID_SINGLE ( 5 ),		\
 	ASN1_OID_SINGLE ( 5 ), ASN1_OID_SINGLE ( 7 ),		\
 	ASN1_OID_SINGLE ( 3 ), ASN1_OID_SINGLE ( 9 )
+
+/** ASN.1 OID for id-ce-subjectAltName (2.5.29.17) */
+#define ASN1_OID_SUBJECTALTNAME					\
+	ASN1_OID_INITIAL ( 2, 5 ), ASN1_OID_SINGLE ( 29 ),	\
+	ASN1_OID_SINGLE ( 17 )
 
 /** Define an ASN.1 cursor containing an OID */
 #define ASN1_OID_CURSOR( oid_value ) {				\

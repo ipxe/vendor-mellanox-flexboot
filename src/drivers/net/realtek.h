@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/spi.h>
 #include <ipxe/spi_bit.h>
@@ -140,6 +140,7 @@ enum realtek_legacy_status {
 
 /** Receive (Rx) Configuration Register (dword) */
 #define RTL_RCR 0x44
+#define RTL_RCR_STOP_WORKING	0x01000000UL /**< Here be dragons */
 #define RTL_RCR_RXFTH(x)	( (x) << 13 ) /**< Receive FIFO threshold */
 #define RTL_RCR_RXFTH_MASK	RTL_RCR_RXFTH ( 0x7 )
 #define RTL_RCR_RXFTH_DEFAULT	RTL_RCR_RXFTH ( 0x7 /* Whole packet */ )

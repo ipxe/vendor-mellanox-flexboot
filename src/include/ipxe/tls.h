@@ -7,7 +7,7 @@
  * Transport Layer Security Protocol
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/refcnt.h>
@@ -241,8 +241,8 @@ struct tls_session {
 	struct digest_algorithm *handshake_digest;
 	/** Digest algorithm context used for handshake verification */
 	uint8_t *handshake_ctx;
-	/** Public-key algorithm used for Certificate Verify (if sent) */
-	struct pubkey_algorithm *verify_pubkey;
+	/** Client certificate (if used) */
+	struct x509_certificate *cert;
 
 	/** Server certificate chain */
 	struct x509_chain *chain;

@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/tables.h>
@@ -47,6 +47,8 @@ struct setting {
 	 * indicates a DHCPv4 option setting.
 	 */
 	const struct settings_scope *scope;
+	/** Show/Hide this setting in the TUI */
+	int hidden;
 };
 
 /** Configuration setting table */
@@ -74,6 +76,7 @@ struct setting {
 #define SETTING_AUTH_EXTRA	12 /**< Authentication additional settings */
 #define SETTING_CRYPTO		13 /**< Cryptography settings */
 #define SETTING_MISC		14 /**< Miscellaneous settings */
+#define SETTING_FLEXBOOT	15 /**< Hermon settings */
 
 /** @} */
 
@@ -140,6 +143,8 @@ struct settings {
 	struct settings_operations *op;
 	/** Default scope for numerical settings constructed for this block */
 	const struct settings_scope *default_scope;
+	/** Show/Hide this settings block in the TUI */
+	int hidden;
 };
 
 /**
@@ -315,6 +320,9 @@ extern int setting_applies ( struct settings *settings,
 extern int store_setting ( struct settings *settings,
 			   const struct setting *setting,
 			   const void *data, size_t len );
+extern int fetch_setting_origin ( struct settings *settings,
+				  const struct setting *setting,
+				  struct settings **origin );
 extern int fetch_setting ( struct settings *settings,
 			   const struct setting *setting,
 			   struct settings **origin, struct setting *fetched,
@@ -367,7 +375,7 @@ extern struct settings * find_child_settings ( struct settings *parent,
 extern struct settings * autovivify_child_settings ( struct settings *parent,
 						     const char *name );
 extern const char * settings_name ( struct settings *settings );
-extern struct settings * find_settings ( const char *name );
+extern struct settings * find_settings ( struct settings *setting, const char *name );
 extern struct setting * find_setting ( const char *name );
 extern int parse_setting_name ( char *name, get_child_settings_t get_child,
 				struct settings **settings,
@@ -415,6 +423,7 @@ extern const struct setting_type setting_type_uint32 __setting_type;
 extern const struct setting_type setting_type_hex __setting_type;
 extern const struct setting_type setting_type_hexhyp __setting_type;
 extern const struct setting_type setting_type_hexraw __setting_type;
+extern const struct setting_type setting_type_base64 __setting_type;
 extern const struct setting_type setting_type_uuid __setting_type;
 extern const struct setting_type setting_type_busdevfn __setting_type;
 extern const struct setting_type setting_type_dnssl __setting_type;
@@ -451,6 +460,15 @@ extern const struct setting
 busid_setting __setting ( SETTING_NETDEV, busid );
 extern const struct setting
 user_class_setting __setting ( SETTING_HOST_EXTRA, user-class );
+
+extern const struct setting
+uriboot_retry_delay_setting __setting ( SETTING_BOOT_EXTRA, uriboot_retry_delay );
+extern const struct setting
+uriboot_retry_setting __setting ( SETTING_BOOT_EXTRA, uriboot_retry );
+extern const struct setting
+network_wait_to_setting __setting ( SETTING_BOOT_EXTRA, network_wait_to );
+extern const struct setting
+promisc_vlan_setting __setting ( SETTING_NETDEV_EXTRA, promisc_vlan );
 
 /**
  * Initialise a settings block

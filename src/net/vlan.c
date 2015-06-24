@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <string.h>
@@ -38,6 +43,13 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 
 FEATURE ( FEATURE_PROTOCOL, "VLAN", DHCP_EB_FEATURE_VLAN, 1 );
+
+const struct setting
+promisc_vlan_setting __setting ( SETTING_NETDEV_EXTRA, promisc_vlan ) = {
+	.name = "promisc_vlan_setting",
+	.description = "Promisuous VLAN enable/disable",
+	.type = &setting_type_int8,
+};
 
 struct net_protocol vlan_protocol __net_protocol;
 
@@ -210,6 +222,26 @@ struct net_device * vlan_find ( struct net_device *trunk, unsigned int tag ) {
 }
 
 /**
+ * Check if vlan is present
+ *
+ * @v trunk             Trunk network device
+ * @ret rc              VLAN device if present, NULL if not present
+ */
+struct net_device* vlan_present ( struct net_device *trunk ) {
+	struct net_device *netdev;
+	struct vlan_device *vlan;
+
+	for_each_netdev ( netdev ) {
+		if ( netdev->op != &vlan_operations )
+			continue;
+		vlan = netdev->priv;
+		if ( vlan->trunk == trunk )
+			return netdev;
+	}
+	return NULL;
+}
+
+/**
  * Process incoming VLAN packet
  *
  * @v iobuf		I/O buffer
@@ -229,6 +261,7 @@ static int vlan_rx ( struct io_buffer *iobuf, struct net_device *trunk,
 	uint8_t ll_source_copy[ETH_ALEN];
 	uint16_t tag;
 	int rc;
+	int promisc_vlan_enabled;
 
 	/* Sanity check */
 	if ( iob_len ( iobuf ) < sizeof ( *vlanhdr ) ) {
@@ -242,10 +275,17 @@ static int vlan_rx ( struct io_buffer *iobuf, struct net_device *trunk,
 	tag = VLAN_TAG ( ntohs ( vlanhdr->tci ) );
 	netdev = vlan_find ( trunk, tag );
 	if ( ! netdev ) {
-		DBGC2 ( trunk, "VLAN %s received packet for unknown VLAN "
-			"%d\n", trunk->name, tag );
-		rc = -EPIPE;
-		goto err_no_vlan;
+		/* When promiscuos VLAN is enabled and the user did not
+		 * configured VLAN manually, then use the trunk */
+		promisc_vlan_enabled = fetch_intz_setting ( netdev_settings ( netdev ), &promisc_vlan_setting );
+		if ( promisc_vlan_enabled ) {
+			netdev = trunk;
+		} else {
+			DBGC2 ( trunk, "VLAN %s received packet for unknown VLAN "
+				"%d\n", trunk->name, tag );
+			rc = -EPIPE;
+			goto err_no_vlan;
+		}
 	}
 
 	/* Strip VLAN header and preserve original link-layer header fields */

@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** @file
  *
@@ -66,6 +70,8 @@ struct uri_resolve_test {
 struct uri_tftp_test {
 	/** Next-server address */
 	struct in_addr next_server;
+	/** Port number */
+	unsigned int port;
 	/** Filename */
 	const char *filename;
 	/** URI */
@@ -330,7 +336,7 @@ static void uri_tftp_okx ( struct uri_tftp_test *test, const char *file,
 	size_t len;
 
 	/* Construct URI */
-	uri = tftp_uri ( test->next_server, test->filename );
+	uri = tftp_uri ( test->next_server, test->port, test->filename );
 	okx ( uri != NULL, file, line );
 	if ( uri ) {
 		uri_okx ( uri, &test->uri, file, line );
@@ -674,7 +680,7 @@ static struct uri_resolve_test uri_fragment = {
 
 /** TFTP URI with absolute path */
 static struct uri_tftp_test uri_tftp_absolute = {
-	{ .s_addr = htonl ( 0xc0a80002 ) /* 192.168.0.2 */ },
+	{ .s_addr = htonl ( 0xc0a80002 ) /* 192.168.0.2 */ }, 0,
 	"/absolute/path",
 	{
 		.scheme = "tftp",
@@ -686,7 +692,7 @@ static struct uri_tftp_test uri_tftp_absolute = {
 
 /** TFTP URI with relative path */
 static struct uri_tftp_test uri_tftp_relative = {
-	{ .s_addr = htonl ( 0xc0a80003 ) /* 192.168.0.3 */ },
+	{ .s_addr = htonl ( 0xc0a80003 ) /* 192.168.0.3 */ }, 0,
 	"relative/path",
 	{
 		.scheme = "tftp",
@@ -698,7 +704,7 @@ static struct uri_tftp_test uri_tftp_relative = {
 
 /** TFTP URI with path containing special characters */
 static struct uri_tftp_test uri_tftp_icky = {
-	{ .s_addr = htonl ( 0x0a000006 ) /* 10.0.0.6 */ },
+	{ .s_addr = htonl ( 0x0a000006 ) /* 10.0.0.6 */ }, 0,
 	"C:\\tftpboot\\icky#path",
 	{
 		.scheme = "tftp",
@@ -706,6 +712,19 @@ static struct uri_tftp_test uri_tftp_icky = {
 		.path = "C:\\tftpboot\\icky#path",
 	},
 	"tftp://10.0.0.6/C%3A\\tftpboot\\icky%23path",
+};
+
+/** TFTP URI with custom port */
+static struct uri_tftp_test uri_tftp_port = {
+	{ .s_addr = htonl ( 0xc0a80001 ) /* 192.168.0.1 */ }, 4069,
+	"/another/path",
+	{
+		.scheme = "tftp",
+		.host = "192.168.0.1",
+		.port = "4069",
+		.path = "/another/path",
+	},
+	"tftp://192.168.0.1:4069/another/path",
 };
 
 /** Current working URI test */
@@ -842,6 +861,7 @@ static void uri_test_exec ( void ) {
 	uri_tftp_ok ( &uri_tftp_absolute );
 	uri_tftp_ok ( &uri_tftp_relative );
 	uri_tftp_ok ( &uri_tftp_icky );
+	uri_tftp_ok ( &uri_tftp_port );
 
 	/* Current working URI tests */
 	uri_churi_ok ( uri_churi );

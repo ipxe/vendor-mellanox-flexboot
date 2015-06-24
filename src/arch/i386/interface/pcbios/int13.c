@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -40,11 +44,13 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/pci.h>
 #include <ipxe/iso9660.h>
 #include <ipxe/eltorito.h>
+#include <ipxe/status_updater.h>
 #include <realmode.h>
 #include <bios.h>
 #include <biosint.h>
 #include <bootsector.h>
 #include <int13.h>
+
 
 /** @file
  *
@@ -1388,6 +1394,8 @@ static __asmcall void int13 ( struct i386_all_regs *ix86 ) {
 		DBGC2 ( int13, "INT13,%02x (%02x): ",
 			ix86->regs.ah, bios_drive );
 
+		status_update ( STATUS_UPDATE_INT13_START );
+
 		switch ( command ) {
 		case INT13_RESET:
 			status = int13_reset ( int13, ix86 );
@@ -1436,6 +1444,8 @@ static __asmcall void int13 ( struct i386_all_regs *ix86 ) {
 			status = -INT13_STATUS_INVALID;
 			break;
 		}
+
+		status_update ( STATUS_UPDATE_INT13_END );
 
 		/* Store status for INT 13,01 */
 		int13->last_status = status;

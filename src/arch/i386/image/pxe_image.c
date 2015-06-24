@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /**
  * @file
@@ -27,6 +31,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 
 #include <pxe.h>
+#include <stdio.h>
 #include <pxe_call.h>
 #include <ipxe/uaccess.h>
 #include <ipxe/image.h>
@@ -34,6 +39,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/netdevice.h>
 #include <ipxe/features.h>
 #include <ipxe/console.h>
+#include <ipxe/init.h>
 
 FEATURE ( FEATURE_IMAGE, "PXE", DHCP_EB_FEATURE_PXE, 1 );
 
@@ -80,19 +86,21 @@ static int pxe_exec ( struct image *image ) {
 
 	/* Start PXE NBP */
 	rc = pxe_start_nbp();
+	if ( ! ipxe_is_started () ) {
+		printf ( "FlexBoot was shut down by NBP! Cleaning...\n" );
+		return 0;
+	}
 
 	/* Clear PXE command line */
 	pxe_cmdline = NULL;
 
 	/* Deactivate PXE */
 	pxe_deactivate();
-
 	/* Try to reopen network device.  Ignore errors, since the NBP
 	 * may have called PXENV_STOP_UNDI.
 	 */
 	netdev_open ( netdev );
 	netdev_put ( netdev );
-
 	return rc;
 }
 

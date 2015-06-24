@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -40,6 +44,8 @@ FILE_LICENCE ( GPL2_OR_LATER );
 struct imgsingle_options {
 	/** Image name */
 	char *name;
+	/** Download timeout */
+	unsigned long timeout;
 	/** Replace image */
 	int replace;
 	/** Free image after execution */
@@ -49,13 +55,17 @@ struct imgsingle_options {
 /** "img{single}" option list */
 static union {
 	/* "imgexec" takes all three options */
-	struct option_descriptor imgexec[3];
-	/* Other "img{single}" commands take only --name and --autofree */
-	struct option_descriptor imgsingle[2];
+	struct option_descriptor imgexec[4];
+	/* Other "img{single}" commands take only --name, --timeout,
+	 * and --autofree
+	 */
+	struct option_descriptor imgsingle[3];
 } opts = {
 	.imgexec = {
 		OPTION_DESC ( "name", 'n', required_argument,
 			      struct imgsingle_options, name, parse_string ),
+		OPTION_DESC ( "timeout", 't', required_argument,
+			      struct imgsingle_options, timeout, parse_timeout),
 		OPTION_DESC ( "autofree", 'a', no_argument,
 			      struct imgsingle_options, autofree, parse_flag ),
 		OPTION_DESC ( "replace", 'r', no_argument,
@@ -68,7 +78,8 @@ struct imgsingle_descriptor {
 	/** Command descriptor */
 	struct command_descriptor *cmd;
 	/** Function to use to acquire the image */
-	int ( * acquire ) ( const char *name, struct image **image );
+	int ( * acquire ) ( const char *name, unsigned long timeout,
+			    struct image **image );
 	/** Pre-action to take upon image, or NULL */
 	void ( * preaction ) ( struct image *image );
 	/** Action to take upon image, or NULL */
@@ -114,7 +125,8 @@ static int imgsingle_exec ( int argc, char **argv,
 
 	/* Acquire the image */
 	if ( name_uri ) {
-		if ( ( rc = desc->acquire ( name_uri, &image ) ) != 0 )
+		if ( ( rc = desc->acquire ( name_uri, opts.timeout,
+					    &image ) ) != 0 )
 			goto err_acquire;
 	} else {
 		image = image_find_selected();

@@ -6,13 +6,16 @@
  * IP over Infiniband
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/if_arp.h>
 #include <ipxe/infiniband.h>
 
 /** IPoIB MAC address length */
 #define IPOIB_ALEN 20
+
+/** IPoIB poll send CQ io buffer seconds */
+#define POLL_SEND_IOBUFFER_TIMEOUT 2
 
 /** An IPoIB MAC address */
 struct ipoib_mac {

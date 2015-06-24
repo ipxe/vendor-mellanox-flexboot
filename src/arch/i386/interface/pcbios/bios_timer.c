@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** @file
  *
@@ -44,10 +48,10 @@ static unsigned long bios_currticks ( void ) {
 	uint8_t midnight;
 
 	/* Re-enable interrupts so that the timer interrupt can occur */
-	__asm__ __volatile__ ( REAL_CODE ( "sti\n\t"
-					   "nop\n\t"
-					   "nop\n\t"
-					   "cli\n\t" ) : : );
+	__asm__ __volatile__ ( "sti\n\t"
+			       "nop\n\t"
+			       "nop\n\t"
+			       "cli\n\t" );
 
 	get_real ( ticks, BDA_SEG, 0x006c );
 	get_real ( midnight, BDA_SEG, 0x0070 );

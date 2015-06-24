@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2008-2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,12 +16,17 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <errno.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/dhcp.h>
@@ -36,12 +42,19 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/features.h>
 #include <ipxe/image.h>
 #include <ipxe/timer.h>
+#include <ipxe/vlan.h>
 #include <usr/ifmgmt.h>
 #include <usr/route.h>
 #include <usr/imgmgmt.h>
 #include <usr/prompt.h>
+#include <ipxe/console.h>
 #include <usr/autoboot.h>
 #include <config/general.h>
+#include <ipxe/boot_menu_ui.h>
+#include <ipxe/driver_settings.h>
+#include <ipxe/iscsi.h>
+#include <ipxe/status_updater.h>
+#include <config/branding.h>
 
 /** @file
  *
@@ -49,8 +62,17 @@ FILE_LICENCE ( GPL2_OR_LATER );
  *
  */
 
-/** Device location of preferred autoboot device */
-struct device_description autoboot_device;
+/** Flag to keep net device open in case we want to preserve the iscsi hook */
+static uint8_t keep_netdev_open = 0;
+
+/** Link-layer address of preferred autoboot device, if known */
+static uint8_t autoboot_ll_addr[MAX_LL_ADDR_LEN];
+
+/** Device location of preferred autoboot device, if known */
+static struct device_description autoboot_desc;
+
+/** Autoboot device tester */
+static int ( * is_autoboot_device ) ( struct net_device *netdev );
 
 /* Disambiguate the various error causes */
 #define ENOENT_BOOT __einfo_error ( EINFO_ENOENT_BOOT )
@@ -85,6 +107,9 @@ __weak int pxe_menu_boot ( struct net_device *netdev __unused ) {
  */
 static struct uri * parse_next_server_and_filename ( struct in_addr next_server,
 						     const char *filename ) {
+#ifndef NET_PROTO_IPV6
+	char buf[ 23 /* "tftp://xxx.xxx.xxx.xxx/" */ + strlen ( filename ) + 1 /* NUL */ ];
+#endif
 	struct uri *uri;
 
 	/* Parse filename */
@@ -92,10 +117,26 @@ static struct uri * parse_next_server_and_filename ( struct in_addr next_server,
 	if ( ! uri )
 		return NULL;
 
-	/* Construct a TFTP URI for the filename, if applicable */
+    /*#ifndef NET_PROTO_IPV6
+     *      Construct a tftp:// URI for the filename, if applicable.
+     *      We can't just rely on the current working URI, because the
+     *      relative URI resolution will remove the distinction between
+     *      filenames with and without initial slashes, which is
+     *      significant for TFTP.
+     *#else
+     *      Construct a TFTP URI for the filename, if applicable
+     *#endif
+     */
+
 	if ( next_server.s_addr && filename[0] && ! uri_is_absolute ( uri ) ) {
 		uri_put ( uri );
-		uri = tftp_uri ( next_server, filename );
+#ifndef NET_PROTO_IPV6
+               snprintf ( buf, sizeof ( buf ), "tftp://%s/%s",
+                               inet_ntoa ( next_server ), filename );
+               uri = parse_uri ( buf );
+#else
+		uri = tftp_uri ( next_server, 0, filename );
+#endif
 		if ( ! uri )
 			return NULL;
 	}
@@ -139,6 +180,7 @@ const struct setting skip_san_boot_setting __setting ( SETTING_SANBOOT_EXTRA,
 int uriboot ( struct uri *filename, struct uri *root_path, int drive,
 	      unsigned int flags ) {
 	struct image *image;
+	int iscsi_hook = 0, iscsi_describe = 0;
 	int rc;
 
 	/* Hook SAN device, if applicable */
@@ -146,8 +188,11 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
 		if ( ( rc = san_hook ( root_path, drive ) ) != 0 ) {
 			printf ( "Could not open SAN device: %s\n",
 				 strerror ( rc ) );
+			if ( filename )
+				goto pxe_label;
 			goto err_san_hook;
 		}
+		iscsi_hook = 1;
 		printf ( "Registered SAN device %#02x\n", drive );
 	}
 
@@ -156,36 +201,50 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
 		if ( ( rc = san_describe ( drive ) ) != 0 ) {
 			printf ( "Could not describe SAN device %#02x: %s\n",
 				 drive, strerror ( rc ) );
+			if ( filename )
+				goto pxe_label;
 			goto err_san_describe;
 		}
+		iscsi_describe = 1;
 	}
 
 	/* Allow a root-path-only boot with skip-san enabled to succeed */
 	rc = 0;
 
+	/* Check boot priority ISCSI vs PXE */
+	if( ( ! ( flags & URIBOOT_NO_SAN_BOOT ) ) && ( flags & URIBOOT_SAN_BOOT_PRIO ) )
+		goto iscsi_label;
+
+ pxe_label:
 	/* Attempt filename boot if applicable */
 	if ( filename ) {
-		if ( ( rc = imgdownload ( filename, &image ) ) != 0 )
-			goto err_download;
-		image->flags |= IMAGE_AUTO_UNREGISTER;
-		if ( ( rc = image_exec ( image ) ) != 0 ) {
-			printf ( "Could not boot image: %s\n",
-				 strerror ( rc ) );
-			/* Fall through to (possibly) attempt a SAN boot
-			 * as a fallback.  If no SAN boot is attempted,
-			 * our status will become the return status.
-			 */
-		} else {
-			/* Always print an extra newline, because we
-			 * don't know where the NBP may have left the
-			 * cursor.
-			 */
-			printf ( "\n" );
+		if ( ( rc = imgdownload ( filename, 0, &image ) ) == 0 ) {
+			image->flags |= IMAGE_AUTO_UNREGISTER;
+			if ( ( rc = image_exec ( image ) ) != 0 ) {
+				printf ( "Could not boot image: %s\n",
+					 strerror ( rc ) );
+				/* Fall through to (possibly) attempt a SAN boot
+				 * as a fallback.  If no SAN boot is attempted,
+				 * our status will become the return status.
+				 */
+			} else {
+				/* Always print an extra newline, because we
+				 * don't know where the NBP may have left the
+				 * cursor.
+				 */
+				printf ( "\n" );
+			}
+			if ( ! ipxe_is_started () )
+				goto uriboot_done;
 		}
 	}
 
+	if ( flags & URIBOOT_SAN_BOOT_PRIO )
+		goto err_download;
+
+ iscsi_label:
 	/* Attempt SAN boot if applicable */
-	if ( ( drive >= 0 ) && ! ( flags & URIBOOT_NO_SAN_BOOT ) ) {
+	if ( iscsi_describe && ( drive >= 0 ) && ! ( flags & URIBOOT_NO_SAN_BOOT ) ) {
 		if ( fetch_intz_setting ( NULL, &skip_san_boot_setting) == 0 ) {
 			printf ( "Booting from SAN device %#02x\n", drive );
 			rc = san_boot ( drive );
@@ -200,35 +259,25 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
 		}
 	}
 
+	if ( flags & URIBOOT_SAN_BOOT_PRIO )
+		goto pxe_label;
+
  err_download:
  err_san_describe:
 	/* Unhook SAN device, if applicable */
-	if ( ( drive >= 0 ) && ! ( flags & URIBOOT_NO_SAN_UNHOOK ) ) {
-		if ( fetch_intz_setting ( NULL, &keep_san_setting ) == 0 ) {
+	if ( iscsi_hook && ( drive >= 0 ) ) {
+		if ( ( fetch_intz_setting ( NULL, &keep_san_setting ) == 0 ) &&
+		     ! ( flags & URIBOOT_NO_SAN_UNHOOK ) ) {
 			san_unhook ( drive );
 			printf ( "Unregistered SAN device %#02x\n", drive );
 		} else {
 			printf ( "Preserving SAN device %#02x\n", drive );
+			keep_netdev_open = 1;
 		}
 	}
  err_san_hook:
+ uriboot_done:
 	return rc;
-}
-
-/**
- * Close all open net devices
- *
- * Called before a fresh boot attempt in order to free up memory.  We
- * don't just close the device immediately after the boot fails,
- * because there may still be TCP connections in the process of
- * closing.
- */
-static void close_all_netdevs ( void ) {
-	struct net_device *netdev;
-
-	for_each_netdev ( netdev ) {
-		ifclose ( netdev );
-	}
 }
 
 /**
@@ -335,6 +384,53 @@ static int have_pxe_menu ( void ) {
 		       setting_exists ( NULL, &filename_setting ) ) ) );
 }
 
+struct netdev_to_driver_iscsi_setting {
+	const struct setting *netdev_setting;
+	const struct setting *driver_setting;
+};
+
+void iscsi_settings_from_driver_settings ( struct settings *netdev_settings,
+		struct settings *driver_settings ) {
+	struct settings *sub_settings;
+	char buf[255] = {0};
+	int i, clear = 0;
+	struct netdev_to_driver_iscsi_setting iscsi_table[] = {
+		{ &initiator_iqn_setting, &iscsi_init_name_setting },
+		{ NULL, NULL }
+	};
+
+	if ( ( ! netdev_settings ) || ( ! driver_settings ) )
+		return;
+
+	fetchf_setting ( driver_settings, &connect_setting, NULL, NULL, buf, sizeof ( buf ) );
+        if ( buf[0] != 'E' )
+		clear = 1;
+
+	for ( i = 0 ; iscsi_table[i].driver_setting ; i++ ) {
+		storef_setting ( netdev_settings, iscsi_table[i].netdev_setting, NULL );
+		/* Clear the setting from DHCP/pxebs/proxyDHCP if it exists */
+		list_for_each_entry ( sub_settings, &netdev_settings->children, siblings ) {
+			storef_setting ( sub_settings, iscsi_table[i].netdev_setting, NULL );
+		}
+
+		if ( clear == 0 && fetchf_setting ( driver_settings, iscsi_table[i].driver_setting,
+						NULL, NULL, buf, sizeof ( buf ) ) > 0 )
+			storef_setting ( netdev_settings, iscsi_table[i].netdev_setting, buf );
+	}
+
+	root_path_store ( netdev_settings, driver_settings );
+}
+
+#define TOTAL_BOOT_RETRIES	7
+
+/**
+ * According to errno.h we need the POSIX value.
+ **/
+#define POSIX_ERROR_OFFSET	24
+inline int errno_cmp ( int errno1, int errno2 ) {
+	return ((errno1 >> POSIX_ERROR_OFFSET) == (errno2 >> POSIX_ERROR_OFFSET));
+}
+
 /**
  * Boot from a network device
  *
@@ -344,30 +440,73 @@ static int have_pxe_menu ( void ) {
 int netboot ( struct net_device *netdev ) {
 	struct uri *filename;
 	struct uri *root_path;
+	struct settings *netdevice_settings = netdev_settings ( netdev );
+	struct settings *driver_settings = NULL;
+	char buf[20] = { 0 };
+	unsigned int flags;
+	int retries = 0, boot_prot = 0, uriboot_retries = 0, canceled = 0;
+	int iscsi_dhcp_ip = 0, iscsi_dhcp_params = 0, uriboot_retrie_delay = 0;
+	int iscsi_boot_to_target = 0;
 	int rc;
 
-	/* Close all other network devices */
-	close_all_netdevs();
+	keep_netdev_open = 0;
 
+	/* Fetch stored settings */
+	if ( nv_settings_root ) {
+		driver_settings = driver_settings_from_netdev ( netdev );
+		boot_prot = driver_settings_get_boot_prot_val ( driver_settings );
+		retries = driver_settings_get_boot_ret_val ( driver_settings );
+		rc = fetchf_setting ( driver_settings, &dhcp_ip_setting, NULL, NULL, buf, sizeof ( buf ) );
+		iscsi_dhcp_ip = ( ( rc > 0 ) && ( buf[0] == 'E' ) );
+		memset ( buf, 0, sizeof ( buf ) );
+		rc = fetchf_setting ( driver_settings, &dhcp_iscsi_setting, NULL, NULL, buf, sizeof ( buf ) );
+		iscsi_dhcp_params = ( ( rc > 0 ) && ( buf[0] == 'E' ) );
+		iscsi_boot_to_target =
+				driver_settings_get_iscsi_boot_to_target_val ( driver_settings );
+	}
+	uriboot_retrie_delay = fetch_intz_setting ( netdevice_settings, &uriboot_retry_delay_setting );
+	uriboot_retries = fetch_intz_setting ( netdevice_settings, &uriboot_retry_setting );
+
+ retry:
 	/* Open device and display device status */
 	if ( ( rc = ifopen ( netdev ) ) != 0 )
 		goto err_ifopen;
 	ifstat ( netdev );
 
-	/* Configure device */
-	if ( ( rc = ifconf ( netdev, NULL ) ) != 0 )
-		goto err_dhcp;
+	status_update ( STATUS_UPDATE_WAIT_ON_LINKUP );
+
+	/* Check if we want to take the configurations from the DHCP server or not */
+	if ( ( boot_prot == BOOT_PROTOCOL_ISCSI ) && ( ! iscsi_dhcp_ip ) ) {
+		if ( ( rc = iflinkwait ( netdev, LINK_WAIT_TIMEOUT ) ) == 0 ) {
+			/* Give some time to the network to settle.
+			 * Switches may be still building their routing tables */
+			ifnetwork_wait ( netdev, LINK_WAIT_TIMEOUT, NETWORK_WAIT_TIMEOUT );
+		}
+	} else {
+		rc = ifconf ( netdev, NULL );
+	}
+
+	if ( rc != 0 ) {
+		if ( errno_cmp ( rc, -ECANCELED ) )
+			canceled = 1;
+		goto err_link_up_and_config;
+	}
+
+	/* Update iSCSI settings from flash if needed */
+	if ( nv_settings_root && iscsi_dhcp_ip && ( ! iscsi_dhcp_params ) )
+		iscsi_settings_from_driver_settings ( netdevice_settings, driver_settings );
+
 	route();
 
 	/* Try PXE menu boot, if applicable */
 	if ( have_pxe_menu() ) {
-		printf ( "Booting from PXE menu\n" );
+		printf ( "Booting from PXE menu...\n" );
 		rc = pxe_menu_boot ( netdev );
 		goto err_pxe_menu_boot;
 	}
 
 	/* Fetch next server and filename */
-	filename = fetch_next_server_and_filename ( NULL );
+	filename = fetch_next_server_and_filename ( netdevice_settings );
 	if ( ! filename )
 		goto err_filename;
 	if ( ! uri_has_path ( filename ) ) {
@@ -377,7 +516,7 @@ int netboot ( struct net_device *netdev ) {
 	}
 
 	/* Fetch root path */
-	root_path = fetch_root_path ( NULL );
+	root_path = fetch_root_path ( netdevice_settings );
 	if ( ! root_path )
 		goto err_root_path;
 	if ( ! uri_is_absolute ( root_path ) ) {
@@ -404,10 +543,26 @@ int netboot ( struct net_device *netdev ) {
 		goto err_no_boot;
 	}
 
+	status_update ( STATUS_UPDATE_URI_BOOT );
+
+ uriboot_retry:
 	/* Boot using next server, filename and root path */
-	if ( ( rc = uriboot ( filename, root_path, san_default_drive(),
-			      ( root_path ? 0 : URIBOOT_NO_SAN ) ) ) != 0 )
+	flags = ( root_path ? URIBOOT_NO_SAN_UNHOOK : URIBOOT_NO_SAN );
+	flags |= ( ( iscsi_boot_to_target == ISCSI_BOOT_TO_TARGET_ENABLE ) ? 0 : URIBOOT_NO_SAN_BOOT );
+	flags |= ( ( boot_prot == BOOT_PROTOCOL_ISCSI ) ? URIBOOT_SAN_BOOT_PRIO : 0 );
+	if ( ( rc = uriboot ( filename, root_path, san_default_drive(), flags ) ) != 0 ) {
+		if ( ! ipxe_is_started () || errno_cmp ( rc, -ECANCELED ) ) {
+			canceled = 1;
+			goto err_uriboot;
+		}
+		if ( uriboot_retries > 0 ) {
+			uriboot_retries--;
+			printf( "Boot retry in %d seconds.\n", uriboot_retrie_delay );
+			sleep( uriboot_retrie_delay );
+			goto uriboot_retry;
+		}
 		goto err_uriboot;
+	}
 
  err_uriboot:
  err_no_boot:
@@ -416,21 +571,82 @@ int netboot ( struct net_device *netdev ) {
 	uri_put ( filename );
  err_filename:
  err_pxe_menu_boot:
- err_dhcp:
+ err_link_up_and_config:
  err_ifopen:
+	/* Close net device if we didn't hook to an iscsi target */
+	if ( ipxe_is_started () && ! keep_netdev_open ) {
+		if ( ( ! canceled ) && rc && retries ) {
+			if ( retries < TOTAL_BOOT_RETRIES )
+				--retries;
+			rc = 0;
+			goto retry;
+		}
+		ifclose ( netdev );
+	}
+
 	return rc;
 }
 
 /**
- * Test if network device matches the autoboot device location
+ * Test if network device matches the autoboot device bus type and location
  *
  * @v netdev		Network device
- * @ret is_autoboot	Network device matches the autoboot device location
+ * @ret is_autoboot	Network device matches the autoboot device
  */
-static int is_autoboot_device ( struct net_device *netdev ) {
+static int is_autoboot_busloc ( struct net_device *netdev ) {
+	struct device *dev;
 
-	return ( ( netdev->dev->desc.bus_type == autoboot_device.bus_type ) &&
-		 ( netdev->dev->desc.location == autoboot_device.location ) );
+	for ( dev = netdev->dev ; dev ; dev = dev->parent ) {
+		if ( ( dev->desc.bus_type == autoboot_desc.bus_type ) &&
+		     ( dev->desc.location == autoboot_desc.location ) )
+			return 1;
+	}
+	return 0;
+}
+
+/**
+ * Identify autoboot device by bus type and location
+ *
+ * @v bus_type		Bus type
+ * @v location		Location
+ */
+void set_autoboot_busloc ( unsigned int bus_type, unsigned int location ) {
+
+	/* Record autoboot device description */
+	autoboot_desc.bus_type = bus_type;
+	autoboot_desc.location = location;
+
+	/* Mark autoboot device as present */
+	is_autoboot_device = is_autoboot_busloc;
+}
+
+/**
+ * Test if network device matches the autoboot device link-layer address
+ *
+ * @v netdev		Network device
+ * @ret is_autoboot	Network device matches the autoboot device
+ */
+static int is_autoboot_ll_addr ( struct net_device *netdev ) {
+
+	return ( memcmp ( netdev->ll_addr, autoboot_ll_addr,
+			  netdev->ll_protocol->ll_addr_len ) == 0 );
+}
+
+/**
+ * Identify autoboot device by link-layer address
+ *
+ * @v ll_addr		Link-layer address
+ * @v len		Length of link-layer address
+ */
+void set_autoboot_ll_addr ( const void *ll_addr, size_t len ) {
+
+	/* Record autoboot link-layer address (truncated if necessary) */
+	if ( len > sizeof ( autoboot_ll_addr ) )
+		len = sizeof ( autoboot_ll_addr );
+	memcpy ( autoboot_ll_addr, ll_addr, len );
+
+	/* Mark autoboot device as present */
+	is_autoboot_device = is_autoboot_ll_addr;
 }
 
 /**
@@ -438,6 +654,7 @@ static int is_autoboot_device ( struct net_device *netdev ) {
  */
 static int autoboot ( void ) {
 	struct net_device *netdev;
+	struct net_device *vlan;
 	int rc = -ENODEV;
 
 	/* Try booting from each network device.  If we have a
@@ -445,17 +662,28 @@ static int autoboot ( void ) {
 	 * matching that location.
 	 */
 	for_each_netdev ( netdev ) {
-
 		/* Skip any non-matching devices, if applicable */
-		if ( autoboot_device.bus_type &&
-		     ( ! is_autoboot_device ( netdev ) ) )
+		if ( is_autoboot_device && ( ! is_autoboot_device ( netdev ) ) )
 			continue;
+
+		/* Skip trunk device and boot from the VLAN device */
+		if ( ( vlan = vlan_present ( netdev ) ) ) {
+			printf ( "VLAN is present on %s. Skipping trunk net device...\n", netdev->name );
+			rc = netboot ( vlan );
+			continue;
+		} else if ( vlan_tag ( netdev ) ) {
+			/* Skip the VLAN device - we already tried to boot from it before */
+			continue;
+		}
 
 		/* Attempt booting from this device */
 		rc = netboot ( netdev );
+
+		if ( ! ipxe_is_started () )
+			return rc;
 	}
 
-	printf ( "No more network devices\n" );
+	printf ( "No more ports. Exiting FlexBoot...\n" );
 	return rc;
 }
 
@@ -464,18 +692,23 @@ static int autoboot ( void ) {
  *
  * @ret	enter_shell	User wants to enter shell
  */
-static int shell_banner ( void ) {
-
+static int show_banner_and_get_key ( void ) {
+	if ( boot_post_shell ) {
+		/* Remove the key press from the buffer */
+		if ( iskey() )
+			getchar();
+		return CTRL_B;
+	}
 	/* Skip prompt if timeout is zero */
 	if ( BANNER_TIMEOUT <= 0 )
 		return 0;
 
 	/* Prompt user */
 	printf ( "\n" );
-	return ( prompt ( "Press Ctrl-B for the iPXE command line...",
-			  ( ( BANNER_TIMEOUT * TICKS_PER_SEC ) / 10 ),
-			  CTRL_B ) == 0 );
+	return ( prompt_any ( "Press Ctrl-B for FlexBoot setup, or ESC to skip boot...",
+			  ( ( BANNER_TIMEOUT * TICKS_PER_SEC ) / 10 ) ) );
 }
+
 
 /**
  * Main iPXE flow of execution
@@ -486,23 +719,22 @@ void ipxe ( struct net_device *netdev ) {
 	struct feature *feature;
 	struct image *image;
 	char *scriptlet;
+	int key_pressed;
 
 	/*
 	 * Print welcome banner
 	 *
 	 *
 	 * If you wish to brand this build of iPXE, please do so by
-	 * defining the string PRODUCT_NAME in config/general.h.
+	 * defining the string PRODUCT_NAME in config/branding.h.
 	 *
 	 * While nothing in the GPL prevents you from removing all
 	 * references to iPXE or http://ipxe.org, we prefer you not to
 	 * do so.
 	 *
 	 */
-	printf ( NORMAL "\n\n" PRODUCT_NAME "\n" BOLD "iPXE %s"
-		 NORMAL " -- Open Source Network Boot Firmware -- "
-		 CYAN "http://ipxe.org" NORMAL "\n"
-		 "Features:", product_version );
+	printf ( NORMAL "\n\n" PRODUCT_NAME "\n" BOLD PRODUCT_SHORT_NAME " "
+		 CYAN PRODUCT_URI NORMAL "\nFeatures:" );
 	for_each_table_entry ( feature, FEATURES )
 		printf ( " %s", feature->name );
 	printf ( "\n" );
@@ -511,10 +743,14 @@ void ipxe ( struct net_device *netdev ) {
 	if ( ( image = first_image() ) != NULL ) {
 		/* We have an embedded image; execute it */
 		image_exec ( image );
-	} else if ( shell_banner() ) {
+	} else if ( ( key_pressed = show_banner_and_get_key () ) == CTRL_B ) {
 		/* User wants shell; just give them a shell */
-		shell();
-	} else {
+#ifdef FLASH_CONFIGURATION
+		boot_menu_ui ();
+#else
+		shell ();
+#endif
+	} else if ( key_pressed != ESC ) {
 		fetch_string_setting_copy ( NULL, &scriptlet_setting,
 					    &scriptlet );
 		if ( scriptlet ) {
@@ -530,7 +766,7 @@ void ipxe ( struct net_device *netdev ) {
 			} else {
 				autoboot();
 			}
-			if ( shell_banner() )
+			if ( show_banner_and_get_key () == CTRL_B )
 				shell();
 		}
 	}

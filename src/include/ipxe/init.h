@@ -1,7 +1,7 @@
 #ifndef _IPXE_INIT_H
 #define _IPXE_INIT_H
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/tables.h>
 
@@ -65,6 +65,7 @@ struct startup_fn {
 
 /** @} */
 
+extern int ipxe_is_started ( void );
 extern void initialise ( void );
 extern void startup ( void );
 extern void shutdown ( int booting );

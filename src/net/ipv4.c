@@ -1,3 +1,27 @@
+/*
+ * Copyright (C) 2006 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2006 Nikhil Chandru Rao
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
+ */
+
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -16,6 +40,7 @@
 #include <ipxe/settings.h>
 #include <ipxe/fragment.h>
 #include <ipxe/ipstat.h>
+#include <ipxe/profile.h>
 
 /** @file
  *
@@ -23,7 +48,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /* Unique IP datagram identification number (high byte) */
 static uint8_t next_ident_high = 0;
@@ -40,6 +65,12 @@ ipv4_stats_family __ip_statistics_family ( IP_STATISTICS_IPV4 ) = {
 	.version = 4,
 	.stats = &ipv4_stats,
 };
+
+/** Transmit profiler */
+static struct profiler ipv4_tx_profiler __profiler = { .name = "ipv4.tx" };
+
+/** Receive profiler */
+static struct profiler ipv4_rx_profiler __profiler = { .name = "ipv4.rx" };
 
 /**
  * Add IPv4 minirouting table entry
@@ -263,6 +294,9 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 	const void *ll_dest;
 	int rc;
 
+	/* Start profiling */
+	profile_start ( &ipv4_tx_profiler );
+
 	/* Update statistics */
 	ipv4_stats.out_requests++;
 
@@ -358,6 +392,7 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 		}
 	}
 
+	profile_stop ( &ipv4_tx_profiler );
 	return 0;
 
  err:
@@ -429,6 +464,9 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 	uint16_t csum;
 	uint16_t pshdr_csum;
 	int rc;
+
+	/* Start profiling */
+	profile_start ( &ipv4_rx_profiler );
 
 	/* Update statistics */
 	ipv4_stats.in_receives++;
@@ -528,6 +566,7 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 		return rc;
 	}
 
+	profile_stop ( &ipv4_rx_profiler );
 	return 0;
 
  err_header:
@@ -554,10 +593,42 @@ static int ipv4_arp_check ( struct net_device *netdev, const void *net_addr ) {
 }
 
 /**
+ * Parse IPv4 address
+ *
+ * @v string		IPv4 address string
+ * @ret in		IPv4 address to fill in
+ * @ret ok		IPv4 address is valid
+ *
+ * Note that this function returns nonzero iff the address is valid,
+ * to match the standard BSD API function of the same name.  Unlike
+ * most other iPXE functions, a zero therefore indicates failure.
+ */
+int inet_aton ( const char *string, struct in_addr *in ) {
+	const char *separator = "...";
+	uint8_t *byte = ( ( uint8_t * ) in );
+	char *endp;
+	unsigned long value;
+
+	while ( 1 ) {
+		value = strtoul ( string, &endp, 0 );
+		if ( string == endp )
+			return 0;
+		if ( value > 0xff )
+			return 0;
+		*(byte++) = value;
+		if ( *endp != *separator )
+			return 0;
+		if ( ! *(separator++) )
+			return 1;
+		string = ( endp + 1 );
+	}
+}
+
+/**
  * Convert IPv4 address to dotted-quad notation
  *
- * @v in	IP address
- * @ret string	IP address in dotted-quad notation
+ * @v in		IPv4 address
+ * @ret string		IPv4 address in dotted-quad notation
  */
 char * inet_ntoa ( struct in_addr in ) {
 	static char buf[16]; /* "xxx.xxx.xxx.xxx" */
@@ -568,10 +639,10 @@ char * inet_ntoa ( struct in_addr in ) {
 }
 
 /**
- * Transcribe IP address
+ * Transcribe IPv4 address
  *
- * @v net_addr	IP address
- * @ret string	IP address in dotted-quad notation
+ * @v net_addr		IPv4 address
+ * @ret string		IPv4 address in dotted-quad notation
  *
  */
 static const char * ipv4_ntoa ( const void *net_addr ) {
@@ -769,6 +840,9 @@ static int ipv4_create_routes ( void ) {
 struct settings_applicator ipv4_settings_applicator __settings_applicator = {
 	.apply = ipv4_create_routes,
 };
+
+/* Drag in objects via ipv4_protocol */
+REQUIRING_SYMBOL ( ipv4_protocol );
 
 /* Drag in ICMPv4 */
 REQUIRE_OBJECT ( icmpv4 );

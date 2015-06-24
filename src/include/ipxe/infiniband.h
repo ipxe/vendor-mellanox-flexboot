@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/refcnt.h>
@@ -36,6 +36,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 /** Default Infiniband partition key */
 #define IB_PKEY_DEFAULT 0xffff
+#define IB_PKEY_DEFAULT_IDX 0x0
 
 /** Infiniband partition key full membership flag */
 #define IB_PKEY_FULL 0x8000
@@ -131,6 +132,10 @@ struct ib_multicast_gid {
 	struct list_head list;
 	/** Multicast GID */
 	union ib_gid gid;
+	/** QP number */
+	unsigned int qpn;
+	/** GID protocol */
+	u8 protocol;
 };
 
 /** An Infiniband queue pair type */
@@ -435,7 +440,8 @@ struct ib_device {
 	uint8_t sm_sl;
 	/** Partition key */
 	uint16_t pkey;
-
+	/** Partition key table index */
+	uint16_t pkey_index;
 	/** RDMA key
 	 *
 	 * This is a single key allowing unrestricted access to
@@ -452,6 +458,8 @@ struct ib_device {
 	void *drv_priv;
 	/** Owner private data */
 	void *owner_priv;
+	/** Port protocol */
+	u8 protocol;
 };
 
 /** An Infiniband upper-layer driver */

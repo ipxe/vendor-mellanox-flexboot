@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /**
  * @file
@@ -33,6 +37,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <strings.h>
 #include <byteswap.h>
 #include <errno.h>
+#include <ctype.h>
 #include <assert.h>
 #include <ipxe/uri.h>
 #include <ipxe/refcnt.h>
@@ -52,6 +57,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/acpi.h>
 #include <ipxe/version.h>
 #include <ipxe/params.h>
+#include <ipxe/profile.h>
 #include <ipxe/http.h>
 
 /* Disambiguate the various error causes */
@@ -92,6 +98,12 @@ FILE_LICENCE ( GPL2_OR_LATER );
 /** Retry delay used when we cannot understand the Retry-After header */
 #define HTTP_RETRY_SECONDS 5
 
+/** Receive profiler */
+static struct profiler http_rx_profiler __profiler = { .name = "http.rx" };
+
+/** Data transfer profiler */
+static struct profiler http_xfer_profiler __profiler = { .name = "http.xfer" };
+
 /** HTTP flags */
 enum http_flags {
 	/** Request is waiting to be transmitted */
@@ -108,8 +120,12 @@ enum http_flags {
 	HTTP_BASIC_AUTH = 0x0020,
 	/** Provide Digest authentication details */
 	HTTP_DIGEST_AUTH = 0x0040,
+	/** Include qop parameter in Digest authentication reponse */
+	HTTP_DIGEST_AUTH_QOP = 0x0080,
+	/** Use MD5-sess algorithm for Digest authentication */
+	HTTP_DIGEST_AUTH_MD5_SESS = 0x0100,
 	/** Socket must be reopened */
-	HTTP_REOPEN_SOCKET = 0x0080,
+	HTTP_REOPEN_SOCKET = 0x0200,
 };
 
 /** HTTP receive state */
@@ -441,7 +457,7 @@ static int http_rx_content_length ( struct http_request *http, char *value ) {
 
 	/* Parse content length */
 	content_len = strtoul ( value, &endp, 10 );
-	if ( *endp != '\0' ) {
+	if ( ! ( ( *endp == '\0' ) || isspace ( *endp ) ) ) {
 		DBGC ( http, "HTTP %p invalid Content-Length \"%s\"\n",
 		       http, value );
 		return -EINVAL_CONTENT_LENGTH;
@@ -603,6 +619,18 @@ static int http_rx_digest_auth ( struct http_request *http, char *params ) {
 			/* Not an error; "opaque" is optional */
 		}
 
+		/* Check for presence of qop */
+		if ( strstr ( params, "qop=\"" ) != NULL )
+			http->flags |= HTTP_DIGEST_AUTH_QOP;
+
+		/* Check for MD5-sess.  For some bizarre reason,
+		 * RFC2617 requires this to be unquoted, which means
+		 * that http_digest_param() cannot be used.
+		 */
+		if ( strstr ( params, "algorithm=MD5-sess" ) != NULL )
+			http->flags |= HTTP_DIGEST_AUTH_MD5_SESS;
+
+		/* Retry using digest authentication */
 		http->flags |= ( HTTP_TRY_AGAIN | HTTP_DIGEST_AUTH );
 	}
 
@@ -891,6 +919,7 @@ static int http_socket_deliver ( struct http_request *http,
 	ssize_t line_len;
 	int rc = 0;
 
+	profile_start ( &http_rx_profiler );
 	while ( iobuf && iob_len ( iobuf ) ) {
 
 		switch ( http->rx_state ) {
@@ -926,16 +955,20 @@ static int http_socket_deliver ( struct http_request *http,
 				iob_pull ( iobuf, data_len );
 			} else if ( data_len < iob_len ( iobuf ) ) {
 				/* Deliver partial buffer as raw data */
+				profile_start ( &http_xfer_profiler );
 				rc = xfer_deliver_raw ( &http->xfer,
 							iobuf->data, data_len );
 				iob_pull ( iobuf, data_len );
 				if ( rc != 0 )
 					goto done;
+				profile_stop ( &http_xfer_profiler );
 			} else {
 				/* Deliver whole I/O buffer */
+				profile_start ( &http_xfer_profiler );
 				if ( ( rc = xfer_deliver_iob ( &http->xfer,
 						 iob_disown ( iobuf ) ) ) != 0 )
 					goto done;
+				profile_stop ( &http_xfer_profiler );
 			}
 			http->rx_len += data_len;
 			if ( http->chunk_remaining ) {
@@ -984,6 +1017,7 @@ static int http_socket_deliver ( struct http_request *http,
 	if ( rc )
 		http_close ( http, rc );
 	free_iob ( iobuf );
+	profile_stop ( &http_rx_profiler );
 	return rc;
 }
 
@@ -1047,7 +1081,8 @@ static char * http_basic_auth ( struct http_request *http ) {
 	snprintf ( user_pw, sizeof ( user_pw ), "%s:%s", user, password );
 
 	/* Base64-encode the "user:password" string */
-	base64_encode ( ( void * ) user_pw, user_pw_len, user_pw_base64 );
+	base64_encode ( user_pw, user_pw_len, user_pw_base64,
+			sizeof ( user_pw_base64 ) );
 
 	/* Generate the authorisation string */
 	len = asprintf ( &auth, "Authorization: Basic %s\r\n",
@@ -1056,6 +1091,46 @@ static char * http_basic_auth ( struct http_request *http ) {
 		return NULL;
 
 	return auth;
+}
+
+/**
+ * Initialise HTTP digest
+ *
+ * @v ctx		Digest context
+ * @v string		Initial string
+ */
+static void http_digest_init ( struct md5_context *ctx ) {
+
+	digest_init ( &md5_algorithm, ctx );
+}
+
+/**
+ * Update HTTP digest with new data
+ *
+ * @v ctx		Digest context
+ * @v string		String to append
+ */
+static void http_digest_update ( struct md5_context *ctx, const char *string ) {
+	static const char colon = ':';
+
+	if ( ctx->len )
+		digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
+	digest_update ( &md5_algorithm, ctx, string, strlen ( string ) );
+}
+
+/**
+ * Finalise HTTP digest
+ *
+ * @v ctx		Digest context
+ * @v out		Buffer for digest output
+ * @v len		Buffer length
+ */
+static void http_digest_final ( struct md5_context *ctx, char *out,
+				size_t len ) {
+	uint8_t digest[MD5_DIGEST_SIZE];
+
+	digest_final ( &md5_algorithm, ctx, digest );
+	base16_encode ( digest, sizeof ( digest ), out, len );
 }
 
 /**
@@ -1077,12 +1152,13 @@ static char * http_digest_auth ( struct http_request *http,
 	const char *realm = http->auth_realm;
 	const char *nonce = http->auth_nonce;
 	const char *opaque = http->auth_opaque;
-	static const char colon = ':';
-	uint8_t ctx[MD5_CTX_SIZE];
-	uint8_t digest[MD5_DIGEST_SIZE];
-	char ha1[ base16_encoded_len ( sizeof ( digest ) ) + 1 /* NUL */ ];
-	char ha2[ base16_encoded_len ( sizeof ( digest ) ) + 1 /* NUL */ ];
-	char response[ base16_encoded_len ( sizeof ( digest ) ) + 1 /* NUL */ ];
+	char cnonce[ 9 /* "xxxxxxxx" + NUL */ ];
+	struct md5_context ctx;
+	char ha1[ base16_encoded_len ( MD5_DIGEST_SIZE ) + 1 /* NUL */ ];
+	char ha2[ base16_encoded_len ( MD5_DIGEST_SIZE ) + 1 /* NUL */ ];
+	char response[ base16_encoded_len ( MD5_DIGEST_SIZE ) + 1 /* NUL */ ];
+	int qop = ( http->flags & HTTP_DIGEST_AUTH_QOP );
+	int md5sess = ( qop && ( http->flags & HTTP_DIGEST_AUTH_MD5_SESS ) );
 	char *auth;
 	int len;
 
@@ -1091,38 +1167,51 @@ static char * http_digest_auth ( struct http_request *http,
 	assert ( realm != NULL );
 	assert ( nonce != NULL );
 
+	/* Generate a client nonce */
+	snprintf ( cnonce, sizeof ( cnonce ), "%08lx", random() );
+
 	/* Generate HA1 */
-	digest_init ( &md5_algorithm, ctx );
-	digest_update ( &md5_algorithm, ctx, user, strlen ( user ) );
-	digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
-	digest_update ( &md5_algorithm, ctx, realm, strlen ( realm ) );
-	digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
-	digest_update ( &md5_algorithm, ctx, password, strlen ( password ) );
-	digest_final ( &md5_algorithm, ctx, digest );
-	base16_encode ( digest, sizeof ( digest ), ha1 );
+	http_digest_init ( &ctx );
+	http_digest_update ( &ctx, user );
+	http_digest_update ( &ctx, realm );
+	http_digest_update ( &ctx, password );
+	http_digest_final ( &ctx, ha1, sizeof ( ha1 ) );
+	if ( md5sess ) {
+		http_digest_init ( &ctx );
+		http_digest_update ( &ctx, ha1 );
+		http_digest_update ( &ctx, nonce );
+		http_digest_update ( &ctx, cnonce );
+		http_digest_final ( &ctx, ha1, sizeof ( ha1 ) );
+	}
 
 	/* Generate HA2 */
-	digest_init ( &md5_algorithm, ctx );
-	digest_update ( &md5_algorithm, ctx, method, strlen ( method ) );
-	digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
-	digest_update ( &md5_algorithm, ctx, uri, strlen ( uri ) );
-	digest_final ( &md5_algorithm, ctx, digest );
-	base16_encode ( digest, sizeof ( digest ), ha2 );
+	http_digest_init ( &ctx );
+	http_digest_update ( &ctx, method );
+	http_digest_update ( &ctx, uri );
+	http_digest_final ( &ctx, ha2, sizeof ( ha2 ) );
 
 	/* Generate response */
-	digest_init ( &md5_algorithm, ctx );
-	digest_update ( &md5_algorithm, ctx, ha1, strlen ( ha1 ) );
-	digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
-	digest_update ( &md5_algorithm, ctx, nonce, strlen ( nonce ) );
-	digest_update ( &md5_algorithm, ctx, &colon, sizeof ( colon ) );
-	digest_update ( &md5_algorithm, ctx, ha2, strlen ( ha2 ) );
-	digest_final ( &md5_algorithm, ctx, digest );
-	base16_encode ( digest, sizeof ( digest ), response );
+	http_digest_init ( &ctx );
+	http_digest_update ( &ctx, ha1 );
+	http_digest_update ( &ctx, nonce );
+	if ( qop ) {
+		http_digest_update ( &ctx, "00000001" /* nc */ );
+		http_digest_update ( &ctx, cnonce );
+		http_digest_update ( &ctx, "auth" /* qop */ );
+	}
+	http_digest_update ( &ctx, ha2 );
+	http_digest_final ( &ctx, response, sizeof ( response ) );
 
 	/* Generate the authorisation string */
 	len = asprintf ( &auth, "Authorization: Digest username=\"%s\", "
 			 "realm=\"%s\", nonce=\"%s\", uri=\"%s\", "
-			 "%s%s%sresponse=\"%s\"\r\n", user, realm, nonce, uri,
+			 "%s%s%s%s%s%s%s%sresponse=\"%s\"\r\n",
+			 user, realm, nonce, uri,
+			 ( qop ? "qop=\"auth\", algorithm=" : "" ),
+			 ( qop ? ( md5sess ? "MD5-sess, " : "MD5, " ) : "" ),
+			 ( qop ? "nc=00000001, cnonce=\"" : "" ),
+			 ( qop ? cnonce : "" ),
+			 ( qop ? "\", " : "" ),
 			 ( opaque ? "opaque=\"" : "" ),
 			 ( opaque ? opaque : "" ),
 			 ( opaque ? "\", " : "" ), response );

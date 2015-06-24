@@ -8,7 +8,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** A VLAN header */
 struct vlan_header {
@@ -61,6 +61,7 @@ struct vlan_header {
 
 extern struct net_device * vlan_find ( struct net_device *trunk,
 				       unsigned int tag );
+extern struct net_device * vlan_present ( struct net_device *trunk );
 extern unsigned int vlan_tag ( struct net_device *netdev );
 extern int vlan_can_be_trunk ( struct net_device *trunk );
 extern int vlan_create ( struct net_device *trunk, unsigned int tag,

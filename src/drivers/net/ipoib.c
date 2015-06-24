@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014-2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,13 +50,13 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 
 /** Number of IPoIB send work queue entries */
-#define IPOIB_NUM_SEND_WQES 2
-
+#define IPOIB_NUM_SEND_WQES 8
 /** Number of IPoIB receive work queue entries */
-#define IPOIB_NUM_RECV_WQES 4
-
-/** Number of IPoIB completion entries */
-#define IPOIB_NUM_CQES 8
+#define IPOIB_NUM_RECV_WQES 16
+/** Number of IPoIB send completion entries */
+#define IPOIB_NUM_SEND_CQES IPOIB_NUM_SEND_WQES
+/** Number of IPoIB recieve completion entries */
+#define IPOIB_NUM_RECV_CQES IPOIB_NUM_RECV_WQES
 
 /** An IPoIB device */
 struct ipoib_device {
@@ -59,8 +64,10 @@ struct ipoib_device {
 	struct net_device *netdev;
 	/** Underlying Infiniband device */
 	struct ib_device *ibdev;
-	/** Completion queue */
-	struct ib_completion_queue *cq;
+	/** RX Completion queue */
+	struct ib_completion_queue *rx_cq;
+	/** TX Completion queue */
+	struct ib_completion_queue *tx_cq;
 	/** Queue pair */
 	struct ib_queue_pair *qp;
 	/** Local MAC */
@@ -77,6 +84,7 @@ struct ipoib_device {
 	struct ib_mc_membership broadcast_membership;
 	/** REMAC cache */
 	struct list_head peers;
+	uint32_t total_peers;
 };
 
 /** Broadcast IPoIB address */
@@ -96,6 +104,20 @@ struct errortab ipoib_errors[] __errortab = {
 	__einfo_errortab ( EINFO_EINPROGRESS_JOINING ),
 };
 
+static int ipoib_open ( struct net_device *netdev );
+static void ipoib_close ( struct net_device *netdev );
+static int ipoib_transmit ( struct net_device *netdev,
+			    struct io_buffer *iobuf );
+static void ipoib_poll ( struct net_device *netdev );
+
+/** IPoIB network device operations */
+static struct net_device_operations ipoib_operations = {
+	.open		= ipoib_open,
+	.close		= ipoib_close,
+	.transmit	= ipoib_transmit,
+	.poll		= ipoib_poll,
+};
+
 /****************************************************************************
  *
  * IPoIB REMAC cache
@@ -112,6 +134,22 @@ struct ipoib_peer {
 	/** MAC address */
 	struct ipoib_mac mac;
 };
+
+static uint32_t ipoib_add_peer ( struct ipoib_device *ipoib,
+								struct ipoib_peer * peer ) {
+	list_add ( &peer->list, &ipoib->peers );
+	ipoib->total_peers++;
+	return ipoib->total_peers;
+}
+
+static uint32_t ipoib_remove_peer( struct ipoib_device *ipoib,
+								struct ipoib_peer * peer ) {
+	if ( ipoib->total_peers > 0 ) {
+		list_del ( &peer->list );
+		ipoib->total_peers--;
+	}
+	return ipoib->total_peers;
+}
 
 /**
  * Find IPoIB MAC from REMAC
@@ -172,11 +210,14 @@ static int ipoib_map_remac ( struct ipoib_device *ipoib,
 
 	/* Create new entry */
 	peer = malloc ( sizeof ( *peer ) );
-	if ( ! peer )
+	if ( ! peer ) {
+		DBGC ( ipoib, "IPoIB %p insufficient space for new peer\n",
+				       ipoib );
 		return -ENOMEM;
+	}
 	memcpy ( &peer->remac, remac, sizeof ( peer->remac ) );
 	memcpy ( &peer->mac, mac, sizeof ( peer->mac ) );
-	list_add ( &peer->list, &ipoib->peers );
+	ipoib_add_peer ( ipoib, peer );
 
 	return 0;
 }
@@ -191,11 +232,12 @@ static void ipoib_flush_remac ( struct ipoib_device *ipoib ) {
 	struct ipoib_peer *tmp;
 
 	list_for_each_entry_safe ( peer, tmp, &ipoib->peers, list ) {
-		list_del ( &peer->list );
+		ipoib_remove_peer( ipoib, peer );
 		free ( peer );
 	}
 }
-
+extern unsigned int neighbour_discard ( void *ll_addr, size_t ll_addr_len );
+#define IPOIB_MIN_DROP_CACHE 3
 /**
  * Discard some entries from the REMAC cache
  *
@@ -203,15 +245,33 @@ static void ipoib_flush_remac ( struct ipoib_device *ipoib ) {
  */
 static unsigned int ipoib_discard_remac ( void ) {
 	struct ib_device *ibdev;
+	struct net_device *netdev;
 	struct ipoib_device *ipoib;
-	struct ipoib_peer *peer;
+	struct ipoib_peer *peer, *tmp;
 	unsigned int discarded = 0;
 
 	/* Try to discard one cache entry for each IPoIB device */
 	for_each_ibdev ( ibdev ) {
-		ipoib = ib_get_ownerdata ( ibdev );
-		list_for_each_entry_reverse ( peer, &ipoib->peers, list ) {
-			list_del ( &peer->list );
+		netdev = ib_get_ownerdata ( ibdev );
+		/* Skip non-Infiniband ports */
+		if ( netdev->op != &ipoib_operations )
+			continue;
+
+		ipoib = netdev->priv;
+		if ( list_empty ( &ipoib->peers ) || ( ipoib->total_peers < IPOIB_MIN_DROP_CACHE ) )
+			continue;
+
+		list_for_each_entry_reverse_safe ( peer, tmp, &ipoib->peers, list ) {
+			ipoib_remove_peer( ipoib, peer );
+			/* WA: Remove from neghbors list
+			 * malloc() may discard a remac but not the corresponfing
+			 * ARP neighbour, as a result the download process may get stuck.
+			 * The optimal fix wiil be that the IPoIB stack must know how to
+			 * recover from a state where the ARP table (neighbours list)
+			 * has an entry of a specific neighbour but the REMACs list doesn't
+			 */
+			neighbour_discard ( ( void * ) & ( peer->remac ),
+					netdev->ll_protocol->ll_addr_len );
 			free ( peer );
 			discarded++;
 			break;
@@ -222,7 +282,7 @@ static unsigned int ipoib_discard_remac ( void ) {
 }
 
 /** IPoIB cache discarder */
-struct cache_discarder ipoib_discarder __cache_discarder ( CACHE_NORMAL ) = {
+struct cache_discarder ipoib_discarder __cache_discarder ( CACHE_EXPENSIVE ) = {
 	.discard = ipoib_discard_remac,
 };
 
@@ -233,6 +293,34 @@ struct cache_discarder ipoib_discarder __cache_discarder ( CACHE_NORMAL ) = {
  ****************************************************************************
  */
 
+static void ipoib_def_eth_addr ( const union ib_guid *guid,
+			uint8_t *eth_addr ) {
+	eth_addr[0] = guid->bytes[0];
+	eth_addr[1] = guid->bytes[1];
+	eth_addr[2] = guid->bytes[2];
+	eth_addr[3] = guid->bytes[5];
+	eth_addr[4] = guid->bytes[6];
+	eth_addr[5] = guid->bytes[7];
+}
+
+/**
+ * Generate Mellanox Ethernet-compatible compressed link-layer address
+ *
+ * @v ll_addr		Link-layer address
+ * @v eth_addr		Ethernet-compatible address to fill in
+ */
+static void ipoib_mlx_eth_addr ( const union ib_guid *guid,
+				uint8_t *eth_addr ) {
+	eth_addr[0] = ( ( guid->bytes[3] == 2 ) ? 0x00 : 0x02 );
+	eth_addr[1] = guid->bytes[1];
+	eth_addr[2] = guid->bytes[2];
+	eth_addr[3] = guid->bytes[5];
+	eth_addr[4] = guid->bytes[6];
+	eth_addr[5] = guid->bytes[7];
+}
+
+void ( * ipoib_hw_guid2mac ) ( const void *hw_addr, void *ll_addr ) = NULL;
+
 /**
  * Initialise IPoIB link-layer address
  *
@@ -241,15 +329,16 @@ struct cache_discarder ipoib_discarder __cache_discarder ( CACHE_NORMAL ) = {
  */
 static void ipoib_init_addr ( const void *hw_addr, void *ll_addr ) {
 	const uint8_t *guid = hw_addr;
-	uint8_t *eth_addr = ll_addr;
-	uint8_t guid_mask = IPOIB_GUID_MASK;
-	unsigned int i;
 
-	/* Extract bytes from GUID according to mask */
-	for ( i = 0 ; i < 8 ; i++, guid++, guid_mask <<= 1 ) {
-		if ( guid_mask & 0x80 )
-			*(eth_addr++) = *guid;
-	}
+	/* If specified, query the HW for the ETH MAC */
+	if ( ipoib_hw_guid2mac )
+		ipoib_hw_guid2mac ( hw_addr, ll_addr );
+	else if ( ( guid[0] == 0x0 ) &&
+		    ( guid[1] == 0x02 ) &&
+		    ( guid[2] == 0xc9 ) )
+		ipoib_mlx_eth_addr ( hw_addr, ll_addr );
+	else
+		ipoib_def_eth_addr ( hw_addr, ll_addr );
 }
 
 /** IPoIB protocol */
@@ -259,6 +348,7 @@ struct ll_protocol ipoib_protocol __ll_protocol = {
 	.hw_addr_len	= sizeof ( union ib_guid ),
 	.ll_addr_len	= ETH_ALEN,
 	.ll_header_len	= ETH_HLEN,
+	.client_id_len	= IPOIB_ALEN,
 	.push		= eth_push,
 	.pull		= eth_pull,
 	.init_addr	= ipoib_init_addr,
@@ -463,7 +553,9 @@ static int ipoib_transmit ( struct net_device *netdev,
 	struct ethhdr *ethhdr;
 	struct ipoib_hdr *ipoib_hdr;
 	struct ipoib_mac *mac;
+	struct ib_work_queue *wq = &ipoib->qp->send;
 	struct ib_address_vector dest;
+	unsigned long end_timer;
 	uint16_t net_proto;
 	int rc;
 
@@ -486,8 +578,10 @@ static int ipoib_transmit ( struct net_device *netdev,
 
 	/* Identify destination address */
 	mac = ipoib_find_remac ( ipoib, ( ( void *) ethhdr->h_dest ) );
-	if ( ! mac )
+	if ( ! mac ) {
+		DBGC ( ipoib, "IPoIB %p No REMAC found for this peer\n", ipoib );
 		return -ENXIO;
+	}
 
 	/* Translate packet if applicable */
 	if ( ( rc = ipoib_translate_tx ( netdev, iobuf, net_proto ) ) != 0 )
@@ -506,6 +600,16 @@ static int ipoib_transmit ( struct net_device *netdev,
 	if ( ( rc = ib_resolve_path ( ibdev, &dest ) ) != 0 ) {
 		/* Path not resolved yet */
 		return rc;
+	}
+
+	/** Poll for free IO buffer */
+	if ( wq->iobufs[wq->next_idx & ( wq->num_wqes - 1 )] ) {
+		end_timer = currticks() +
+			( ticks_per_sec() * POLL_SEND_IOBUFFER_TIMEOUT );
+		while ( wq->iobufs[wq->next_idx & ( wq->num_wqes - 1 )] &&
+				( currticks() < end_timer ) ) {
+			ib_poll_cq ( ibdev, ipoib->qp->send.cq );
+		}
 	}
 
 	return ib_post_send ( ibdev, ipoib->qp, &dest, iobuf );
@@ -551,6 +655,7 @@ static void ipoib_complete_recv ( struct ib_device *ibdev __unused,
 
 	/* Record errors */
 	if ( rc != 0 ) {
+		DBGC ( ipoib, "IPoIB %p received packet with error\n", ipoib );
 		netdev_rx_err ( netdev, iobuf, rc );
 		return;
 	}
@@ -631,13 +736,15 @@ static struct ib_completion_queue_operations ipoib_cq_op = {
 static struct io_buffer * ipoib_alloc_iob ( size_t len ) {
 	struct io_buffer *iobuf;
 	size_t reserve_len;
+	size_t alloc_len;
 
 	/* Calculate additional length required at start of buffer */
 	reserve_len = ( sizeof ( struct ethhdr ) -
 			sizeof ( struct ipoib_hdr ) );
 
 	/* Allocate buffer */
-	iobuf = alloc_iob_raw ( ( len + reserve_len ), len, -reserve_len );
+	alloc_len = ( len + reserve_len + sizeof ( struct ib_global_route_header ) );
+	iobuf = alloc_iob_raw ( alloc_len, len, -reserve_len );
 	if ( iobuf ) {
 		iob_reserve ( iobuf, reserve_len );
 	}
@@ -729,6 +836,7 @@ static void ipoib_leave_broadcast_group ( struct ipoib_device *ipoib ) {
 static void ipoib_link_state_changed ( struct ib_device *ibdev ) {
 	struct net_device *netdev = ib_get_ownerdata ( ibdev );
 	struct ipoib_device *ipoib = netdev->priv;
+	union ib_guid *guid;
 	int rc;
 
 	/* Leave existing broadcast group */
@@ -737,6 +845,11 @@ static void ipoib_link_state_changed ( struct ib_device *ibdev ) {
 	/* Update MAC address based on potentially-new GID prefix */
 	memcpy ( &ipoib->mac.gid.s.prefix, &ibdev->gid.s.prefix,
 		 sizeof ( ipoib->mac.gid.s.prefix ) );
+
+	/* Calculate client identifier ( GUID ) */
+#define CLIENT_ID_GUID_OFFSET 12
+	guid = ( ( union ib_guid * ) ( netdev->client_id + CLIENT_ID_GUID_OFFSET ) );
+	memcpy ( guid, &ibdev->gid.s.guid, sizeof ( union ib_guid ) );
 
 	/* Update broadcast GID based on potentially-new partition key */
 	ipoib->broadcast.gid.words[2] =
@@ -774,18 +887,23 @@ static int ipoib_open ( struct net_device *netdev ) {
 		goto err_ib_open;
 	}
 
-	/* Allocate completion queue */
-	ipoib->cq = ib_create_cq ( ibdev, IPOIB_NUM_CQES, &ipoib_cq_op );
-	if ( ! ipoib->cq ) {
-		DBGC ( ipoib, "IPoIB %p could not allocate completion queue\n",
-		       ipoib );
+	/* Allocate send and receive completion queue */
+	ipoib->tx_cq = ib_create_cq ( ibdev, IPOIB_NUM_SEND_CQES, &ipoib_cq_op );
+	if ( ! ipoib->tx_cq ) {
+		DBGC ( ipoib, "IPoIB %p could not allocate send completion queue\n", ipoib );
 		rc = -ENOMEM;
-		goto err_create_cq;
+		goto err_create_tx_cq;
+	}
+	ipoib->rx_cq = ib_create_cq ( ibdev, IPOIB_NUM_RECV_CQES, &ipoib_cq_op );
+	if ( ! ipoib->rx_cq ) {
+		DBGC ( ipoib, "IPoIB %p could not allocate recieve completion queue\n", ipoib );
+		rc = -ENOMEM;
+		goto err_create_rx_cq;
 	}
 
 	/* Allocate queue pair */
 	ipoib->qp = ib_create_qp ( ibdev, IB_QPT_UD, IPOIB_NUM_SEND_WQES,
-				   ipoib->cq, IPOIB_NUM_RECV_WQES, ipoib->cq,
+				   ipoib->tx_cq, IPOIB_NUM_RECV_WQES, ipoib->rx_cq,
 				   &ipoib_qp_op );
 	if ( ! ipoib->qp ) {
 		DBGC ( ipoib, "IPoIB %p could not allocate queue pair\n",
@@ -808,8 +926,10 @@ static int ipoib_open ( struct net_device *netdev ) {
 
 	ib_destroy_qp ( ibdev, ipoib->qp );
  err_create_qp:
-	ib_destroy_cq ( ibdev, ipoib->cq );
- err_create_cq:
+	ib_destroy_cq ( ibdev, ipoib->rx_cq );
+ err_create_rx_cq:
+	ib_destroy_cq ( ibdev, ipoib->tx_cq );
+ err_create_tx_cq:
 	ib_close ( ibdev );
  err_ib_open:
 	return rc;
@@ -835,20 +955,15 @@ static void ipoib_close ( struct net_device *netdev ) {
 
 	/* Tear down the queues */
 	ib_destroy_qp ( ibdev, ipoib->qp );
-	ib_destroy_cq ( ibdev, ipoib->cq );
+
+	ib_destroy_cq ( ibdev, ipoib->rx_cq );
+	ib_destroy_cq ( ibdev, ipoib->tx_cq );
 
 	/* Close IB device */
 	ib_close ( ibdev );
 }
 
-/** IPoIB network device operations */
-static struct net_device_operations ipoib_operations = {
-	.open		= ipoib_open,
-	.close		= ipoib_close,
-	.transmit	= ipoib_transmit,
-	.poll		= ipoib_poll,
-};
-
+uint8_t mellanox_general_client_id[MAX_LL_ADDR_LEN] = {255,0,0,0,0,0,2,0,0,2,0xC9,0,0,0,0,0,0,0,0,0};
 /**
  * Probe IPoIB device
  *
@@ -888,6 +1003,9 @@ static int ipoib_probe ( struct ib_device *ibdev ) {
 	/* Register network device */
 	if ( ( rc = register_netdev ( netdev ) ) != 0 )
 		goto err_register_netdev;
+
+	/* Update client identifier to IPoIB client identifier */
+	memcpy ( netdev->client_id, &mellanox_general_client_id, MAX_LL_ADDR_LEN );
 
 	return 0;
 

@@ -17,9 +17,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <string.h>
@@ -47,6 +51,33 @@ FILE_LICENCE ( GPL2_OR_LATER );
  *    http://www.datasheetarchive.com/dl/Datasheets-8/DSA-153536.pdf
  *    http://www.datasheetarchive.com/indexdl/Datasheet-028/DSA00494723.pdf
  */
+
+/******************************************************************************
+ *
+ * Debugging
+ *
+ ******************************************************************************
+ */
+
+/**
+ * Dump all registers (for debugging)
+ *
+ * @v rtl		Realtek device
+ */
+static __attribute__ (( unused )) void realtek_dump ( struct realtek_nic *rtl ){
+	uint8_t regs[256];
+	unsigned int i;
+
+	/* Do nothing unless debug output is enabled */
+	if ( ! DBG_LOG )
+		return;
+
+	/* Dump registers (via byte accesses; may not work for all registers) */
+	for ( i = 0 ; i < sizeof ( regs ) ; i++ )
+		regs[i] = readb ( rtl->regs + i );
+	DBGC ( rtl, "REALTEK %p register dump:\n", rtl );
+	DBGC_HDA ( rtl, 0, regs, sizeof ( regs ) );
+}
 
 /******************************************************************************
  *
@@ -167,7 +198,6 @@ static int realtek_init_eeprom ( struct net_device *netdev ) {
 		DBGC ( rtl, "REALTEK %p EEPROM is a 93C46\n", rtl );
 		init_at93c46 ( &rtl->eeprom, 16 );
 	}
-	rtl->eeprom.bus = &rtl->spibit.bus;
 
 	/* Check for EEPROM presence.  Some onboard NICs will have no
 	 * EEPROM connected, with the BIOS being responsible for
@@ -413,6 +443,7 @@ static void realtek_check_link ( struct net_device *netdev ) {
 
 	/* Determine link state */
 	if ( rtl->have_phy_regs ) {
+		mii_dump ( &rtl->mii );
 		phystatus = readb ( rtl->regs + RTL_PHYSTATUS );
 		link_up = ( phystatus & RTL_PHYSTATUS_LINKSTS );
 		DBGC ( rtl, "REALTEK %p PHY status is %02x (%s%s%s%s%s%s, "
@@ -680,8 +711,8 @@ static int realtek_open ( struct net_device *netdev ) {
 
 	/* Configure receiver */
 	rcr = readl ( rtl->regs + RTL_RCR );
-	rcr &= ~( RTL_RCR_RXFTH_MASK | RTL_RCR_RBLEN_MASK |
-		  RTL_RCR_MXDMA_MASK );
+	rcr &= ~( RTL_RCR_STOP_WORKING | RTL_RCR_RXFTH_MASK |
+		  RTL_RCR_RBLEN_MASK | RTL_RCR_MXDMA_MASK );
 	rcr |= ( RTL_RCR_RXFTH_DEFAULT | RTL_RCR_RBLEN_DEFAULT |
 		 RTL_RCR_MXDMA_DEFAULT | RTL_RCR_WRAP | RTL_RCR_AB |
 		 RTL_RCR_AM | RTL_RCR_APM | RTL_RCR_AAP );
@@ -1057,6 +1088,7 @@ static void realtek_detect ( struct realtek_nic *rtl ) {
 			       rtl );
 			rtl->legacy = 1;
 		}
+		rtl->eeprom.bus = &rtl->spibit.bus;
 	}
 }
 
@@ -1091,6 +1123,10 @@ static int realtek_probe ( struct pci_device *pci ) {
 
 	/* Map registers */
 	rtl->regs = ioremap ( pci->membase, RTL_BAR_SIZE );
+	if ( ! rtl->regs ) {
+		rc = -ENODEV;
+		goto err_ioremap;
+	}
 
 	/* Reset the NIC */
 	if ( ( rc = realtek_reset ( rtl ) ) != 0 )
@@ -1100,7 +1136,8 @@ static int realtek_probe ( struct pci_device *pci ) {
 	realtek_detect ( rtl );
 
 	/* Initialise EEPROM */
-	if ( ( rc = realtek_init_eeprom ( netdev ) ) == 0 ) {
+	if ( rtl->eeprom.bus &&
+	     ( ( rc = realtek_init_eeprom ( netdev ) ) == 0 ) ) {
 
 		/* Read MAC address from EEPROM */
 		if ( ( rc = nvs_read ( &rtl->eeprom.nvs, RTL_EEPROM_MAC,
@@ -1149,6 +1186,7 @@ static int realtek_probe ( struct pci_device *pci ) {
 	realtek_reset ( rtl );
  err_reset:
 	iounmap ( rtl->regs );
+ err_ioremap:
 	netdev_nullify ( netdev );
 	netdev_put ( netdev );
  err_alloc:

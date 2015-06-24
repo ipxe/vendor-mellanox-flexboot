@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,10 +16,15 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,17 +53,20 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 static int ib_smc_mad ( struct ib_device *ibdev, uint16_t attr_id,
 			uint32_t attr_mod, ib_local_mad_t local_mad,
-			union ib_mad *mad ) {
+			union ib_mad *mad , uint8_t method)
+{
 	int rc;
 
 	/* Construct MAD */
-	memset ( mad, 0, sizeof ( *mad ) );
-	mad->hdr.base_version = IB_MGMT_BASE_VERSION;
-	mad->hdr.mgmt_class = IB_MGMT_CLASS_SUBN_LID_ROUTED;
-	mad->hdr.class_version = 1;
-	mad->hdr.method = IB_MGMT_METHOD_GET;
-	mad->hdr.attr_id = attr_id;
-	mad->hdr.attr_mod = attr_mod;
+	if ( method != IB_MGMT_METHOD_SET)
+		memset ( mad, 0, sizeof ( *mad ) );
+
+	mad->hdr.base_version	= IB_MGMT_BASE_VERSION;
+	mad->hdr.mgmt_class	= IB_MGMT_CLASS_SUBN_LID_ROUTED;
+	mad->hdr.class_version	= 1;
+	mad->hdr.method		= method;
+	mad->hdr.attr_id	= attr_id;
+	mad->hdr.attr_mod	= attr_mod;
 
 	/* Issue MAD */
 	if ( ( rc = local_mad ( ibdev, mad ) ) != 0 )
@@ -81,7 +90,7 @@ static int ib_smc_get_node_info ( struct ib_device *ibdev,
 
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_NODE_INFO ), 0,
-				 local_mad, mad ) ) != 0 ) {
+				 local_mad, mad,  IB_MGMT_METHOD_GET) ) != 0 ) {
 		DBGC ( ibdev, "IBDEV %p could not get node info: %s\n",
 		       ibdev, strerror ( rc ) );
 		return rc;
@@ -104,7 +113,8 @@ static int ib_smc_get_port_info ( struct ib_device *ibdev,
 
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PORT_INFO ),
-				 htonl ( ibdev->port ), local_mad, mad )) !=0){
+				 htonl ( ibdev->port ), local_mad, mad,
+				 IB_MGMT_METHOD_GET )) != 0 ) {
 		DBGC ( ibdev, "IBDEV %p could not get port info: %s\n",
 		       ibdev, strerror ( rc ) );
 		return rc;
@@ -127,7 +137,7 @@ static int ib_smc_get_guid_info ( struct ib_device *ibdev,
 
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_GUID_INFO ), 0,
-				 local_mad, mad ) ) != 0 ) {
+				 local_mad, mad, IB_MGMT_METHOD_GET) ) != 0 ) {
 		DBGC ( ibdev, "IBDEV %p could not get GUID info: %s\n",
 		       ibdev, strerror ( rc ) );
 		return rc;
@@ -150,11 +160,52 @@ static int ib_smc_get_pkey_table ( struct ib_device *ibdev,
 
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PKEY_TABLE ), 0,
-				 local_mad, mad ) ) != 0 ) {
+				 local_mad, mad, IB_MGMT_METHOD_GET) ) != 0 ) {
 		DBGC ( ibdev, "IBDEV %p could not get pkey table: %s\n",
 		       ibdev, strerror ( rc ) );
 		return rc;
 	}
+	return 0;
+}
+
+/**
+ * Set Infiniband port speed using SMC
+ *
+ * @v ibdev		Infiniband device
+ * @v local_mad		Method for issuing local MADs
+ * @ret rc		Return status code
+ */
+int ib_smc_set_port_info ( struct ib_device *ibdev,
+			  ib_local_mad_t local_mad)
+{
+	union ib_mad mad;
+	struct ib_port_info *port_info	= &mad.smp.smp_data.port_info;
+	int rc;
+
+	/* Get current port info */
+	if ( ( rc = ib_smc_get_port_info ( ibdev, local_mad, &mad ) ) != 0 ) {
+		return rc;
+	}
+
+	port_info->link_speed_active__link_speed_enabled &= ~0xf; //zero out enabled speed
+	port_info->link_speed_active__link_speed_enabled |= 0x1; // set link speed to 2.5Gbps
+	port_info->port_phys_state__link_down_def_state	&= 0xf;
+	port_info->port_phys_state__link_down_def_state	|= 0x2 << 4;
+	port_info->link_speed_ext_ena			= 0x1e;
+#define IB_MAD_PORT_INFO_DISABLE_FDR 0x1e
+	port_info->ext_val &= ~(cpu_to_be32(0xf));
+	port_info->ext_val |= cpu_to_be32(IB_MAD_PORT_INFO_DISABLE_FDR);
+
+	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PORT_INFO ),
+				 htonl ( ibdev->port ), local_mad, &mad,
+				 IB_MGMT_METHOD_SET )) != 0 )
+	{
+		printf("IBDEV %p could not set port info: %s\n",
+		       ibdev, strerror ( rc ) );
+		return rc;
+	}
+
+	DBGC ( ibdev, "IBDEV %p set port info link speed to 2.5Gbps\n", ibdev);
 	return 0;
 }
 
@@ -171,6 +222,7 @@ static int ib_smc_get ( struct ib_device *ibdev, ib_local_mad_t local_mad ) {
 	struct ib_port_info *port_info = &mad.smp.smp_data.port_info;
 	struct ib_guid_info *guid_info = &mad.smp.smp_data.guid_info;
 	struct ib_pkey_table *pkey_table = &mad.smp.smp_data.pkey_table;
+	int pkey_index;
 	int rc;
 
 	/* Node info gives us the node GUID */
@@ -210,7 +262,16 @@ static int ib_smc_get ( struct ib_device *ibdev, ib_local_mad_t local_mad ) {
 	/* Get partition key */
 	if ( ( rc = ib_smc_get_pkey_table ( ibdev, local_mad, &mad ) ) != 0 )
 		return rc;
-	ibdev->pkey = ntohs ( pkey_table->pkey[0] );
+
+	DBGC ( ibdev, "IBDEV %p Using PKey = 0x%04x\n", ibdev, ibdev->pkey );
+
+	for ( pkey_index = 0; pkey_index < IB_NUM_PKEYS; pkey_index++ ) {
+		if ( ( ntohs ( pkey_table->pkey[pkey_index] ) & PKEY_MASK ) ==
+			( ibdev->pkey & PKEY_MASK ) ) {
+			ibdev->pkey_index = pkey_index;
+			break;
+		}
+	}
 
 	DBGC ( ibdev, "IBDEV %p port GID is " IB_GID_FMT "\n",
 	       ibdev, IB_GID_ARGS ( &ibdev->gid ) );

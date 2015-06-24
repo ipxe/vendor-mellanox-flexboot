@@ -4,7 +4,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdlib.h>
 #include <ipxe/timer.h>
@@ -25,11 +25,16 @@ void srandom ( unsigned int seed ) {
  *
  * @ret rand		Pseudo-random number
  */
-long int random ( void ) {
+long int random ( long int seed ) {
 	int32_t q;
+	uint32_t eax;
+	uint32_t edx;
 
-	if ( ! rnd_seed ) /* Initialize linear congruential generator */
-		srandom ( currticks() );
+        __asm__ __volatile__ ( "rdtsc" :
+			       "=a" ( eax ),
+			       "=d" ( edx ) );
+
+	srandom(seed + (eax ^ edx));
 
 	/* simplified version of the LCG given in Bruce Schneier's
 	   "Applied Cryptography" */

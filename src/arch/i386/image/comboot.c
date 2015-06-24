@@ -26,6 +26,8 @@
 
 FILE_LICENCE ( GPL2_OR_LATER );
 
+#include <stdio.h>
+#include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -291,6 +293,10 @@ static int comboot_probe ( struct image *image ) {
 		
 		return rc;
 	}
+
+	printf ( "WARNING: COMBOOT IMAGE SUPPORT IS DEPRECATED "
+			 "AND WILL BE REMOVED IN FUTURE RELEASES\n" );
+	sleep ( 2 );
 
 	return 0;
 }

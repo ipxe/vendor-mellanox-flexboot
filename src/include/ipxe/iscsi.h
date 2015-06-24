@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/socket.h>
@@ -16,6 +16,10 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/refcnt.h>
 #include <ipxe/xfer.h>
 #include <ipxe/process.h>
+
+extern const struct setting reverse_username_setting __setting ( SETTING_AUTH_EXTRA, reverse-username );
+extern const struct setting reverse_password_setting __setting ( SETTING_AUTH_EXTRA, reverse-password );
+extern const struct setting initiator_iqn_setting __setting ( SETTING_SANBOOT_EXTRA, initiator-iqn );
 
 /** Default iSCSI port */
 #define ISCSI_PORT 3260

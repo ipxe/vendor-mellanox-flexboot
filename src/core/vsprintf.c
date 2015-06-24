@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stddef.h>
 #include <stdarg.h>
@@ -167,7 +171,7 @@ static char * format_decimal ( char *end, signed long num, int width,
  * Call's the printf_context::handler() method and increments
  * printf_context::len.
  */
-static inline void cputchar ( struct printf_context *ctx, unsigned int c ) {
+static inline void cputchar ( struct printf_context *ctx, unsigned char c ) {
 	ctx->handler ( ctx, c );
 	++ctx->len;
 }

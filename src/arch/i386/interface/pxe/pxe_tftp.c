@@ -21,9 +21,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -36,6 +40,8 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/xfer.h>
 #include <ipxe/open.h>
 #include <ipxe/process.h>
+#include <ipxe/uri.h>
+#include <realmode.h>
 #include <pxe.h>
 
 /** A PXE TFTP connection */
@@ -170,11 +176,10 @@ static struct pxe_tftp_connection pxe_tftp = {
  * @v blksize		Requested block size
  * @ret rc		Return status code
  */
-static int pxe_tftp_open ( uint32_t ipaddress, unsigned int port,
-			   const unsigned char *filename, size_t blksize,
-			   int sizeonly ) {
-	char uri_string[PXE_TFTP_URI_LEN];
+static int pxe_tftp_open ( IP4_t ipaddress, UDP_PORT_t port,
+			   UINT8_t *filename, UINT16_t blksize ) {
 	struct in_addr address;
+	struct uri *uri;
 	int rc;
 
 	/* Reset PXE TFTP connection structure */
@@ -185,19 +190,20 @@ static int pxe_tftp_open ( uint32_t ipaddress, unsigned int port,
 	pxe_tftp.blksize = blksize;
 	pxe_tftp.rc = -EINPROGRESS;
 
-	/* Construct URI string */
+	/* Construct URI */
 	address.s_addr = ipaddress;
-	if ( ! port )
-		port = htons ( TFTP_PORT );
-	snprintf ( uri_string, sizeof ( uri_string ), "tftp%s://%s:%d%s%s",
-		   sizeonly ? "size" : "", inet_ntoa ( address ),
-		   ntohs ( port ), ( ( filename[0] == '/' ) ? "" : "/" ),
-		   filename );
-	DBG ( " %s", uri_string );
+	DBG ( " %s", inet_ntoa ( address ) );
+	if ( port )
+		DBG ( ":%d", ntohs ( port ) );
+	DBG ( ":%s", filename );
+	uri = tftp_uri ( address, ntohs ( port ), ( ( char * ) filename ) );
+	if ( ! uri ) {
+		DBG ( " could not create URI\n" );
+		return -ENOMEM;
+	}
 
 	/* Open PXE TFTP connection */
-	if ( ( rc = xfer_open_uri_string ( &pxe_tftp.xfer,
-					   uri_string ) ) != 0 ) {
+	if ( ( rc = xfer_open_uri ( &pxe_tftp.xfer, uri ) ) != 0 ) {
 		DBG ( " could not open (%s)\n", strerror ( rc ) );
 		return rc;
 	}
@@ -259,8 +265,7 @@ static PXENV_EXIT_t pxenv_tftp_open ( struct s_PXENV_TFTP_OPEN *tftp_open ) {
 	if ( ( rc = pxe_tftp_open ( tftp_open->ServerIPAddress,
 				    tftp_open->TFTPPort,
 				    tftp_open->FileName,
-				    tftp_open->PacketSize,
-				    0) ) != 0 ) {
+				    tftp_open->PacketSize ) ) != 0 ) {
 		tftp_open->Status = PXENV_STATUS ( rc );
 		return PXENV_EXIT_FAILURE;
 	}
@@ -483,7 +488,7 @@ PXENV_EXIT_t pxenv_tftp_read_file ( struct s_PXENV_TFTP_READ_FILE
 
 	/* Open TFTP file */
 	if ( ( rc = pxe_tftp_open ( tftp_read_file->ServerIPAddress, 0,
-				    tftp_read_file->FileName, 0, 0 ) ) != 0 ) {
+				    tftp_read_file->FileName, 0 ) ) != 0 ) {
 		tftp_read_file->Status = PXENV_STATUS ( rc );
 		return PXENV_EXIT_FAILURE;
 	}
@@ -553,7 +558,7 @@ static PXENV_EXIT_t pxenv_tftp_get_fsize ( struct s_PXENV_TFTP_GET_FSIZE
 
 	/* Open TFTP file */
 	if ( ( rc = pxe_tftp_open ( tftp_get_fsize->ServerIPAddress, 0,
-				    tftp_get_fsize->FileName, 0, 1 ) ) != 0 ) {
+				    tftp_get_fsize->FileName, 0 ) ) != 0 ) {
 		tftp_get_fsize->Status = PXENV_STATUS ( rc );
 		return PXENV_EXIT_FAILURE;
 	}

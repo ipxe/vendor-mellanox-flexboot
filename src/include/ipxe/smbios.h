@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/api.h>
@@ -115,6 +115,23 @@ struct smbios_system_information {
 
 /** SMBIOS system information structure type */
 #define SMBIOS_TYPE_SYSTEM_INFORMATION 1
+
+/** SMBIOS base board information structure */
+struct smbios_base_board_information {
+	/** SMBIOS structure header */
+	struct smbios_header header;
+	/** Manufacturer string */
+	uint8_t manufacturer;
+	/** Product string */
+	uint8_t product;
+	/** Version string */
+	uint8_t version;
+	/** Serial number string */
+	uint8_t serial;
+} __attribute__ (( packed ));
+
+/** SMBIOS base board information structure type */
+#define SMBIOS_TYPE_BASE_BOARD_INFORMATION 2
 
 /** SMBIOS enclosure information structure */
 struct smbios_enclosure_information {

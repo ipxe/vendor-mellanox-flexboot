@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <string.h>
 #include <errno.h>
@@ -121,6 +125,10 @@ static int netdev_fetch_bustype ( struct net_device *netdev, void *data,
 		[BUS_TYPE_MCA] = "MCA",
 		[BUS_TYPE_ISA] = "ISA",
 		[BUS_TYPE_TAP] = "TAP",
+		[BUS_TYPE_EFI] = "EFI",
+		[BUS_TYPE_XEN] = "XEN",
+		[BUS_TYPE_HV] = "HV",
+		[BUS_TYPE_USB] = "USB",
 	};
 	struct device_description *desc = &netdev->dev->desc;
 	const char *bustype;

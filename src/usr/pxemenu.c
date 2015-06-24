@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -367,7 +372,7 @@ int pxe_menu_boot ( struct net_device *netdev ) {
 		return rc;
 
 	/* Fetch next server and filename */
-	pxebs_settings = find_settings ( PXEBS_SETTINGS_NAME );
+	pxebs_settings = find_settings ( netdev_settings ( netdev ), PXEBS_SETTINGS_NAME );
 	assert ( pxebs_settings );
 	uri = fetch_next_server_and_filename ( pxebs_settings );
 	if ( ! uri )

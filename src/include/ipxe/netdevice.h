@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/list.h>
@@ -36,13 +36,12 @@ struct device;
 
 /** Maximum length of a link-layer header
  *
- * The longest currently-supported link-layer header is for 802.11: a
- * 24-byte frame header plus an 8-byte 802.3 LLC/SNAP header, plus a
- * possible 4-byte VLAN header.  (The IPoIB link-layer pseudo-header
- * doesn't actually include link-layer addresses; see ipoib.c for
- * details.)
+ * The longest currently-supported link-layer header is for RNDIS: an
+ * 8-byte RNDIS header, a 32-byte RNDIS packet message header, a
+ * 14-byte Ethernet header and a possible 4-byte VLAN header.  Round
+ * up to 64 bytes.
  */
-#define MAX_LL_HEADER_LEN 36
+#define MAX_LL_HEADER_LEN 64
 
 /** Maximum length of a network-layer address */
 #define MAX_NET_ADDR_LEN 16
@@ -198,6 +197,8 @@ struct ll_protocol {
 	uint8_t ll_addr_len;
 	/** Link-layer header length */
 	uint8_t ll_header_len;
+	/** Client Identifier length */
+	uint8_t client_id_len;
 	/** Flags */
 	unsigned int flags;
 };
@@ -379,6 +380,9 @@ struct net_device {
 	 * device.  It can be changed at runtime.
 	 */
 	uint8_t ll_addr[MAX_LL_ADDR_LEN];
+	/** Client Identifier */
+	uint8_t client_id[MAX_LL_ADDR_LEN];
+
 	/** Link-layer broadcast address */
 	const uint8_t *ll_broadcast;
 
@@ -658,6 +662,8 @@ netdev_rx_frozen ( struct net_device *netdev ) {
 	return ( netdev->state & NETDEV_RX_FROZEN );
 }
 
+extern void netdev_rx_freeze ( struct net_device *netdev );
+extern void netdev_rx_unfreeze ( struct net_device *netdev );
 extern void netdev_link_err ( struct net_device *netdev, int rc );
 extern void netdev_link_down ( struct net_device *netdev );
 extern int netdev_tx ( struct net_device *netdev, struct io_buffer *iobuf );
@@ -683,6 +689,8 @@ extern struct net_device * find_netdev ( const char *name );
 extern struct net_device * find_netdev_by_index ( unsigned int index );
 extern struct net_device * find_netdev_by_location ( unsigned int bus_type,
 						     unsigned int location );
+extern struct net_device *
+find_netdev_by_ll_addr ( struct ll_protocol *ll_protocol, const void *ll_addr );
 extern struct net_device * last_opened_netdev ( void );
 extern int net_tx ( struct io_buffer *iobuf, struct net_device *netdev,
 		    struct net_protocol *net_protocol, const void *ll_dest,
@@ -731,26 +739,6 @@ static inline void netdev_tx_complete_next ( struct net_device *netdev ) {
 static inline __attribute__ (( always_inline )) void
 netdev_link_up ( struct net_device *netdev ) {
 	netdev_link_err ( netdev, 0 );
-}
-
-/**
- * Freeze network device receive queue processing
- *
- * @v netdev		Network device
- */
-static inline __attribute__ (( always_inline )) void
-netdev_rx_freeze ( struct net_device *netdev ) {
-	netdev->state |= NETDEV_RX_FROZEN;
-}
-
-/**
- * Unfreeze network device receive queue processing
- *
- * @v netdev		Network device
- */
-static inline __attribute__ (( always_inline )) void
-netdev_rx_unfreeze ( struct net_device *netdev ) {
-	netdev->state &= ~NETDEV_RX_FROZEN;
 }
 
 #endif /* _IPXE_NETDEVICE_H */

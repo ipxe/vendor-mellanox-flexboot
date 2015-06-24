@@ -21,23 +21,30 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <byteswap.h>
 #include <basemem_packet.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/iobuf.h>
+#include <usr/ifmgmt.h>
 #include <ipxe/device.h>
 #include <ipxe/pci.h>
 #include <ipxe/if_ether.h>
 #include <ipxe/ip.h>
 #include <ipxe/arp.h>
 #include <ipxe/rarp.h>
+#include <ipxe/profile.h>
 #include "pxe.h"
 
 /**
@@ -52,6 +59,9 @@ FILE_LICENCE ( GPL2_OR_LATER );
 static int undi_tx_count = 0;
 
 struct net_device *pxe_netdev = NULL;
+
+/** Transmit profiler */
+static struct profiler undi_tx_profiler __profiler = { .name = "undi.tx" };
 
 /**
  * Set network device as current PXE network device
@@ -77,7 +87,7 @@ void pxe_set_netdev ( struct net_device *netdev ) {
  * @ret rc		Return status code
  */
 static int pxe_netdev_open ( void ) {
-	int rc;
+	int rc, network_wait_to = 0;
 
 	assert ( pxe_netdev != NULL );
 
@@ -86,6 +96,11 @@ static int pxe_netdev_open ( void ) {
 
 	netdev_rx_freeze ( pxe_netdev );
 	netdev_irq ( pxe_netdev, 1 );
+
+	network_wait_to = fetch_intz_setting ( netdev_settings ( pxe_netdev ),
+			&network_wait_to_setting );
+	if ( network_wait_to > 0 )
+		ifnetwork_wait ( pxe_netdev, LINK_WAIT_TIMEOUT, network_wait_to );
 
 	return 0;
 }
@@ -309,6 +324,9 @@ pxenv_undi_transmit ( struct s_PXENV_UNDI_TRANSMIT *undi_transmit ) {
 	unsigned int i;
 	int rc;
 
+	/* Start profiling */
+	profile_start ( &undi_tx_profiler );
+
 	/* Sanity check */
 	if ( ! pxe_netdev ) {
 		DBGC ( &pxe_netdev, "PXENV_UNDI_TRANSMIT called with no "
@@ -323,8 +341,10 @@ pxenv_undi_transmit ( struct s_PXENV_UNDI_TRANSMIT *undi_transmit ) {
 	 * processing at this point, to work around callers that never
 	 * call PXENV_UNDI_OPEN before attempting to use the UNDI API.
 	 */
-	netdev_rx_freeze ( pxe_netdev );
-	netdev_irq ( pxe_netdev, 1 );
+	if ( ! netdev_rx_frozen ( pxe_netdev ) ) {
+		netdev_rx_freeze ( pxe_netdev );
+		netdev_irq ( pxe_netdev, 1 );
+	}
 
 	/* Identify network-layer protocol */
 	switch ( undi_transmit->Protocol ) {
@@ -422,6 +442,7 @@ pxenv_undi_transmit ( struct s_PXENV_UNDI_TRANSMIT *undi_transmit ) {
 		return PXENV_EXIT_FAILURE;
 	}
 
+	profile_stop ( &undi_tx_profiler );
 	undi_transmit->Status = PXENV_STATUS_SUCCESS;
 	return PXENV_EXIT_SUCCESS;
 }

@@ -15,13 +15,18 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/device.h>
 #include <ipxe/console.h>
 #include <ipxe/init.h>
+#include "mlx_bullseye.h"
 
 /** @file
  *
@@ -31,6 +36,12 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 /** "startup() has been called" flag */
 static int started = 0;
+/** "cleanup() has been called" flag */
+static int cleaned = 0;
+
+int ipxe_is_started () {
+	return started;
+}
 
 /**
  * Initialise iPXE
@@ -72,6 +83,20 @@ void startup ( void ) {
 	started = 1;
 }
 
+static void cleanup ( int flags ) {
+	struct startup_fn *startup_fn;
+
+	if ( cleaned )
+		return;
+
+	for_each_table_entry_reverse ( startup_fn, STARTUP_FNS ) {
+		if ( startup_fn->shutdown )
+			startup_fn->shutdown ( flags );
+	}
+
+	cleaned = 1;
+}
+
 /**
  * Shut down iPXE
  *
@@ -87,14 +112,25 @@ void startup ( void ) {
 void shutdown ( int flags ) {
 	struct startup_fn *startup_fn;
 
-	if ( ! started )
+
+	if ( ! started ) {
+		cleanup ( flags );
 		return;
+	}
 
 	/* Call registered shutdown functions (in reverse order) */
 	for_each_table_entry_reverse ( startup_fn, STARTUP_FNS ) {
 		if ( startup_fn->shutdown )
 			startup_fn->shutdown ( flags );
 	}
+
+	/*
+	 * The below is effective only
+	 * if MLX_BULLSEYE is defined
+	 * it will work only on QEMU machine
+	 * or native machine with console redirection
+	 */
+	MlxBullseyeDump();
 
 	/* Reset console */
 	console_reset();

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +37,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/params.h>
 #include <ipxe/timer.h>
 #include <ipxe/parseopt.h>
+#include <config/branding.h>
 
 /** @file
  *
@@ -232,7 +238,7 @@ int parse_settings ( char *text, struct settings **value ) {
 	assert ( text != NULL );
 
 	/* Parse scope name */
-	*value = find_settings ( text );
+	*value = find_settings ( NULL, text );
 	if ( ! *value ) {
 		printf ( "\"%s\": no such scope\n", text );
 		return -EINVAL;
@@ -343,7 +349,7 @@ void print_usage ( struct command_descriptor *cmd, char **argv ) {
 	}
 	if ( cmd->usage )
 		printf ( " %s", cmd->usage );
-	printf ( "\n\nSee http://ipxe.org/cmd/%s for further information\n",
+	printf ( "\n\nSee " PRODUCT_COMMAND_URI " for further information\n",
 		 argv[0] );
 }
 

@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 static void _wupdcurs ( WINDOW *win ) __nonnull;
 void _wputch ( WINDOW *win, chtype ch, int wrap ) __nonnull;
@@ -75,7 +75,7 @@ void _wputch ( WINDOW *win, chtype ch, int wrap ) {
  * @v wrap	wrap "switch"
  */
 void _wputc ( WINDOW *win, char c, int wrap ) {
-	_wputch ( win, ( c | win->attrs ), wrap );
+	_wputch ( win, ( ( ( unsigned char ) c ) | win->attrs ), wrap );
 }
 
 /**

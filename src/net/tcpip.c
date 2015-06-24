@@ -17,7 +17,7 @@
  * TCP/IP transport-network layer interface
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /**
  * Process a received TCP/IP packet
@@ -235,7 +235,7 @@ int tcpip_bind ( struct sockaddr_tcpip *st_local,
 	/* Otherwise, find an available port in the range [1,1023] or
 	 * [1025,65535] as appropriate.
 	 */
-	min_port = ( ( ( ! flags ) & TCPIP_BIND_PRIVILEGED ) + 1 );
+	min_port = ( ( ( ~flags ) & TCPIP_BIND_PRIVILEGED ) + 1 );
 	max_port = ( ( flags & TCPIP_BIND_PRIVILEGED ) - 1 );
 	offset = random();
 	for ( i = 0 ; i <= max_port ; i++ ) {

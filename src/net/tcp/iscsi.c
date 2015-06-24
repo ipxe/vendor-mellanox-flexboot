@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,14 +16,19 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <errno.h>
 #include <assert.h>
 #include <byteswap.h>
@@ -127,7 +133,7 @@ FEATURE ( FEATURE_PROTOCOL, "iSCSI", DHCP_EB_FEATURE_ISCSI, 1 );
 #define EPROTO_INVALID_LARGE_BINARY \
 	__einfo_error ( EINFO_EPROTO_INVALID_LARGE_BINARY )
 #define EINFO_EPROTO_INVALID_LARGE_BINARY \
-	__einfo_uniqify ( EINFO_EPROTO, 0x03, "Invalid large binary" )
+	__einfo_uniqify ( EINFO_EPROTO, 0x03, "Invalid large binary value" )
 #define EPROTO_INVALID_CHAP_RESPONSE \
 	__einfo_error ( EINFO_EPROTO_INVALID_CHAP_RESPONSE )
 #define EINFO_EPROTO_INVALID_CHAP_RESPONSE \
@@ -412,11 +418,12 @@ static int iscsi_rx_scsi_response ( struct iscsi_session *iscsi,
 		= &iscsi->rx_bhs.scsi_response;
 	struct scsi_rsp rsp;
 	uint32_t residual_count;
+	size_t data_len;
 	int rc;
 
 	/* Buffer up the PDU data */
 	if ( ( rc = iscsi_rx_buffered_data ( iscsi, data, len ) ) != 0 ) {
-		DBGC ( iscsi, "iSCSI %p could not buffer login response: %s\n",
+		DBGC ( iscsi, "iSCSI %p could not buffer SCSI response: %s\n",
 		       iscsi, strerror ( rc ) );
 		return rc;
 	}
@@ -432,9 +439,11 @@ static int iscsi_rx_scsi_response ( struct iscsi_session *iscsi,
 	} else if ( response->flags & ISCSI_DATA_FLAG_UNDERFLOW ) {
 		rsp.overrun = -(residual_count);
 	}
-	if ( ISCSI_DATA_LEN ( response->lengths ) )
-		memcpy ( &rsp.sense, ( iscsi->rx_buffer + 2 ),
-			 sizeof ( rsp.sense ) );
+	data_len = ISCSI_DATA_LEN ( response->lengths );
+	if ( data_len ) {
+		scsi_parse_sense ( ( iscsi->rx_buffer + 2 ), ( data_len - 2 ),
+				   &rsp.sense );
+	}
 	iscsi_rx_buffered_data_done ( iscsi );
 
 	/* Check for errors */
@@ -701,7 +710,7 @@ static int iscsi_build_login_request_strings ( struct iscsi_session *iscsi,
 		char buf[ base16_encoded_len ( iscsi->chap.response_len ) + 1 ];
 		assert ( iscsi->initiator_username != NULL );
 		base16_encode ( iscsi->chap.response, iscsi->chap.response_len,
-				buf );
+				buf, sizeof ( buf ) );
 		used += ssnprintf ( data + used, len - used,
 				    "CHAP_N=%s%cCHAP_R=0x%s%c",
 				    iscsi->initiator_username, 0, buf, 0 );
@@ -711,7 +720,7 @@ static int iscsi_build_login_request_strings ( struct iscsi_session *iscsi,
 		size_t challenge_len = ( sizeof ( iscsi->chap_challenge ) - 1 );
 		char buf[ base16_encoded_len ( challenge_len ) + 1 ];
 		base16_encode ( ( iscsi->chap_challenge + 1 ), challenge_len,
-				buf );
+				buf, sizeof ( buf ) );
 		used += ssnprintf ( data + used, len - used,
 				    "CHAP_I=%d%cCHAP_C=0x%s%c",
 				    iscsi->chap_challenge[0], 0, buf, 0 );
@@ -821,38 +830,27 @@ static int iscsi_tx_login_request ( struct iscsi_session *iscsi ) {
 }
 
 /**
- * Calculate maximum length of decoded large binary value
- *
- * @v encoded		Encoded large binary value
- * @v max_raw_len	Maximum length of raw data
- */
-static inline size_t
-iscsi_large_binary_decoded_max_len ( const char *encoded ) {
-	return ( strlen ( encoded ) ); /* Decoding never expands data */
-}
-
-/**
  * Decode large binary value
  *
  * @v encoded		Encoded large binary value
  * @v raw		Raw data
+ * @v len		Length of data buffer
  * @ret len		Length of raw data, or negative error
  */
-static int iscsi_large_binary_decode ( const char *encoded, uint8_t *raw ) {
+static int iscsi_large_binary_decode ( const char *encoded, uint8_t *raw,
+				       size_t len ) {
 
-	if ( encoded[0] != '0' )
-		return -EPROTO_INVALID_LARGE_BINARY;
-
-	switch ( encoded[1] ) {
-	case 'x' :
-	case 'X' :
-		return base16_decode ( ( encoded + 2 ), raw );
-	case 'b' :
-	case 'B' :
-		return base64_decode ( ( encoded + 2 ), raw );
-	default:
-		return -EPROTO_INVALID_LARGE_BINARY;
+	/* Check for initial '0x' or '0b' and decode as appropriate */
+	if ( *(encoded++) == '0' ) {
+		switch ( tolower ( *(encoded++) ) ) {
+		case 'x' :
+			return base16_decode ( encoded, raw, len );
+		case 'b' :
+			return base64_decode ( encoded, raw, len );
+		}
 	}
+
+	return -EPROTO_INVALID_LARGE_BINARY;
 }
 
 /**
@@ -979,19 +977,19 @@ static int iscsi_handle_chap_i_value ( struct iscsi_session *iscsi,
  */
 static int iscsi_handle_chap_c_value ( struct iscsi_session *iscsi,
 				       const char *value ) {
-	uint8_t buf[ iscsi_large_binary_decoded_max_len ( value ) ];
+	uint8_t buf[ strlen ( value ) ]; /* Decoding never expands data */
 	unsigned int i;
-	size_t len;
+	int len;
 	int rc;
 
 	/* Process challenge */
-	rc = iscsi_large_binary_decode ( value, buf );
-	if ( rc < 0 ) {
+	len = iscsi_large_binary_decode ( value, buf, sizeof ( buf ) );
+	if ( len < 0 ) {
+		rc = len;
 		DBGC ( iscsi, "iSCSI %p invalid CHAP challenge \"%s\": %s\n",
 		       iscsi, value, strerror ( rc ) );
 		return rc;
 	}
-	len = rc;
 	chap_update ( &iscsi->chap, buf, len );
 
 	/* Build CHAP response */
@@ -1049,8 +1047,8 @@ static int iscsi_handle_chap_n_value ( struct iscsi_session *iscsi,
  */
 static int iscsi_handle_chap_r_value ( struct iscsi_session *iscsi,
 				       const char *value ) {
-	uint8_t buf[ iscsi_large_binary_decoded_max_len ( value ) ];
-	size_t len;
+	uint8_t buf[ strlen ( value ) ]; /* Decoding never expands data */
+	int len;
 	int rc;
 
 	/* Generate CHAP response for verification */
@@ -1070,16 +1068,16 @@ static int iscsi_handle_chap_r_value ( struct iscsi_session *iscsi,
 	chap_respond ( &iscsi->chap );
 
 	/* Process response */
-	rc = iscsi_large_binary_decode ( value, buf );
-	if ( rc < 0 ) {
+	len = iscsi_large_binary_decode ( value, buf, sizeof ( buf ) );
+	if ( len < 0 ) {
+		rc = len;
 		DBGC ( iscsi, "iSCSI %p invalid CHAP response \"%s\": %s\n",
 		       iscsi, value, strerror ( rc ) );
 		return rc;
 	}
-	len = rc;
 
 	/* Check CHAP response */
-	if ( len != iscsi->chap.response_len ) {
+	if ( len != ( int ) iscsi->chap.response_len ) {
 		DBGC ( iscsi, "iSCSI %p invalid CHAP response length\n",
 		       iscsi );
 		return -EPROTO_INVALID_CHAP_RESPONSE;
@@ -1944,29 +1942,31 @@ static int iscsi_parse_root_path ( struct iscsi_session *iscsi,
  */
 static int iscsi_fetch_settings ( struct iscsi_session *iscsi ) {
 	char *hostname;
+	struct net_device *netdev = last_opened_netdev ();
+	struct settings *settings = ( netdev ? netdev_settings ( netdev ) : NULL );
 	union uuid uuid;
 	int len;
 
 	/* Fetch relevant settings.  Don't worry about freeing on
 	 * error, since iscsi_free() will take care of that anyway.
 	 */
-	fetch_string_setting_copy ( NULL, &username_setting,
+	fetch_string_setting_copy ( settings, &username_setting,
 				    &iscsi->initiator_username );
-	fetch_string_setting_copy ( NULL, &password_setting,
+	fetch_string_setting_copy ( settings, &password_setting,
 				    &iscsi->initiator_password );
-	fetch_string_setting_copy ( NULL, &reverse_username_setting,
+	fetch_string_setting_copy ( settings, &reverse_username_setting,
 				    &iscsi->target_username );
-	fetch_string_setting_copy ( NULL, &reverse_password_setting,
+	fetch_string_setting_copy ( settings, &reverse_password_setting,
 				    &iscsi->target_password );
 
 	/* Use explicit initiator IQN if provided */
-	fetch_string_setting_copy ( NULL, &initiator_iqn_setting,
+	fetch_string_setting_copy ( settings, &initiator_iqn_setting,
 				    &iscsi->initiator_iqn );
 	if ( iscsi->initiator_iqn )
 		return 0;
 
 	/* Otherwise, try to construct an initiator IQN from the hostname */
-	fetch_string_setting_copy ( NULL, &hostname_setting, &hostname );
+	fetch_string_setting_copy ( settings, &hostname_setting, &hostname );
 	if ( hostname ) {
 		len = asprintf ( &iscsi->initiator_iqn,
 				 ISCSI_DEFAULT_IQN_PREFIX ":%s", hostname );

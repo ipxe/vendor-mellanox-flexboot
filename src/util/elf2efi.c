@@ -478,11 +478,13 @@ static void process_reloc ( bfd *bfd __attribute__ (( unused )),
 		/* Skip absolute symbols; the symbol value won't
 		 * change when the object is loaded.
 		 */
+	} else if ( ( strcmp ( howto->name, "R_386_NONE" ) == 0 ) ||
+		    ( strcmp ( howto->name, "R_X86_64_NONE" ) == 0 ) ) {
+		/* Ignore dummy relocations used by REQUIRE_SYMBOL() */
 	} else if ( strcmp ( howto->name, "R_X86_64_64" ) == 0 ) {
 		/* Generate an 8-byte PE relocation */
 		generate_pe_reloc ( pe_reltab, offset, 8 );
-	} else if ( ( strcmp ( howto->name, "R_386_32" ) == 0 ) ||
-		    ( strcmp ( howto->name, "R_X86_64_32" ) == 0 ) ) {
+	} else if ( strcmp ( howto->name, "R_386_32" ) == 0 ) {
 		/* Generate a 4-byte PE relocation */
 		generate_pe_reloc ( pe_reltab, offset, 4 );
 	} else if ( strcmp ( howto->name, "R_386_16" ) == 0 ) {

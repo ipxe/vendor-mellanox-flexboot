@@ -24,14 +24,16 @@ struct efi_snp_device {
 	struct list_head list;
 	/** The underlying iPXE network device */
 	struct net_device *netdev;
-	/** The underlying EFI PCI device */
-	struct efi_pci_device *efipci;
+	/** The underlying EFI device */
+	struct efi_device *efidev;
 	/** EFI device handle */
 	EFI_HANDLE handle;
 	/** The SNP structure itself */
 	EFI_SIMPLE_NETWORK_PROTOCOL snp;
 	/** The SNP "mode" (parameters) */
 	EFI_SIMPLE_NETWORK_MODE mode;
+	/** Started flag */
+	int started;
 	/** Outstanding TX packet count (via "interrupt status")
 	 *
 	 * Used in order to generate TX completions.
@@ -63,17 +65,31 @@ struct efi_snp_device {
 	/** Driver name */
 	wchar_t driver_name[16];
 	/** Controller name */
-	wchar_t controller_name[32];
-	/** The device path
-	 *
-	 * This field is variable in size and must appear at the end
-	 * of the structure.
-	 */
-	EFI_DEVICE_PATH_PROTOCOL path;
+	wchar_t controller_name[64];
+	/** The device path */
+	EFI_DEVICE_PATH_PROTOCOL *path;
 };
 
 extern int efi_snp_hii_install ( struct efi_snp_device *snpdev );
 extern void efi_snp_hii_uninstall ( struct efi_snp_device *snpdev );
+extern struct efi_snp_device * find_snpdev ( EFI_HANDLE handle );
 extern struct efi_snp_device * last_opened_snpdev ( void );
+extern void efi_snp_set_claimed ( int claimed );
+
+/**
+ * Claim network devices for use by iPXE
+ *
+ */
+static inline void efi_snp_claim ( void ) {
+	efi_snp_set_claimed ( 1 );
+}
+
+/**
+ * Release network devices for use via SNP
+ *
+ */
+static inline void efi_snp_release ( void ) {
+	efi_snp_set_claimed ( 0 );
+}
 
 #endif /* _IPXE_EFI_SNP_H */

@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /**
  * @file
@@ -396,5 +400,6 @@ struct gdb_transport *find_gdb_transport ( const char *name ) {
 void gdbstub_start ( struct gdb_transport *trans ) {
 	stub.trans = trans;
 	stub.payload = &stub.buf [ 1 ];
+	gdbmach_init();
 	gdbmach_breakpoint();
 }

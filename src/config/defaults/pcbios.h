@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #define UACCESS_LIBRM
 #define IOAPI_X86
@@ -27,14 +27,20 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define	IMAGE_PXE		/* PXE image support */
 #define IMAGE_SCRIPT		/* iPXE script image support */
 #define IMAGE_BZIMAGE		/* Linux bzImage image support */
+#define IMAGE_COMBOOT		/* SYSLINUX COMBOOT image support */
 
 #define PXE_STACK		/* PXE stack in iPXE - required for PXELINUX */
 #define PXE_MENU		/* PXE menu booting */
 
 #define	SANBOOT_PROTO_ISCSI	/* iSCSI protocol */
-#define	SANBOOT_PROTO_AOE	/* AoE protocol */
-#define	SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
-#define	SANBOOT_PROTO_FCP	/* Fibre Channel protocol */
+#undef	SANBOOT_PROTO_AOE	/* AoE protocol */
+#undef	SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
+#undef	SANBOOT_PROTO_FCP	/* Fibre Channel protocol */
+
+#define	USB_HCD_XHCI		/* xHCI USB host controller */
+#define	USB_HCD_EHCI		/* EHCI USB host controller */
+#define	USB_HCD_UHCI		/* UHCI USB host controller */
+#define	USB_KEYBOARD		/* USB keyboards */
 
 #define	REBOOT_CMD		/* Reboot command */
 #define	CPUID_CMD		/* x86 CPU feature detection command */

@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <string.h>
 #include <stdio.h>
@@ -179,7 +183,7 @@ static int validator_append ( struct validator *validator,
 		}
 		cert = x509_last ( certs );
 		DBGC ( validator, "VALIDATOR %p found certificate %s\n",
-		       validator, cert->subject.name );
+		       validator, x509_name ( cert ) );
 
 		/* Move to next certificate */
 		asn1_skip_any ( &cursor );
@@ -250,7 +254,8 @@ static int validator_start_download ( struct validator *validator,
 	/* Generate URI string */
 	len = snprintf ( uri_string, uri_string_len, "%s/%08x.der?subject=",
 			 crosscert, crc );
-	base64_encode ( issuer->data, issuer->len, ( uri_string + len ) );
+	base64_encode ( issuer->data, issuer->len, ( uri_string + len ),
+			( uri_string_len - len ) );
 	DBGC ( validator, "VALIDATOR %p downloading cross-signed certificate "
 	       "from %s\n", validator, uri_string );
 
@@ -458,7 +463,7 @@ static void validator_step ( struct validator *validator ) {
 	 * previously.
 	 */
 	now = time ( NULL );
-	if ( ( rc = x509_validate_chain ( validator->chain, now,
+	if ( ( rc = x509_validate_chain ( validator->chain, now, NULL,
 					  NULL ) ) == 0 ) {
 		validator_finished ( validator, 0 );
 		return;
@@ -477,7 +482,7 @@ static void validator_step ( struct validator *validator ) {
 		/* The issuer is valid, but this certificate is not
 		 * yet valid.  If OCSP is applicable, start it.
 		 */
-		if ( cert->extensions.auth_info.ocsp.uri &&
+		if ( cert->extensions.auth_info.ocsp.uri.len &&
 		     ( ! cert->extensions.auth_info.ocsp.good ) ) {
 			/* Start OCSP */
 			if ( ( rc = validator_start_ocsp ( validator, cert,

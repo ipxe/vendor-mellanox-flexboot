@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008 Daniel Verkamp <daniel@drv.nu>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -188,7 +189,8 @@ static int comboot_fetch_kernel ( char *kernel_file, char *cmdline ) {
 		DBG ( "COMBOOT: fetching initrd '%s'\n", initrd_file );
 
 		/* Fetch initrd */
-		if ( ( rc = imgdownload_string ( initrd_file, &initrd ) ) != 0){
+		if ( ( rc = imgdownload_string ( initrd_file, 0,
+						 &initrd ) ) != 0 ) {
 			DBG ( "COMBOOT: could not fetch initrd: %s\n",
 			      strerror ( rc ) );
 			return rc;
@@ -202,7 +204,7 @@ static int comboot_fetch_kernel ( char *kernel_file, char *cmdline ) {
 	DBG ( "COMBOOT: fetching kernel '%s'\n", kernel_file );
 
 	/* Fetch kernel */
-	if ( ( rc = imgdownload_string ( kernel_file, &kernel ) ) != 0 ) {
+	if ( ( rc = imgdownload_string ( kernel_file, 0, &kernel ) ) != 0 ) {
 		DBG ( "COMBOOT: could not fetch kernel: %s\n",
 		      strerror ( rc ) );
 		return rc;
@@ -260,8 +262,18 @@ static __asmcall void int21 ( struct i386_all_regs *ix86 ) {
 		break;
 
 	case 0x04: /* Write Character to Serial Port */
+#ifdef CONSOLE_SERIAL
 		serial_putc ( ix86->regs.dl );
 		ix86->flags &= ~CF;
+#else
+		{
+			static int printed = 0;
+			if ( ! printed ) {
+				printed = 1;
+				DBG ( "Serial console is disabled\n" );
+			}
+		}
+#endif
 		break;
 
 	case 0x09: /* Write DOS String to Console */
@@ -464,7 +476,9 @@ static __asmcall void int22 ( struct i386_all_regs *ix86 ) {
 
 		ix86->flags &= ~CF;
 		break;
-
+	case 0x000C: /* Perform final cleanup */
+		shutdown_boot();
+		break;
 	case 0x000E: /* Get configuration file name */
 		/* FIXME: stub */
 		ix86->segs.es = rm_ds;

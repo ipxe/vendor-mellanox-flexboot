@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -924,7 +928,6 @@ int start_dhcpv6 ( struct interface *job, struct net_device *netdev,
 	/* Construct client and server addresses */
 	memset ( &addresses, 0, sizeof ( addresses ) );
 	addresses.client.sin6.sin6_family = AF_INET6;
-	addresses.client.sin6.sin6_scope_id = netdev->index;
 	addresses.client.sin6.sin6_port = htons ( DHCPV6_CLIENT_PORT );
 	addresses.server.sin6.sin6_family = AF_INET6;
 	ipv6_all_dhcp_relay_and_servers ( &addresses.server.sin6.sin6_addr );

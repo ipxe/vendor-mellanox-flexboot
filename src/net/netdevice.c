@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -34,6 +39,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/malloc.h>
 #include <ipxe/device.h>
 #include <ipxe/errortab.h>
+#include <ipxe/profile.h>
 #include <ipxe/vlan.h>
 #include <ipxe/netdevice.h>
 
@@ -48,6 +54,18 @@ struct list_head net_devices = LIST_HEAD_INIT ( net_devices );
 
 /** List of open network devices, in reverse order of opening */
 static struct list_head open_net_devices = LIST_HEAD_INIT ( open_net_devices );
+
+/** Network device index */
+static unsigned int netdev_index = 0;
+
+/** Network polling profiler */
+static struct profiler net_poll_profiler __profiler = { .name = "net.poll" };
+
+/** Network receive profiler */
+static struct profiler net_rx_profiler __profiler = { .name = "net.rx" };
+
+/** Network transmit profiler */
+static struct profiler net_tx_profiler __profiler = { .name = "net.tx" };
 
 /** Default unknown link status code */
 #define EUNKNOWN_LINK_STATUS __einfo_error ( EINFO_EUNKNOWN_LINK_STATUS )
@@ -106,6 +124,34 @@ static void netdev_notify ( struct net_device *netdev ) {
 		if ( driver->notify )
 			driver->notify ( netdev );
 	}
+}
+
+/**
+ * Freeze network device receive queue processing
+ *
+ * @v netdev		Network device
+ */
+void netdev_rx_freeze ( struct net_device *netdev ) {
+
+	/* Mark receive queue processing as frozen */
+	netdev->state |= NETDEV_RX_FROZEN;
+
+	/* Notify drivers of change */
+	netdev_notify ( netdev );
+}
+
+/**
+ * Unfreeze network device receive queue processing
+ *
+ * @v netdev		Network device
+ */
+void netdev_rx_unfreeze ( struct net_device *netdev ) {
+
+	/* Mark receive queue processing as not frozen */
+	netdev->state &= ~NETDEV_RX_FROZEN;
+
+	/* Notify drivers of change */
+	netdev_notify ( netdev );
 }
 
 /**
@@ -199,6 +245,7 @@ int netdev_tx ( struct net_device *netdev, struct io_buffer *iobuf ) {
 
 	DBGC2 ( netdev, "NETDEV %s transmitting %p (%p+%zx)\n",
 		netdev->name, iobuf, iobuf->data, iob_len ( iobuf ) );
+	profile_start ( &net_tx_profiler );
 
 	/* Enqueue packet */
 	list_add_tail ( &iobuf->list, &netdev->tx_queue );
@@ -220,6 +267,7 @@ int netdev_tx ( struct net_device *netdev, struct io_buffer *iobuf ) {
 	if ( ( rc = netdev->op->transmit ( netdev, iobuf ) ) != 0 )
 		goto err;
 
+	profile_stop ( &net_tx_profiler );
 	return 0;
 
  err:
@@ -557,22 +605,37 @@ struct net_device * alloc_netdev ( size_t priv_len ) {
  * devices.
  */
 int register_netdev ( struct net_device *netdev ) {
-	static unsigned int ifindex = 0;
 	struct ll_protocol *ll_protocol = netdev->ll_protocol;
 	struct net_driver *driver;
+	struct net_device *duplicate;
 	uint32_t seed;
 	int rc;
-
-	/* Record device index and create device name */
-	netdev->index = ifindex++;
-	if ( netdev->name[0] == '\0' ) {
-		snprintf ( netdev->name, sizeof ( netdev->name ), "net%d",
-			   netdev->index );
-	}
 
 	/* Set initial link-layer address, if not already set */
 	if ( ! netdev_has_ll_addr ( netdev ) ) {
 		ll_protocol->init_addr ( netdev->hw_addr, netdev->ll_addr );
+	}
+
+	/* Set client identifier */
+	memcpy ( netdev->client_id, netdev->ll_addr, sizeof ( netdev->client_id ) );
+
+	/* Reject network devices that are already available via a
+	 * different hardware device.
+	 */
+	duplicate = find_netdev_by_ll_addr ( ll_protocol, netdev->ll_addr );
+	if ( duplicate && ( duplicate->dev != netdev->dev ) ) {
+		DBGC ( netdev, "NETDEV rejecting duplicate (phys %s) of %s "
+		       "(phys %s)\n", netdev->dev->name, duplicate->name,
+		       duplicate->dev->name );
+		rc = -EEXIST;
+		goto err_duplicate;
+	}
+
+	/* Record device index and create device name */
+	netdev->index = netdev_index++;
+	if ( netdev->name[0] == '\0' ) {
+		snprintf ( netdev->name, sizeof ( netdev->name ), "net%d",
+			   netdev->index );
 	}
 
 	/* Use least significant bits of the link-layer address to
@@ -618,6 +681,7 @@ int register_netdev ( struct net_device *netdev ) {
 	clear_settings ( netdev_settings ( netdev ) );
 	unregister_settings ( netdev_settings ( netdev ) );
  err_register_settings:
+ err_duplicate:
 	return rc;
 }
 
@@ -724,6 +788,10 @@ void unregister_netdev ( struct net_device *netdev ) {
 	DBGC ( netdev, "NETDEV %s unregistered\n", netdev->name );
 	list_del ( &netdev->list );
 	netdev_put ( netdev );
+
+	/* Reset network device index if no devices remain */
+	if ( list_empty ( &net_devices ) )
+		netdev_index = 0;
 }
 
 /** Enable or disable interrupts
@@ -804,6 +872,27 @@ struct net_device * find_netdev_by_location ( unsigned int bus_type,
 	}
 
 	return NULL;	
+}
+
+/**
+ * Get network device by link-layer address
+ *
+ * @v ll_protocol	Link-layer protocol
+ * @v ll_addr		Link-layer address
+ * @ret netdev		Network device, or NULL
+ */
+struct net_device * find_netdev_by_ll_addr ( struct ll_protocol *ll_protocol,
+					     const void *ll_addr ) {
+	struct net_device *netdev;
+
+	list_for_each_entry ( netdev, &net_devices, list ) {
+		if ( ( netdev->ll_protocol == ll_protocol ) &&
+		     ( memcmp ( netdev->ll_addr, ll_addr,
+				ll_protocol->ll_addr_len ) == 0 ) )
+			return netdev;
+	}
+
+	return NULL;
 }
 
 /**
@@ -904,7 +993,9 @@ void net_poll ( void ) {
 	list_for_each_entry ( netdev, &net_devices, list ) {
 
 		/* Poll for new packets */
+		profile_start ( &net_poll_profiler );
 		netdev_poll ( netdev );
+		profile_stop ( &net_poll_profiler );
 
 		/* Leave received packets on the queue if receive
 		 * queue processing is currently frozen.  This will
@@ -916,11 +1007,12 @@ void net_poll ( void ) {
 			continue;
 
 		/* Process all received packets */
-		while ( ( iobuf = netdev_rx_dequeue ( netdev ) ) ) {
+		if ( ( iobuf = netdev_rx_dequeue ( netdev ) ) ) {
 
 			DBGC2 ( netdev, "NETDEV %s processing %p (%p+%zx)\n",
 				netdev->name, iobuf, iobuf->data,
 				iob_len ( iobuf ) );
+			profile_start ( &net_rx_profiler );
 
 			/* Remove link-layer header */
 			ll_protocol = netdev->ll_protocol;
@@ -939,6 +1031,7 @@ void net_poll ( void ) {
 				/* Record error for diagnosis */
 				netdev_rx_err ( netdev, NULL, rc );
 			}
+			profile_stop ( &net_rx_profiler );
 		}
 	}
 }
@@ -995,7 +1088,7 @@ static unsigned int net_discard ( void ) {
 
 			/* Discard first deferred packet */
 			list_del ( &iobuf->list );
-			free ( iobuf );
+			free_iob ( iobuf );
 
 			/* Report discard */
 			discarded++;

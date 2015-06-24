@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdlib.h>
 #include <errno.h>
@@ -84,7 +88,7 @@ int imgverify ( struct image *image, struct image *signature,
 	/* Use signature to verify image */
 	now = time ( NULL );
 	if ( ( rc = cms_verify ( sig, image->data, image->len,
-				 name, now, NULL ) ) != 0 )
+				 name, now, NULL, NULL ) ) != 0 )
 		goto err_verify;
 
 	/* Drop reference to signature */

@@ -15,11 +15,16 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <byteswap.h>
@@ -113,6 +118,21 @@ void eth_init_addr ( const void *hw_addr, void *ll_addr ) {
 }
 
 /**
+ * Generate random Ethernet address
+ *
+ * @v hw_addr		Generated hardware address
+ */
+void eth_random_addr ( void *hw_addr ) {
+	uint8_t *addr = hw_addr;
+	unsigned int i;
+
+	for ( i = 0 ; i < ETH_ALEN ; i++ )
+		addr[i] = random();
+	addr[0] &= ~0x01; /* Clear multicast bit */
+	addr[0] |= 0x02; /* Set locally-assigned bit */
+}
+
+/**
  * Transcribe Ethernet address
  *
  * @v ll_addr		Link-layer address
@@ -192,6 +212,7 @@ struct ll_protocol ethernet_protocol __ll_protocol = {
 	.hw_addr_len	= ETH_ALEN,
 	.ll_addr_len	= ETH_ALEN,
 	.ll_header_len	= ETH_HLEN,
+	.client_id_len	= ETH_ALEN,
 	.push		= eth_push,
 	.pull		= eth_pull,
 	.init_addr	= eth_init_addr,
@@ -218,6 +239,12 @@ struct net_device * alloc_etherdev ( size_t priv_size ) {
 	}
 	return netdev;
 }
+
+/* Drag in objects via ethernet_protocol */
+REQUIRING_SYMBOL ( ethernet_protocol );
+
+/* Drag in Ethernet configuration */
+REQUIRE_OBJECT ( config_ethernet );
 
 /* Drag in Ethernet slow protocols */
 REQUIRE_OBJECT ( eth_slow );

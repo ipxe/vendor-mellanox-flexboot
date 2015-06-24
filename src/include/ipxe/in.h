@@ -1,7 +1,7 @@
 #ifndef	_IPXE_IN_H
 #define	_IPXE_IN_H
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/socket.h>
@@ -61,7 +61,7 @@ struct in6_addr {
 
 #define IN6_IS_ADDR_LINKLOCAL( addr )					\
 	( ( *( ( const uint16_t * ) (addr) ) & htons ( 0xffc0 ) ) ==	\
-	  htonl ( 0xfe80 ) )
+	  htons ( 0xfe80 ) )
 
 /**
  * IPv4 socket address

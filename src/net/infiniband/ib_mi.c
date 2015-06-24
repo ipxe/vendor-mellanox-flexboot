@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,7 +52,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
  *
  * This is a policy decision.
  */
-#define IB_MI_NUM_RECV_WQES 2
+#define IB_MI_NUM_RECV_WQES 4
 
 /** Management interface number of completion queue entries
  *
@@ -134,8 +139,8 @@ static void ib_mi_complete_recv ( struct ib_device *ibdev,
 
 	/* Sanity checks */
 	if ( iob_len ( iobuf ) != sizeof ( *mad ) ) {
-		DBGC ( mi, "MI %p RX bad size (%zd bytes)\n",
-		       mi, iob_len ( iobuf ) );
+		DBGC ( mi, "MI %p RX bad size (%zd bytes) (mad size = 0x%x)\n",
+		       mi, iob_len ( iobuf ) , sizeof ( *mad ));
 		DBGC_HDA ( mi, 0, iobuf->data, iob_len ( iobuf ) );
 		goto out;
 	}

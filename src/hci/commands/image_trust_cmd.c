@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdio.h>
@@ -86,6 +90,8 @@ struct imgverify_options {
 	char *signer;
 	/** Keep signature after verification */
 	int keep;
+	/** Download timeout */
+	unsigned long timeout;
 };
 
 /** "imgverify" option list */
@@ -94,6 +100,8 @@ static struct option_descriptor imgverify_opts[] = {
 		      struct imgverify_options, signer, parse_string ),
 	OPTION_DESC ( "keep", 'k', no_argument,
 		      struct imgverify_options, keep, parse_flag ),
+	OPTION_DESC ( "timeout", 't', required_argument,
+		      struct imgverify_options, timeout, parse_timeout),
 };
 
 /** "imgverify" command descriptor */
@@ -127,11 +135,12 @@ static int imgverify_exec ( int argc, char **argv ) {
 	signature_name_uri = argv[ optind + 1 ];
 
 	/* Acquire the image */
-	if ( ( rc = imgacquire ( image_name_uri, &image ) ) != 0 )
+	if ( ( rc = imgacquire ( image_name_uri, opts.timeout, &image ) ) != 0 )
 		goto err_acquire_image;
 
 	/* Acquire the signature image */
-	if ( ( rc = imgacquire ( signature_name_uri, &signature ) ) != 0 )
+	if ( ( rc = imgacquire ( signature_name_uri, opts.timeout,
+				 &signature ) ) != 0 )
 		goto err_acquire_signature;
 
 	/* Verify image */
@@ -163,6 +172,9 @@ struct command image_trust_commands[] __command = {
 		.exec = imgverify_exec,
 	},
 };
+
+/* Drag in objects via command list */
+REQUIRING_SYMBOL ( image_trust_commands );
 
 /* Drag in objects typically required for signature verification */
 REQUIRE_OBJECT ( rsa );

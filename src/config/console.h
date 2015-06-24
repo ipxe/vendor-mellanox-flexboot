@@ -10,12 +10,14 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <config/defaults.h>
 
-//#define	CONSOLE_PCBIOS		/* Default BIOS console */
-//#define	CONSOLE_SERIAL		/* Serial port */
+#ifdef MLX_DEBUG
+#define	CONSOLE_PCBIOS		/* Default BIOS console */
+#define	CONSOLE_SERIAL		/* Serial port */
+#endif
 //#define	CONSOLE_DIRECT_VGA	/* Direct access to VGA card */
 //#define	CONSOLE_PC_KBD		/* Direct access to PC keyboard */
 //#define	CONSOLE_SYSLOG		/* Syslog console */
@@ -23,11 +25,19 @@ FILE_LICENCE ( GPL2_OR_LATER );
 //#define	CONSOLE_VMWARE		/* VMware logfile console */
 //#define	CONSOLE_DEBUGCON	/* Debug port console */
 //#define	CONSOLE_VESAFB		/* VESA framebuffer console */
+//#define	CONSOLE_INT13		/* INT13 disk log console */
 
 #define	KEYBOARD_MAP	us
 
+#ifdef MLX_DEBUG
+#define	LOG_LEVEL	LOG_ALL
+#else
 #define	LOG_LEVEL	LOG_NONE
+#endif
 
+#include <config/named.h>
+#include NAMED_CONFIG(console.h)
 #include <config/local/console.h>
+#include LOCAL_NAMED_CONFIG(console.h)
 
 #endif /* CONFIG_CONSOLE_H */

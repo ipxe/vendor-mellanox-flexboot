@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 #
 # Copyright (C) 2008 Michael Brown <mbrown@fensystems.co.uk>.
+# Copyright (C) 2015 Mellanox Technologies Ltd.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -59,7 +60,7 @@ foreach my $rom ( @roms ) {
     $baserom_pci->{image_length} += $rom_pci->{image_length};
     if ( exists $baserom_pci->{runtime_length} ) {
       if ( exists $rom_pci->{runtime_length} ) {
-	$baserom_pci->{runtime_length} += $rom_pci->{runtime_length};
+	$baserom_pci->{runtime_length} += $rom_pci->{image_length};
       } else {
 	$baserom_pci->{runtime_length} += $rom_pci->{image_length};
       }

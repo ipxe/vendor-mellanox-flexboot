@@ -30,6 +30,8 @@ FILE_LICENCE ( GPL2_ONLY );
 #ifndef H_prefix_hermonprm_bits_fixnames_MT25408_PRM_csp_H
 #define H_prefix_hermonprm_bits_fixnames_MT25408_PRM_csp_H
 
+#include "mlx_nodnic/include/prm/nodnic_hermon_prm.h"
+
 /* UD Address Vector */
 
 struct hermonprm_ud_address_vector_st {	/* Little Endian */
@@ -47,7 +49,7 @@ struct hermonprm_ud_address_vector_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00008];
 /* -------------- */
     pseudo_bit_t	hop_limit[0x00008];    /* IPv6 hop limit */
-    pseudo_bit_t	max_stat_rate[0x00004];/* Maximum static rate control. 
+    pseudo_bit_t	max_stat_rate[0x00004];/* Maximum static rate control.
                                                  0 - 4X injection rate
                                                  1 - 1X injection rate
                                                  other - reserved
@@ -72,7 +74,7 @@ struct hermonprm_ud_address_vector_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	rgid_31_0[0x00020];    /* Remote GID[31:0] if G bit is set. Must be set to 0x2 if G bit is cleared. */
 /* -------------- */
-}; 
+};
 
 /* Send doorbell */
 
@@ -87,7 +89,7 @@ struct hermonprm_send_doorbell_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00002];
     pseudo_bit_t	qpn[0x00018];          /* QP number this doorbell is rung on */
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment data inline */
 
@@ -101,7 +103,7 @@ struct hermonprm_wqe_segment_data_inline_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x00040];
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment data ptr */
 
@@ -115,7 +117,7 @@ struct hermonprm_wqe_segment_data_ptr_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	local_address_l[0x00020];
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment rd */
 
@@ -127,7 +129,7 @@ struct hermonprm_local_invalidate_segment_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x000a0];
 /* -------------- */
-}; 
+};
 
 /* Fast_Registration_Segment   ####michal - doesn't match PRM (fields were added, see below) new table size in bytes -  0x30 */
 
@@ -157,7 +159,7 @@ struct hermonprm_fast_registration_segment_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reg_len_l[0x00020];    /* Region Length[31:0] */
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment atomic */
 
@@ -170,7 +172,7 @@ struct hermonprm_wqe_segment_atomic_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	compare_l[0x00020];
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment remote address */
 
@@ -183,7 +185,7 @@ struct hermonprm_wqe_segment_remote_address_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved0[0x00020];
 /* -------------- */
-}; 
+};
 
 /* end wqe segment bind */
 
@@ -213,7 +215,7 @@ struct hermonprm_wqe_segment_bind_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	length_l[0x00020];
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment ud */
 
@@ -227,7 +229,7 @@ struct hermonprm_wqe_segment_ud_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00040];
 /* -------------- */
-}; 
+};
 
 /* Send wqe segment rd */
 
@@ -239,31 +241,7 @@ struct hermonprm_wqe_segment_rd_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00040];
 /* -------------- */
-}; 
-
-/* Send wqe segment ctrl */
-
-struct hermonprm_wqe_segment_ctrl_send_st {	/* Little Endian */
-    pseudo_bit_t	opcode[0x00005];
-    pseudo_bit_t	reserved0[0x0001a];
-    pseudo_bit_t	owner[0x00001];
-/* -------------- */
-    pseudo_bit_t	ds[0x00006];           /* descriptor (wqe) size in 16bytes chunk */
-    pseudo_bit_t	f[0x00001];            /* fence */
-    pseudo_bit_t	reserved1[0x00019];
-/* -------------- */
-    pseudo_bit_t	fl[0x00001];           /* Force LoopBack */
-    pseudo_bit_t	s[0x00001];            /* Remote Solicited Event */
-    pseudo_bit_t	c[0x00002];            /* completion required: 0b00 - no   0b11 - yes */
-    pseudo_bit_t	ip[0x00001];           /* When set, InfiniHost III Ex will calculate the IP checksum of the IP header that is present immediately after the IPoverIB encapsulation header. In the case of multiple headers (encapsulation), InfiniHost III Ex will calculate the checksum only for the first IP header following the IPoverIB encapsulation header. Not Valid for IPv6 packets */
-    pseudo_bit_t	tcp_udp[0x00001];      /* When set, InfiniHost III Ex will calculate the TCP/UDP checksum of the packet that is present immediately after the IP header. In the case of multiple headers (encapsulation), InfiniHost III Ex will calculate the checksum only for the first TCP header following the IP header. This bit may be set only if the entire TCP/UDP segment is present in one IB packet */
-    pseudo_bit_t	reserved2[0x00001];
-    pseudo_bit_t	so[0x00001];           /* Strong Ordering - when set, the WQE will be executed only after all previous WQEs have been executed. Can be set for RC WQEs only. This bit must be set in type two BIND, Fast Registration and Local invalidate operations. */
-    pseudo_bit_t	src_remote_buf[0x00018];
-/* -------------- */
-    pseudo_bit_t	immediate[0x00020];    /* If the OpCode encodes an operation with Immediate (RDMA-write/SEND), This field will hold the Immediate data to be sent. If the OpCode encodes send and invalidate operations, this field holds the Invalidation key to be inserted into the packet; otherwise, this field is reserved. */
-/* -------------- */
-}; 
+};
 
 /* Address Path	# ###michal - match to PRM */
 
@@ -280,19 +258,19 @@ struct hermonprm_address_path_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00008];
 /* -------------- */
     pseudo_bit_t	hop_limit[0x00008];    /* IPv6 hop limit */
-    pseudo_bit_t	max_stat_rate[0x00004];/* Maximum static rate control. 
-                                                 0 - 100% injection rate 
+    pseudo_bit_t	max_stat_rate[0x00004];/* Maximum static rate control.
+                                                 0 - 100% injection rate
                                                  1 - 25% injection rate
                                                  2 - 12.5% injection rate
                                                  3 - 50% injection rate
-                                                 7: 2.5 Gb/s. 
-                                                 8: 10 Gb/s. 
-                                                 9: 30 Gb/s. 
-                                                 10: 5 Gb/s. 
+                                                 7: 2.5 Gb/s.
+                                                 8: 10 Gb/s.
+                                                 9: 30 Gb/s.
+                                                 10: 5 Gb/s.
                                                  11: 20 Gb/s.
-                                                 12: 40 Gb/s. 
-                                                 13: 60 Gb/s. 
-                                                 14: 80 Gb/s. 
+                                                 12: 40 Gb/s.
+                                                 13: 60 Gb/s.
+                                                 14: 80 Gb/s.
                                                  15: 120 Gb/s. */
     pseudo_bit_t	reserved2[0x00004];
     pseudo_bit_t	mgid_index[0x00007];   /* Index to port GID table */
@@ -328,7 +306,7 @@ struct hermonprm_address_path_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	dmac_31_0[0x00020];
 /* -------------- */
-}; 
+};
 
 /* HCA Command Register (HCR)    #### michal - match PRM */
 
@@ -359,7 +337,7 @@ struct hermonprm_hca_command_register_st {	/* Little Endian */
     pseudo_bit_t	status[0x00008];       /* Command execution status report. Valid only if command interface in under SW ownership (Go bit is cleared)
                                                  0 - command completed without error. If different than zero, command execution completed with error. Syndrom encoding is depended on command executed and is defined for each command */
 /* -------------- */
-}; 
+};
 
 /* CQ Doorbell */
 
@@ -373,14 +351,14 @@ struct hermonprm_cq_cmd_doorbell_st {	/* Little Endian */
                                                  Other - Reserved */
     pseudo_bit_t	reserved0[0x00001];
     pseudo_bit_t	cmd_sn[0x00002];       /* Command Sequence Number - This field should be incremented upon receiving completion notification of the respective CQ.
-                                                 This transition is done by ringing Request notification for next Solicited, Request notification for next Solicited or Unsolicited 
+                                                 This transition is done by ringing Request notification for next Solicited, Request notification for next Solicited or Unsolicited
                                                  completion or Request notification for multiple completions doorbells after receiving completion notification.
                                                  This field is initialized to Zero */
     pseudo_bit_t	reserved1[0x00002];
 /* -------------- */
     pseudo_bit_t	cq_param[0x00020];     /* parameter to be used by CQ command */
 /* -------------- */
-}; 
+};
 
 /* RD-send doorbell */
 
@@ -394,7 +372,7 @@ struct hermonprm_rd_send_doorbell_st {	/* Little Endian */
 /* -------------- */
     struct hermonprm_send_doorbell_st	send_doorbell;/* Send Parameters */
 /* -------------- */
-}; 
+};
 
 /* Multicast Group Member QP   #### michal - match PRM */
 
@@ -404,7 +382,7 @@ struct hermonprm_mgmqp_st {	/* Little Endian */
     pseudo_bit_t	blck_lb[0x00001];      /* Block self-loopback messages arriving to this qp */
     pseudo_bit_t	qi[0x00001];           /* Qi: QPN_i is valid */
 /* -------------- */
-}; 
+};
 
 /* vsd */
 
@@ -521,7 +499,7 @@ struct hermonprm_vsd_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	vsd_dw55[0x00020];
 /* -------------- */
-}; 
+};
 
 /* UAR Parameters */
 
@@ -535,7 +513,7 @@ struct hermonprm_uar_params_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x000a0];
 /* -------------- */
-}; 
+};
 
 /* Translation and Protection Tables Parameters */
 
@@ -552,7 +530,7 @@ struct hermonprm_tptparams_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	log_dmpt_sz[0x00006];  /* Log (base 2) of the number of region/windows entries in the dMPT table. */
     pseudo_bit_t	reserved0[0x00002];
-    pseudo_bit_t	pfto[0x00005];         /* Page Fault RNR Timeout - 
+    pseudo_bit_t	pfto[0x00005];         /* Page Fault RNR Timeout -
                                                  The field returned in RNR Naks generated when a page fault is detected.
                                                  It has no effect when on-demand-paging is not used. */
     pseudo_bit_t	reserved1[0x00013];
@@ -575,7 +553,7 @@ struct hermonprm_tptparams_st {	/* Little Endian */
                                                  Entry size is 64 bytes.
                                                  Table must be aligned to its size. */
 /* -------------- */
-}; 
+};
 
 /* Multicast Support Parameters   #### michal - match PRM */
 
@@ -584,14 +562,14 @@ struct hermonprm_multicastparam_st {	/* Little Endian */
                                                  The base address must be aligned to the entry size.
                                                  Address may be set to 0xFFFFFFFF if multicast is not supported. */
 /* -------------- */
-    pseudo_bit_t	mc_base_addr_l[0x00020];/* Base Address of the Multicast Table [31:0]. 
+    pseudo_bit_t	mc_base_addr_l[0x00020];/* Base Address of the Multicast Table [31:0].
                                                  The base address must be aligned to the entry size.
                                                  Address may be set to 0xFFFFFFFF if multicast is not supported. */
 /* -------------- */
     pseudo_bit_t	reserved0[0x00040];
 /* -------------- */
     pseudo_bit_t	log_mc_table_entry_sz[0x00005];/* Log2 of the Size of multicast group member (MGM) entry.
-                                                 Must be greater than 5 (to allow CTRL and GID sections). 
+                                                 Must be greater than 5 (to allow CTRL and GID sections).
                                                  That implies the number of QPs per MC table entry. */
     pseudo_bit_t	reserved1[0x0000b];
     pseudo_bit_t	reserved2[0x00010];
@@ -611,7 +589,7 @@ struct hermonprm_multicastparam_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved6[0x00020];
 /* -------------- */
-}; 
+};
 
 /* QPC/EEC/CQC/EQC/RDB Parameters   #### michal - doesn't match PRM (field name are differs. see below) */
 
@@ -679,12 +657,12 @@ struct hermonprm_qpcbaseaddr_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	log_num_rd[0x00003];   /* Log (base 2) of the maximum number of RdmaRdC entries per QP. This denotes the maximum number of outstanding reads/atomics as a responder. */
     pseudo_bit_t	reserved7[0x00002];
-    pseudo_bit_t	rdmardc_base_addr_l[0x0001b];/* rdmardc_base_addr_l: Base address of table that holds remote read and remote atomic requests [31:0]. 
+    pseudo_bit_t	rdmardc_base_addr_l[0x0001b];/* rdmardc_base_addr_l: Base address of table that holds remote read and remote atomic requests [31:0].
                                                  Table must be aligned to RDB entry size (32 bytes). */
 /* -------------- */
     pseudo_bit_t	reserved8[0x00040];
 /* -------------- */
-}; 
+};
 
 /* Header_Log_Register */
 
@@ -693,7 +671,7 @@ struct hermonprm_header_log_register_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved0[0x00060];
 /* -------------- */
-}; 
+};
 
 /* Performance Monitors */
 
@@ -725,7 +703,7 @@ struct hermonprm_performance_monitors_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	event_counter2[0x00020];/* Read/write event counter, counting events specified by EvCntl and EvCnt2 fields repsectively. When the event counter reaches is maximum value of 0xFFFFFF, the next event will cause it to roll over to zero, set F1 or F2 bit respectively and generate interrupt by I1 I2 bit respectively. */
 /* -------------- */
-}; 
+};
 
 /* MLX WQE segment format */
 
@@ -751,7 +729,7 @@ struct hermonprm_wqe_segment_ctrl_mlx_st {	/* Little Endian */
     pseudo_bit_t	reserved5[0x00010];
     pseudo_bit_t	rlid[0x00010];         /* Destination LID (must match given headers) */
 /* -------------- */
-}; 
+};
 
 /* Send WQE segment format */
 
@@ -780,7 +758,7 @@ struct hermonprm_send_wqe_segment_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00200];
 /* -------------- */
-}; 
+};
 
 /* QP and EE Context Entry */
 
@@ -833,7 +811,7 @@ struct hermonprm_queue_pair_ee_context_entry_st {	/* Little Endian */
                                                  0x3 - 1024
                                                  0x4 - 2048
                                                  other - reserved
-                                                 
+
                                                  Should be configured to 0x4 for UD and MLX QPs. */
 /* -------------- */
     pseudo_bit_t	usr_page[0x00018];     /* UAR number to ring doorbells for this QP (aliased to doorbell and Blue Flame pages) */
@@ -883,7 +861,7 @@ struct hermonprm_queue_pair_ee_context_entry_st {	/* Little Endian */
     pseudo_bit_t	reserved24[0x00008];
 /* -------------- */
     pseudo_bit_t	reserved25[0x00004];
-    pseudo_bit_t	ric[0x00001];          /* Invalid Credits. 
+    pseudo_bit_t	ric[0x00001];          /* Invalid Credits.
                                                  1 - place "Invalid Credits" to ACKs sent from this queue.
                                                  0 - ACKs report the actual number of end to end credits on the connection.
                                                  Not valid (reserved) in EE context.
@@ -895,12 +873,12 @@ struct hermonprm_queue_pair_ee_context_entry_st {	/* Little Endian */
     pseudo_bit_t	rwe[0x00001];          /* If set - RDMA - write enabled on receive queue. Not valid (reserved) in EE context. */
     pseudo_bit_t	rre[0x00001];          /* If set - RDMA - read enabled on receive queue. Not valid (reserved) in EE context. */
     pseudo_bit_t	reserved28[0x00005];
-    pseudo_bit_t	rra_max[0x00003];      /* Maximum number of outstanding RDMA-read/Atomic operations allowed on receive queue is 2^RRA_Max. 
+    pseudo_bit_t	rra_max[0x00003];      /* Maximum number of outstanding RDMA-read/Atomic operations allowed on receive queue is 2^RRA_Max.
                                                  Must be 0 for EE context. */
     pseudo_bit_t	physical_function[0x00008];
 /* -------------- */
     pseudo_bit_t	next_rcv_psn[0x00018]; /* Next (expected) PSN on receive */
-    pseudo_bit_t	min_rnr_nak[0x00005];  /* Minimum RNR NAK timer value (TTTTT field encoding according to the IB spec Vol1 9.7.5.2.8). 
+    pseudo_bit_t	min_rnr_nak[0x00005];  /* Minimum RNR NAK timer value (TTTTT field encoding according to the IB spec Vol1 9.7.5.2.8).
                                                  Not valid (reserved) in EE context. */
     pseudo_bit_t	reserved30[0x00003];
 /* -------------- */
@@ -919,7 +897,7 @@ struct hermonprm_queue_pair_ee_context_entry_st {	/* Little Endian */
                                                  On send datagrams, if Q_Key[31] specified in the WQE is set, then this Q_Key will be transmitted in the outgoing message.
                                                  Not valid (reserved) in EE context. */
 /* -------------- */
-    pseudo_bit_t	srqn[0x00018];         /* SRQN - Shared Receive Queue Number - specifies the SRQ number from which the QP dequeues receive descriptors. 
+    pseudo_bit_t	srqn[0x00018];         /* SRQN - Shared Receive Queue Number - specifies the SRQ number from which the QP dequeues receive descriptors.
                                                  SRQN is valid only if SRQ bit is set. Not valid (reserved) in EE context. */
     pseudo_bit_t	srq[0x00001];          /* SRQ - Shared Receive Queue. If this bit is set, then the QP is associated with a SRQ. Not valid (reserved) in EE context. */
     pseudo_bit_t	reserved34[0x00007];
@@ -983,7 +961,7 @@ struct hermonprm_queue_pair_ee_context_entry_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved48[0x000c0];
 /* -------------- */
-}; 
+};
 
 /*  */
 
@@ -993,21 +971,21 @@ struct hermonprm_mcg_qp_dw_st {	/* Little Endian */
     pseudo_bit_t	blck_lb[0x00001];
     pseudo_bit_t	reserved1[0x00001];
 /* -------------- */
-}; 
+};
 
 /* Clear Interrupt [63:0]              #### michal - match to PRM */
 
 struct hermonprm_clr_int_st {	/* Little Endian */
     pseudo_bit_t	clr_int_h[0x00020];    /* Clear Interrupt [63:32]
-                                                 Write transactions to this register will clear (de-assert) the virtual interrupt output pins of InfiniHost-III-EX. The value to be written in this register is obtained by executing QUERY_ADAPTER command on command interface after system boot. 
+                                                 Write transactions to this register will clear (de-assert) the virtual interrupt output pins of InfiniHost-III-EX. The value to be written in this register is obtained by executing QUERY_ADAPTER command on command interface after system boot.
                                                  This register is write-only. Reading from this register will cause undefined result
                                                   */
 /* -------------- */
     pseudo_bit_t	clr_int_l[0x00020];    /* Clear Interrupt [31:0]
-                                                 Write transactions to this register will clear (de-assert) the virtual interrupt output pins of InfiniHost-III-EX. The value to be written in this register is obtained by executing QUERY_ADAPTER command on command interface after system boot. 
+                                                 Write transactions to this register will clear (de-assert) the virtual interrupt output pins of InfiniHost-III-EX. The value to be written in this register is obtained by executing QUERY_ADAPTER command on command interface after system boot.
                                                  This register is write-only. Reading from this register will cause undefined result */
 /* -------------- */
-}; 
+};
 
 /* EQ Set CI DBs Table */
 
@@ -1268,7 +1246,7 @@ struct hermonprm_eq_set_ci_table_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved63[0x00020];
 /* -------------- */
-}; 
+};
 
 /* InfiniHost-III-EX Configuration Registers     #### michal - match to PRM */
 
@@ -1279,7 +1257,7 @@ struct hermonprm_configuration_registers_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x3fcb20];
 /* -------------- */
-}; 
+};
 
 /* QP_DB_Record         ### michal = gdror fixed */
 
@@ -1287,7 +1265,7 @@ struct hermonprm_qp_db_record_st {	/* Little Endian */
     pseudo_bit_t	receive_wqe_counter[0x00010];/* Modulo-64K counter of WQEs posted to the QP since its creation. Should be initialized to zero. */
     pseudo_bit_t	reserved0[0x00010];
 /* -------------- */
-}; 
+};
 
 /* CQ_ARM_DB_Record */
 
@@ -1303,7 +1281,7 @@ struct hermonprm_cq_arm_db_record_st {	/* Little Endian */
     pseudo_bit_t	res[0x00003];          /* Must be 0x2 */
     pseudo_bit_t	cq_number[0x00018];    /* CQ number */
 /* -------------- */
-}; 
+};
 
 /* CQ_CI_DB_Record */
 
@@ -1314,7 +1292,7 @@ struct hermonprm_cq_ci_db_record_st {	/* Little Endian */
     pseudo_bit_t	res[0x00003];          /* Must be 0x1 */
     pseudo_bit_t	cq_number[0x00018];    /* CQ number */
 /* -------------- */
-}; 
+};
 
 /* Virtual_Physical_Mapping */
 
@@ -1330,7 +1308,7 @@ struct hermonprm_virtual_physical_mapping_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00006];
     pseudo_bit_t	pa_l[0x00014];         /* Physical Address[31:12] */
 /* -------------- */
-}; 
+};
 
 /* MOD_STAT_CFG            #### michal - gdror fix */
 
@@ -1443,32 +1421,33 @@ struct hermonprm_mod_stat_cfg_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	mac_low[0x00020];
 /* -------------- */
-    pseudo_bit_t	reserved34[0x00010];
+    pseudo_bit_t	port_control_vlan[0x0000c];
+    pseudo_bit_t	reserved34[0x00003];
+    pseudo_bit_t	port_control_vlan_m[0x00001];
     pseudo_bit_t	num_veps[0x00008];
-    pseudo_bit_t	num_vep_groups[0x00008];
+    pseudo_bit_t	reserved35[0x00008];
 /* -------------- */
-    pseudo_bit_t	reserved35[0x00020];
+    pseudo_bit_t	reserved36[0x00020];
 /* -------------- */
-    pseudo_bit_t	reserved36[0x00018];
-    pseudo_bit_t	outer_vlan_en[0x00001];
-    pseudo_bit_t	reserved37[0x00002];
-    pseudo_bit_t	outer_vlan_en_m[0x00001];
-    pseudo_bit_t	port_net_boot[0x00001];
-    pseudo_bit_t	reserved38[0x00002];
-    pseudo_bit_t	port_net_boot_m[0x00001];
+    pseudo_bit_t	reserved37[0x00010];
+    pseudo_bit_t	funix[0x00008];
+    pseudo_bit_t	reserved38[0x00004];
+    pseudo_bit_t	pf_net_boot[0x00001];
+    pseudo_bit_t	reserved39[0x00002];
+    pseudo_bit_t	pf_net_boot_m[0x00001];
 /* -------------- */
-    pseudo_bit_t	reserved39[0x00060];
+    pseudo_bit_t	reserved40[0x00060];
 /* -------------- */
     pseudo_bit_t	port_eth_mode_capability[0x0001f];
-    pseudo_bit_t	reserved40[0x00001];
+    pseudo_bit_t	reserved41[0x00001];
 /* -------------- */
     pseudo_bit_t	port_eth_mode_enabled[0x0001f];
     pseudo_bit_t	port_eth_mod_m[0x00001];
 /* -------------- */
     pseudo_bit_t	port_eth_mode_current[0x0001f];
-    pseudo_bit_t	reserved41[0x00001];
+    pseudo_bit_t	reserved42[0x00001];
 /* -------------- */
-    pseudo_bit_t	reserved42[0x00220];
+    pseudo_bit_t	reserved43[0x00220];
 };
 
 /* SRQ Context */
@@ -1489,7 +1468,7 @@ struct hermonprm_srq_context_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00005];
 /* -------------- */
     pseudo_bit_t	cqn[0x00018];          /* Completion Queue to report SRC messages directed to this SRQ. */
-    pseudo_bit_t	page_offset[0x00006];  /* The offset of the first WQE from the beginning of 4Kbyte page (Figure 52,“Work Queue Buffer Structure”) */
+    pseudo_bit_t	page_offset[0x00006];  /* The offset of the first WQE from the beginning of 4Kbyte page (Figure 52,ï¿½Work Queue Buffer Structureï¿½) */
     pseudo_bit_t	reserved2[0x00002];
 /* -------------- */
     pseudo_bit_t	reserved3[0x00020];
@@ -1518,7 +1497,7 @@ struct hermonprm_srq_context_st {	/* Little Endian */
     pseudo_bit_t	reserved10[0x00002];
     pseudo_bit_t	db_record_addr_l[0x0001e];/* SRQ DB Record physical address [31:2] */
 /* -------------- */
-}; 
+};
 
 /* PBL */
 
@@ -1539,7 +1518,7 @@ struct hermonprm_pbl_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	mtt_3_l[0x00020];      /* Fourth MTT[31:0] */
 /* -------------- */
-}; 
+};
 
 /* Performance Counters   #### michal - gdror fixed */
 
@@ -1554,7 +1533,7 @@ struct hermonprm_performance_counters_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved4[0x00620];
 /* -------------- */
-}; 
+};
 
 /* Transport and CI Error Counters */
 
@@ -1575,10 +1554,10 @@ struct hermonprm_transport_and_ci_error_counters_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	sq_num_lpe[0x00020];   /* Requester - number of local protection errors */
 /* -------------- */
-    pseudo_bit_t	rq_num_wrfe[0x00020];  /* Responder - number of CQEs with error. 
+    pseudo_bit_t	rq_num_wrfe[0x00020];  /* Responder - number of CQEs with error.
                                                  Incremented each time a CQE with error is generated */
 /* -------------- */
-    pseudo_bit_t	sq_num_wrfe[0x00020];  /* Requester - number of CQEs with error. 
+    pseudo_bit_t	sq_num_wrfe[0x00020];  /* Requester - number of CQEs with error.
                                                  Incremented each time a CQE with error is generated */
 /* -------------- */
     pseudo_bit_t	reserved0[0x00020];
@@ -1698,7 +1677,7 @@ struct hermonprm_transport_and_ci_error_counters_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved12[0x002a0];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - HCR Completion Event   #### michal - match PRM */
 
@@ -1717,51 +1696,7 @@ struct hermonprm_hcr_completion_event_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved3[0x00020];
 /* -------------- */
-}; 
-
-/* Completion with Error CQE             #### michal - gdror fixed */
-
-struct hermonprm_completion_with_error_st {	/* Little Endian */
-    pseudo_bit_t	qpn[0x00018];          /* Indicates the QP for which completion is being reported */
-    pseudo_bit_t	reserved0[0x00008];
-/* -------------- */
-    pseudo_bit_t	reserved1[0x000a0];
-/* -------------- */
-    pseudo_bit_t	syndrome[0x00008];     /* Completion with error syndrome:
-                                                         0x01 - Local Length Error
-                                                         0x02 - Local QP Operation Error
-                                                         0x03 - Local EE Context Operation Error
-                                                         0x04 - Local Protection Error
-                                                         0x05 - Work Request Flushed Error 
-                                                         0x06 - Memory Window Bind Error
-                                                         0x10 - Bad Response Error
-                                                         0x11 - Local Access Error
-                                                         0x12 - Remote Invalid Request Error
-                                                         0x13 - Remote Access Error
-                                                         0x14 - Remote Operation Error
-                                                         0x15 - Transport Retry Counter Exceeded
-                                                         0x16 - RNR Retry Counter Exceeded
-                                                         0x20 - Local RDD Violation Error
-                                                         0x21 - Remote Invalid RD Request
-                                                         0x22 - Remote Aborted Error
-                                                         0x23 - Invalid EE Context Number
-                                                         0x24 - Invalid EE Context State
-                                                         other - Reserved
-                                                 Syndrome is defined according to the IB specification volume 1. For detailed explanation of the syndromes, refer to chapters 10-11 of the IB specification rev 1.1. */
-    pseudo_bit_t	vendor_error_syndrome[0x00008];
-    pseudo_bit_t	wqe_counter[0x00010];
-/* -------------- */
-    pseudo_bit_t	opcode[0x00005];       /* The opcode of WQE completion is reported for.
-                                                 
-                                                 The following values are reported in case of completion with error:
-                                                 0xFE - For completion with error on Receive Queues
-                                                 0xFF - For completion with error on Send Queues */
-    pseudo_bit_t	reserved2[0x00001];
-    pseudo_bit_t	s_r[0x00001];          /* send 1 / receive 0 */
-    pseudo_bit_t	owner[0x00001];        /* HW Flips this bit for every CQ warp around. Initialized to Zero. */
-    pseudo_bit_t	reserved3[0x00018];
-/* -------------- */
-}; 
+};
 
 /* Resize CQ Input Mailbox */
 
@@ -1790,7 +1725,7 @@ struct hermonprm_resize_cq_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved10[0x00100];
 /* -------------- */
-}; 
+};
 
 /* MAD_IFC Input Modifier */
 
@@ -1802,14 +1737,14 @@ struct hermonprm_mad_ifc_input_modifier_st {	/* Little Endian */
     pseudo_bit_t	rlid[0x00010];         /* Remote (source) LID  from the received MAD.
                                                  This field is required for trap generation upon MKey/BKey validation. */
 /* -------------- */
-}; 
+};
 
 /* MAD_IFC Input Mailbox     ###michal -gdror fixed */
 
 struct hermonprm_mad_ifc_st {	/* Little Endian */
     pseudo_bit_t	request_mad_packet[64][0x00020];/* Request MAD Packet (256bytes) */
 /* -------------- */
-    pseudo_bit_t	my_qpn[0x00018];       /* Destination QP number from the received MAD. 
+    pseudo_bit_t	my_qpn[0x00018];       /* Destination QP number from the received MAD.
                                                  This field is reserved if Mad_extended_info indication in the input modifier is clear. */
     pseudo_bit_t	reserved0[0x00008];
 /* -------------- */
@@ -1822,25 +1757,25 @@ struct hermonprm_mad_ifc_st {	/* Little Endian */
     pseudo_bit_t	reserved3[0x00010];
     pseudo_bit_t	ml_path[0x00007];      /* My (destination) LID path bits  from the received MAD.
                                                  This field is reserved if Mad_extended_info indication in the input modifier is clear. */
-    pseudo_bit_t	g[0x00001];            /* If set, the GRH field in valid. 
+    pseudo_bit_t	g[0x00001];            /* If set, the GRH field in valid.
                                                  This field is reserved if Mad_extended_info indication in the input modifier is clear. */
     pseudo_bit_t	reserved4[0x00004];
     pseudo_bit_t	sl[0x00004];           /* Service Level of the received MAD.
                                                  This field is reserved if Mad_extended_info indication in the input modifier is clear. */
 /* -------------- */
-    pseudo_bit_t	pkey_indx[0x00010];    /* Index in PKey table that matches PKey of the received MAD. 
+    pseudo_bit_t	pkey_indx[0x00010];    /* Index in PKey table that matches PKey of the received MAD.
                                                  This field is reserved if Mad_extended_info indication in the input modifier is clear. */
     pseudo_bit_t	reserved5[0x00010];
 /* -------------- */
     pseudo_bit_t	reserved6[0x00160];
 /* -------------- */
-    pseudo_bit_t	grh[10][0x00020];      /* The GRH field of the MAD packet that was scattered to the first 40 bytes pointed to by the scatter list. 
-                                                 Valid if Mad_extended_info bit (in the input modifier) and g bit are set. 
+    pseudo_bit_t	grh[10][0x00020];      /* The GRH field of the MAD packet that was scattered to the first 40 bytes pointed to by the scatter list.
+                                                 Valid if Mad_extended_info bit (in the input modifier) and g bit are set.
                                                  Otherwise this field is reserved. */
 /* -------------- */
     pseudo_bit_t	reserved7[0x004c0];
 /* -------------- */
-}; 
+};
 
 /* Query Debug Message     #### michal - gdror fixed */
 
@@ -1899,7 +1834,7 @@ struct hermonprm_query_debug_msg_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved4[0x003c0];
 /* -------------- */
-}; 
+};
 
 /* User Access Region */
 
@@ -1914,7 +1849,7 @@ struct hermonprm_uar_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x03ec0];
 /* -------------- */
-}; 
+};
 
 /* Receive doorbell */
 
@@ -1928,7 +1863,7 @@ struct hermonprm_receive_doorbell_st {	/* Little Endian */
     pseudo_bit_t	reserved3[0x00002];
     pseudo_bit_t	qpn[0x00018];          /* QP number or SRQ number this doorbell is rung on */
 /* -------------- */
-}; 
+};
 
 /* SET_IB Parameters */
 
@@ -1949,7 +1884,7 @@ struct hermonprm_set_ib_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x00180];
 /* -------------- */
-}; 
+};
 
 /* Multicast Group Member    #### michal - gdror fixed */
 
@@ -1989,7 +1924,7 @@ struct hermonprm_mgm_entry_st {	/* Little Endian */
 /* -------------- */
     struct hermonprm_mgmqp_st	mgmqp_7;   /* Multicast Group Member QP */
 /* -------------- */
-}; 
+};
 
 /* INIT_PORT Parameters    #### michal - match PRM */
 
@@ -2041,7 +1976,7 @@ struct hermonprm_init_port_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved5[0x006c0];
 /* -------------- */
-}; 
+};
 
 /* Query Device Capablities     #### michal - gdror fixed */
 
@@ -2113,14 +2048,12 @@ struct hermonprm_query_dev_cap_st {	/* Little Endian */
     pseudo_bit_t	pci_pf_num[0x00008];    /* Number of supported physical functions */
     pseudo_bit_t	local_ca_ack_delay[0x00005];/* The Local CA ACK Delay. This is the value recommended to be returned in Query HCA verb.
                                                  The delay value in microseconds is computed using 4.096us * 2^(local_ca_ack_delay). */
-    pseudo_bit_t	port_type[0x00004];    /* Hermon New. bit per port. bit0 is first port. value '1' is ehternet. '0' is IB */
-    pseudo_bit_t	reserved20[0x00004];
-    pseudo_bit_t	w[0x00001];            /* Hermon New. 10GB eth support */
-    pseudo_bit_t	j[0x00001];            /* Hermon New. Jumbo frame support */
-    pseudo_bit_t	reserved21[0x00001];
+    pseudo_bit_t	cqmep[0x00003];    /* Hermon New. bit per port. bit0 is first port. value '1' is ehternet. '0' is IB */
+    pseudo_bit_t	reserved20[0x00007];
+    pseudo_bit_t	port_beacon[0x00001];
 /* -------------- */
-    pseudo_bit_t	log_max_gid[0x00004];  /* Log2 of the maximum number of GIDs per port */
-    pseudo_bit_t	reserved22[0x00004];
+    pseudo_bit_t	max_funix[0x00008];  /* The maximum number of function indexes that can be supported by the device.
+    						A value of 1 indicates that only a single physical function may be operational */
     pseudo_bit_t	log_ethtype[0x00004];  /* Hermon New. log2 eth type table size */
     pseudo_bit_t	reserved23[0x00004];
     pseudo_bit_t	log_drain_size[0x00008];/* Log (base 2) of minimum size of the NoDropVLDrain buffer, specified in 4Kpages units */
@@ -2135,11 +2068,16 @@ struct hermonprm_query_dev_cap_st {	/* Little Endian */
                                                  bit 2 - 1/8 bw
                                                  bit 3 - 1/2 bw; */
 /* -------------- */
-    pseudo_bit_t	reserved26[0x00008];
+    pseudo_bit_t	reserved26[0x00005];
+    pseudo_bit_t        wol_port1[0x00001];
+    pseudo_bit_t        wol_port2[0x00001];
+    pseudo_bit_t        thermal_warning[0x00001];
     pseudo_bit_t	rss_udp[0x00001];
     pseudo_bit_t	vep_uc_steering[0x00001];
     pseudo_bit_t	vep_mc_steering[0x00001];
-    pseudo_bit_t	reserved27[0x00015];
+    pseudo_bit_t	reserved27[0x00011];
+    pseudo_bit_t	ncsi_lag_mode[0x00001];
+    pseudo_bit_t	reserved[0x00003];
 
 /* -------------- */
     pseudo_bit_t	rc[0x00001];           /* RC Transport supported */
@@ -2221,7 +2159,13 @@ struct hermonprm_query_dev_cap_st {	/* Little Endian */
                                                  The reserved resources are numbered from 0 to num_reserved_pds-1
                                                  If 0 - no resources are reserved. */
 /* -------------- */
-    pseudo_bit_t	reserved43[0x000c0];
+    pseudo_bit_t	reserved43_1[0x00080];
+/* -------------- */
+    pseudo_bit_t	reserved43_2[0x00008];
+    pseudo_bit_t	cmdif_post_doorbell[0x00001];
+    pseudo_bit_t	reserved43_3[0x00017];
+/* -------------- */
+    pseudo_bit_t	reserved43_4[0x00020];
 /* -------------- */
     pseudo_bit_t	qpc_entry_sz[0x00010]; /* QPC Entry Size for the device
                                                  For the InfiniHost-III-EX MT25208 entry size is 256 bytes */
@@ -2259,15 +2203,28 @@ struct hermonprm_query_dev_cap_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	resd_lkey[0x00020];    /* The value of the reserved Lkey for Base Memory Management Extension */
 /* -------------- */
-    pseudo_bit_t	reserved45[0x00020];
+    pseudo_bit_t	reserved45_1[0x0000f];
+    pseudo_bit_t    flash_access[0x0001];
+    pseudo_bit_t    flash_nv_config[0x00001];
+    pseudo_bit_t	reserved45_2[0x0000f];
 /* -------------- */
     pseudo_bit_t	max_icm_size_h[0x00020];/* Bits [63:32] of maximum ICM size InfiniHost III Ex support in bytes. */
 /* -------------- */
     pseudo_bit_t	max_icm_size_l[0x00020];/* Bits [31:0] of maximum ICM size InfiniHost III Ex support in bytes. */
 /* -------------- */
-    pseudo_bit_t	reserved46[0x002c0];
+    pseudo_bit_t	reserved46[0x000c0];
 /* -------------- */
-}; 
+    pseudo_bit_t	nv_config_sriov_en[0x00001];
+    pseudo_bit_t	nv_config_wol_port1[0x00001];
+    pseudo_bit_t	nv_config_wol_port2[0x00001];
+    pseudo_bit_t	nv_config_vpi_port1[0x00001];
+    pseudo_bit_t	nv_config_vpi_port2[0x00001];
+    pseudo_bit_t	nv_config_bar_size[0x00001];
+    pseudo_bit_t	reserved48[0x0001a];
+/* -------------- */
+    pseudo_bit_t	reserved49[0x001e0];
+/* -------------- */
+};
 
 /* QUERY_ADAPTER Parameters Block    #### michal - gdror fixed */
 
@@ -2281,7 +2238,7 @@ struct hermonprm_query_adapter_st {	/* Little Endian */
 /* -------------- */
     struct hermonprm_vsd_st	vsd;         /* ###michal- this field was replaced by 2 fields : vsd .1664; vsd(continued/psid .128; */
 /* -------------- */
-}; 
+};
 
 /* QUERY_FW Parameters Block      #### michal - doesn't match PRM */
 
@@ -2298,7 +2255,7 @@ struct hermonprm_query_fw_st {	/* Little Endian */
     pseudo_bit_t	log_max_outstanding_cmd[0x00008];/* Log2 of the maximum number of commands the HCR can support simultaneously */
     pseudo_bit_t	reserved1[0x00017];
     pseudo_bit_t	dt[0x00001];           /* Debug Trace Support
-                                                 0 - Debug trace is not supported 
+                                                 0 - Debug trace is not supported
                                                  1 - Debug trace is supported */
 /* -------------- */
     pseudo_bit_t	reserved2[0x00001];
@@ -2346,7 +2303,7 @@ struct hermonprm_query_fw_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved8[0x00600];
 /* -------------- */
-}; 
+};
 
 /* Memory Access Parameters for UD Address Vector Table */
 
@@ -2358,7 +2315,7 @@ struct hermonprm_udavtable_memory_parameters_st {	/* Little Endian */
     pseudo_bit_t	xlation_en[0x00001];   /* When cleared, address is physical address and no translation will be done. When set, address is virtual. */
     pseudo_bit_t	reserved1[0x00002];
 /* -------------- */
-}; 
+};
 
 /* INIT_HCA & QUERY_HCA Parameters Block ####michal-doesn't match PRM (see differs below) new size in bytes:0x300 */
 
@@ -2407,7 +2364,7 @@ struct hermonprm_init_hca_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved10[0x00600];
 /* -------------- */
-}; 
+};
 
 /* Event Queue Context Table Entry     #### michal - gdror fixed */
 
@@ -2454,19 +2411,19 @@ struct hermonprm_eqc_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved12[0x00040];
 /* -------------- */
-    pseudo_bit_t	consumer_counter[0x00018];/* Consumer counter. The counter is incremented for each EQE polled from the EQ. 
-                                                  Must be 0x0 in EQ initialization. 
+    pseudo_bit_t	consumer_counter[0x00018];/* Consumer counter. The counter is incremented for each EQE polled from the EQ.
+                                                  Must be 0x0 in EQ initialization.
                                                   Maintained by HW (valid for the QUERY_EQ command only). */
     pseudo_bit_t	reserved13[0x00008];
 /* -------------- */
-    pseudo_bit_t	producer_counter[0x00018];/* Producer Coutner. The counter is incremented for each EQE that is written by the HW to the EQ. 
+    pseudo_bit_t	producer_counter[0x00018];/* Producer Coutner. The counter is incremented for each EQE that is written by the HW to the EQ.
                                                   EQ overrun is reported if Producer_counter + 1 equals to Consumer_counter and a EQE needs to be added.
                                                   Maintained by HW (valid for the QUERY_EQ command only) */
     pseudo_bit_t	reserved14[0x00008];
 /* -------------- */
     pseudo_bit_t	reserved15[0x00080];
 /* -------------- */
-}; 
+};
 
 /* Memory Translation Table (MTT) Entry     #### michal - match to PRM */
 
@@ -2477,7 +2434,7 @@ struct hermonprm_mtt_st {	/* Little Endian */
     pseudo_bit_t	reserved0[0x00002];
     pseudo_bit_t	ptag_l[0x0001d];       /* Low-order bits of Physical tag. The size of the field depends on the page size of the region. Maximum PTAG size is 52 bits. */
 /* -------------- */
-}; 
+};
 
 /* Memory Protection Table (MPT) Entry   ### doesn't match PRM (new fields were added). new size in bytes : 0x54 */
 
@@ -2547,7 +2504,7 @@ struct hermonprm_mpt_st {	/* Little Endian */
     pseudo_bit_t	mtt_fbo[0x00015];      /* First byte offset in the zero-based region - the first byte within the first block/page start address refers to. When mtt_rep is being used, fbo points within the replicated block (i.e. block-size x 2^mtt_rep) */
     pseudo_bit_t	reserved10[0x0000b];
 /* -------------- */
-}; 
+};
 
 /* Completion Queue Context Table Entry	#### michal - match PRM */
 
@@ -2559,7 +2516,7 @@ struct hermonprm_completion_queue_context_st {	/* Little Endian */
                                                  0x6 - ARMED SOLICITED (Request Solicited Notification)
                                                  0xA - FIRED
                                                  other - reserved
-                                                 
+
                                                  Must be 0x0 in CQ initialization.
                                                  Valid for the QUERY_CQ and HW2SW_CQ commands only. */
     pseudo_bit_t	reserved1[0x00005];
@@ -2605,7 +2562,7 @@ struct hermonprm_completion_queue_context_st {	/* Little Endian */
     pseudo_bit_t	reserved11[0x00008];
 /* -------------- */
     pseudo_bit_t	solicit_producer_indx[0x00018];/* Maintained by HW.
-                                                 Valid for QUERY_CQ and HW2SW_CQ commands only. 
+                                                 Valid for QUERY_CQ and HW2SW_CQ commands only.
                                                   */
     pseudo_bit_t	reserved12[0x00008];
 /* -------------- */
@@ -2627,7 +2584,7 @@ struct hermonprm_completion_queue_context_st {	/* Little Endian */
     pseudo_bit_t	reserved17[0x00003];
     pseudo_bit_t	db_record_addr_l[0x0001d];/* CQ DB Record physical address [31:3] */
 /* -------------- */
-}; 
+};
 
 /* GPIO_event_data   #### michal - gdror fixed */
 
@@ -2640,7 +2597,7 @@ struct hermonprm_gpio_event_data_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00020];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - QP/EE Events     #### michal - doesn't match PRM */
 
@@ -2657,7 +2614,7 @@ struct hermonprm_qp_ee_event_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved4[0x00060];
 /* -------------- */
-}; 
+};
 
 /* InfiniHost-III-EX Type0 Configuration Header   ####michal - doesn't match PRM (new fields added, see below) */
 
@@ -2803,19 +2760,19 @@ struct hermonprm_mt25208_type0_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	uncorrectable_error_status_register[0x00020];/* 0 Training Error Status
                                                  4 Data Link Protocol Error Status
-                                                 12 Poisoned TLP Status 
-                                                 13 Flow Control Protocol Error Status 
-                                                 14 Completion Timeout Status 
-                                                 15 Completer Abort Status 
-                                                 16 Unexpected Completion Status 
-                                                 17 Receiver Overflow Status 
-                                                 18 Malformed TLP Status 
-                                                 19 ECRC Error Status 
+                                                 12 Poisoned TLP Status
+                                                 13 Flow Control Protocol Error Status
+                                                 14 Completion Timeout Status
+                                                 15 Completer Abort Status
+                                                 16 Unexpected Completion Status
+                                                 17 Receiver Overflow Status
+                                                 18 Malformed TLP Status
+                                                 19 ECRC Error Status
                                                  20 Unsupported Request Error Status */
 /* -------------- */
     pseudo_bit_t	uncorrectable_error_mask_register[0x00020];/* 0 Training Error Mask
                                                  4 Data Link Protocol Error Mask
-                                                 12 Poisoned TLP Mask 
+                                                 12 Poisoned TLP Mask
                                                  13 Flow Control Protocol Error Mask
                                                  14 Completion Timeout Mask
                                                  15 Completer Abort Mask
@@ -2855,7 +2812,7 @@ struct hermonprm_mt25208_type0_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved13[0x006a0];
 /* -------------- */
-}; 
+};
 
 /* Event Data Field - Performance Monitor */
 
@@ -2873,7 +2830,7 @@ struct hermonprm_performance_monitor_event_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00040];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - Page Faults */
 
@@ -2897,7 +2854,7 @@ struct hermonprm_page_fault_event_data_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	prefetch_len[0x00020]; /* Indicates how many subsequent pages in the same memory region/window will be accessed by the following transaction after this page fault is resolved. measured in bytes. SW can use this information in order to page-in the subsequent pages if they are not present. */
 /* -------------- */
-}; 
+};
 
 /* WQE segments format */
 
@@ -2914,7 +2871,7 @@ struct hermonprm_wqe_segment_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x00080];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - Port State Change   #### michal - match PRM */
 
@@ -2927,7 +2884,7 @@ struct hermonprm_port_state_change_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved3[0x00060];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - Completion Queue Error     #### michal - match PRM */
 
@@ -2944,22 +2901,22 @@ struct hermonprm_completion_queue_error_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved3[0x00060];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - Completion Event	#### michal - match PRM */
 
-struct hermonprm_completion_event_st {	/* Little Endian */
+struct hermonprm_completion_event_data_st {	/* Little Endian */
     pseudo_bit_t	cqn[0x00018];          /* CQ number event is reported for */
     pseudo_bit_t	reserved0[0x00008];
 /* -------------- */
     pseudo_bit_t	reserved1[0x000a0];
 /* -------------- */
-}; 
+};
 
 /* Event Queue Entry         #### michal - match to PRM */
 
 struct hermonprm_event_queue_entry_st {	/* Little Endian */
-    pseudo_bit_t	event_sub_type[0x00008];/* Event Sub Type. 
+    pseudo_bit_t	event_sub_type[0x00008];/* Event Sub Type.
                                                  Defined for events which have sub types, zero elsewhere. */
     pseudo_bit_t	reserved0[0x00008];
     pseudo_bit_t	event_type[0x00008];   /* Event Type */
@@ -2968,12 +2925,12 @@ struct hermonprm_event_queue_entry_st {	/* Little Endian */
     pseudo_bit_t	event_data[6][0x00020];/* Delivers auxilary data to handle event. */
 /* -------------- */
     pseudo_bit_t	reserved2[0x00007];
-    pseudo_bit_t	owner[0x00001];        /* Owner of the entry 
-                                                 0 SW 
+    pseudo_bit_t	owner[0x00001];        /* Owner of the entry
+                                                 0 SW
                                                  1 HW */
     pseudo_bit_t	reserved3[0x00018];
 /* -------------- */
-}; 
+};
 
 /* QP/EE State Transitions Command Parameters  ###michal - doesn't match PRM (field name changed) */
 
@@ -2986,80 +2943,14 @@ struct hermonprm_qp_ee_state_transitions_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00800];
 /* -------------- */
-}; 
-
-/* Completion Queue Entry Format        #### michal - fixed by gdror */
-
-struct hermonprm_completion_queue_entry_st {	/* Little Endian */
-    pseudo_bit_t	qpn[0x00018];          /* Indicates the QP for which completion is being reported */
-    pseudo_bit_t	reserved0[0x00002];
-    pseudo_bit_t	d2s[0x00001];          /* Duplicate to Sniffer. This bit is set if both Send and Receive queues are subject for sniffer queue. The HW delivers
-                                                 packet only to send-associated sniffer receive queue. */
-    pseudo_bit_t	fcrc_sd[0x00001];      /* FCRC: If set, FC CRC is correct in FC frame encapsulated in payload. Valid for Raw Frame FC receive queue only.
-                                                 SD: CQ associated with Sniffer receive queue. If set, packets were skipped due to lack of receive buffers on the Sniffer receive queue */
-    pseudo_bit_t	fl[0x00001];           /* Force Loopback Valid for responder RawEth and UD only. */
-    pseudo_bit_t	vlan[0x00002];         /* Valid for RawEth and UD over Ethernet only. Applicable for RawEth and UD over Ethernet Receive queue
-                                                  00 - No VLAN header was present in the packet
-                                                 01 - C-VLAN (802.1q) Header was present in the frame.
-                                                 10 - S-VLAN (802.1ad) Header was present in the frame. */
-    pseudo_bit_t	dife[0x00001];         /* DIF Error */
-/* -------------- */
-    pseudo_bit_t	immediate_rssvalue_invalidatekey[0x00020];/* For a responder CQE, if completed WQE Opcode is Send With Immediate or Write With Immediate, this field contains immediate field of the received message.
-                                                 For a responder CQE, if completed WQE Opcode is Send With Invalidate, this field contains the R_key that was invalidated.
-                                                 For a responder CQE of a GSI packet this filed contains the Pkey Index of the packet.
-                                                 For IPoIB (UD) and RawEth CQEs this field contains the RSS hash function value.
-                                                 Otherwise, this field is reserved. */
-/* -------------- */
-    pseudo_bit_t	srq_rqpn[0x00018];     /* For Responder UD QPs, Remote (source) QP number. 
-                                                 For Responder SRC QPs, SRQ number.
-                                                 Otherwise, this field is reserved. */
-    pseudo_bit_t	ml_path_mac_index[0x00007];/* For responder UD over IB CQE: These are the lower LMC bits of the DLID in an incoming UD packet, higher bits of this field, that are not part of the LMC bits are zeroed by HW. Invalid if incoming message DLID is the permissive LID or incoming message is multicast.
-                                                  For responder UD over Ethernet and RawEth CQEs: Index of the MAC Table entry that the packet DMAC was matched against.
-                                                  Otherwise, this field is reserved. */
-    pseudo_bit_t	g[0x00001];            /* For responder UD over IB CQE this bit indicates the presence of a GRH
-                                                 For responder UD over Ethernet CQE this bit is set if IPv6 L3 header was present in the packet, this bit is cleared if IPv4 L3 Header was present in the packet.
-                                                 Otherwise, this field is reserved. */
-/* -------------- */
-    pseudo_bit_t	slid_smac47_32[0x00010];/* For responder UD over IB CQE it is the source LID of the packet.
-                                                 For responder UD over Ethernet and RawEth CQEs it is the source-MAC[47:32] of the packet.
-                                                 Otherwise, this field is reserved. */
-    pseudo_bit_t	vid[0x0000c];          /* Frame VID, valid for Responder Raw Ethernet and UD over Ethernet QP. Otherwise, this field is reserved. */
-    pseudo_bit_t	sl[0x00004];           /* For responder UD over IB - the Service Level of the packet.
-                                                  For responder UD over Ethernet and RawEth - it is VLAN-header[15:12]
-                                                  Otherwise, this field is reserved. */
-/* -------------- */
-    pseudo_bit_t	smac31_0_rawether_ipoib_status[0x00020];/* For responder UD over Ethernet - source MAC[31:0] of the packet. 
-                                                  For responder RawEth and UD over IB - RawEth-IPoIB status {3 reserved, ipok,udp,tcp,ipv4opt,ipv6,ipv4vf,ipv4,rht(6),ipv6extmask(6),reserved(2),l2am,reserved(2),bfcs,reserved(2),enc} 
-                                                  Otherwise, this field is reserved. */
-/* -------------- */
-    pseudo_bit_t	byte_cnt[0x00020];     /* Byte count of data transferred. Applicable for RDMA-read, Atomic and all receive operations. completions. 
-                                                 For Receive Queue that is subject for headers. separation, byte_cnt[31:24] specify number of bytes scattered to the first scatter entry (headers. length). Byte_cnt[23:0] specify total byte count received (including headers). */
-/* -------------- */
-    pseudo_bit_t	checksum[0x00010];     /* Valid for RawEth and IPoIB only. */
-    pseudo_bit_t	wqe_counter[0x00010];
-/* -------------- */
-    pseudo_bit_t	opcode[0x00005];       /* Send completions - same encoding as WQE. 
-                                                  Error coding is 0x1F
-                                                  Receive:
-                                                  0x0 - RDMA-Write with Immediate
-                                                  0x1 - Send
-                                                  0x2 - Send with Immediate
-                                                  0x3 - Send & Invalidate
-                                                  */
-    pseudo_bit_t	is[0x00001];           /* inline scatter */
-    pseudo_bit_t	s_r[0x00001];          /* send 1 / receive 0 */
-    pseudo_bit_t	owner[0x00001];        /* HW Flips this bit for every CQ warp around. Initialized to Zero. */
-    pseudo_bit_t	reserved1[0x00010];
-    pseudo_bit_t	reserved2[0x00008];
-/* -------------- */
-}; 
+};
 
 /*  */
 
 struct hermonprm_mcg_qps_st {	/* Little Endian */
     struct hermonprm_mcg_qp_dw_st	dw[128];
 /* -------------- */
-}; 
+};
 
 /*  */
 
@@ -3084,7 +2975,7 @@ struct hermonprm_mcg_hdr_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	gid0[0x00020];
 /* -------------- */
-}; 
+};
 
 /*  */
 
@@ -3096,7 +2987,7 @@ struct hermonprm_sched_queue_context_st {	/* Little Endian */
     pseudo_bit_t	reserved0[0x00006];
     pseudo_bit_t	weight[0x00010];       /* Weight of this SchQ */
 /* -------------- */
-}; 
+};
 
 /*  */
 
@@ -3117,7 +3008,7 @@ struct hermonprm_ecc_detect_event_data_st {	/* Little Endian */
     pseudo_bit_t	err_ra[0x00010];
     pseudo_bit_t	err_ca[0x00010];
 /* -------------- */
-}; 
+};
 
 /* Event_data Field - ECC Detection Event */
 
@@ -3142,14 +3033,14 @@ struct hermonprm_scrubbing_event_st {	/* Little Endian */
     pseudo_bit_t	err_ra[0x00010];       /* Error row address */
     pseudo_bit_t	err_ca[0x00010];       /* Error column address */
 /* -------------- */
-}; 
+};
 
 /*  */
 
 struct hermonprm_eq_cmd_doorbell_st {	/* Little Endian */
     pseudo_bit_t	reserved0[0x00020];
 /* -------------- */
-}; 
+};
 
 /* 0 */
 
@@ -3166,7 +3057,7 @@ struct hermonprm_hermon_prm_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved2[0x7ff00];
 /* -------------- */
-    struct hermonprm_completion_event_st	completion_event;/* Event_data Field - Completion Event */
+    struct hermonprm_completion_event_data_st	completion_event;/* Event_data Field - Completion Event */
 /* -------------- */
     pseudo_bit_t	reserved3[0x7ff40];
 /* -------------- */
@@ -3400,5 +3291,5 @@ struct hermonprm_hermon_prm_st {	/* Little Endian */
 /* -------------- */
     pseudo_bit_t	reserved64[0xffcfc0];
 /* -------------- */
-}; 
+};
 #endif /* H_prefix_hermonprm_bits_fixnames_MT25408_PRM_csp_H */

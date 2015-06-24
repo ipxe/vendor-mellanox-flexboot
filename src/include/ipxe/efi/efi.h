@@ -41,6 +41,16 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define EFIAPI __attribute__((cdecl,regparm(0)))
 #endif
 
+/* EFI headers define EFI_HANDLE as a void pointer, which renders type
+ * checking somewhat useless.  Work around this bizarre sabotage
+ * attempt by redefining EFI_HANDLE as a pointer to an anonymous
+ * structure.
+ */
+#define EFI_HANDLE STUPID_EFI_HANDLE
+#include <ipxe/efi/Uefi/UefiBaseType.h>
+#undef EFI_HANDLE
+typedef struct {} *EFI_HANDLE;
+
 /* Include the top-level EFI header files */
 #include <ipxe/efi/Uefi.h>
 #include <ipxe/efi/PiDxe.h>
@@ -59,6 +69,8 @@ struct efi_protocol {
 	EFI_GUID guid;
 	/** Variable containing pointer to protocol structure */
 	void **protocol;
+	/** Protocol is required */
+	int required;
 };
 
 /** EFI protocol table */
@@ -78,6 +90,21 @@ struct efi_protocol {
 		.protocol = ( ( void ** ) ( void * )			     \
 			      ( ( (_ptr) == ( ( _protocol ** ) (_ptr) ) ) ?  \
 				(_ptr) : (_ptr) ) ),			     \
+		.required = 1,						     \
+	}
+
+/** Declare an EFI protocol to be requested by iPXE
+ *
+ * @v _protocol		EFI protocol name
+ * @v _ptr		Pointer to protocol instance
+ */
+#define EFI_REQUEST_PROTOCOL( _protocol, _ptr )				     \
+	struct efi_protocol __ ## _protocol __efi_protocol = {		     \
+		.guid = _protocol ## _GUID,				     \
+		.protocol = ( ( void ** ) ( void * )			     \
+			      ( ( (_ptr) == ( ( _protocol ** ) (_ptr) ) ) ?  \
+				(_ptr) : (_ptr) ) ),			     \
+		.required = 0,						     \
 	}
 
 /** An EFI configuration table used by iPXE */
@@ -126,15 +153,61 @@ struct efi_config_table {
  */
 #define EEFI( efirc ) EPLATFORM ( EINFO_EPLATFORM, efirc )
 
+extern EFI_GUID efi_arp_protocol_guid;
+extern EFI_GUID efi_arp_service_binding_protocol_guid;
+extern EFI_GUID efi_block_io_protocol_guid;
+extern EFI_GUID efi_bus_specific_driver_override_protocol_guid;
+extern EFI_GUID efi_component_name_protocol_guid;
+extern EFI_GUID efi_component_name2_protocol_guid;
+extern EFI_GUID efi_device_path_protocol_guid;
+extern EFI_GUID efi_dhcp4_protocol_guid;
+extern EFI_GUID efi_dhcp4_service_binding_protocol_guid;
+extern EFI_GUID efi_disk_io_protocol_guid;
+extern EFI_GUID efi_driver_binding_protocol_guid;
+extern EFI_GUID efi_graphics_output_protocol_guid;
+extern EFI_GUID efi_hii_config_access_protocol_guid;
+extern EFI_GUID efi_ip4_protocol_guid;
+extern EFI_GUID efi_ip4_config_protocol_guid;
+extern EFI_GUID efi_ip4_service_binding_protocol_guid;
+extern EFI_GUID efi_load_file_protocol_guid;
+extern EFI_GUID efi_load_file2_protocol_guid;
+extern EFI_GUID efi_loaded_image_protocol_guid;
+extern EFI_GUID efi_loaded_image_device_path_protocol_guid;
+extern EFI_GUID efi_managed_network_protocol_guid;
+extern EFI_GUID efi_managed_network_service_binding_protocol_guid;
+extern EFI_GUID efi_mtftp4_protocol_guid;
+extern EFI_GUID efi_mtftp4_service_binding_protocol_guid;
+extern EFI_GUID efi_nii_protocol_guid;
+extern EFI_GUID efi_nii31_protocol_guid;
+extern EFI_GUID efi_pci_io_protocol_guid;
+extern EFI_GUID efi_pci_root_bridge_io_protocol_guid;
+extern EFI_GUID efi_pxe_base_code_protocol_guid;
+extern EFI_GUID efi_simple_file_system_protocol_guid;
+extern EFI_GUID efi_simple_network_protocol_guid;
+extern EFI_GUID efi_tcg_protocol_guid;
+extern EFI_GUID efi_tcp4_protocol_guid;
+extern EFI_GUID efi_tcp4_service_binding_protocol_guid;
+extern EFI_GUID efi_udp4_protocol_guid;
+extern EFI_GUID efi_udp4_service_binding_protocol_guid;
+extern EFI_GUID efi_vlan_config_protocol_guid;
+
 extern EFI_HANDLE efi_image_handle;
 extern EFI_LOADED_IMAGE_PROTOCOL *efi_loaded_image;
 extern EFI_DEVICE_PATH_PROTOCOL *efi_loaded_image_path;
 extern EFI_SYSTEM_TABLE *efi_systab;
 
 extern const char * efi_guid_ntoa ( EFI_GUID *guid );
+extern const char * efi_devpath_text ( EFI_DEVICE_PATH_PROTOCOL *path );
+extern const char * efi_handle_name ( EFI_HANDLE handle );
 
+extern void dbg_efi_openers ( EFI_HANDLE handle, EFI_GUID *protocol );
 extern void dbg_efi_protocols ( EFI_HANDLE handle );
-extern void dbg_efi_devpath ( EFI_DEVICE_PATH_PROTOCOL *path );
+
+#define DBG_EFI_OPENERS_IF( level, handle, protocol ) do {	\
+		if ( DBG_ ## level ) {				\
+			dbg_efi_openers ( handle, protocol );	\
+		}						\
+	} while ( 0 )
 
 #define DBG_EFI_PROTOCOLS_IF( level, handle ) do {		\
 		if ( DBG_ ## level ) {				\
@@ -142,10 +215,10 @@ extern void dbg_efi_devpath ( EFI_DEVICE_PATH_PROTOCOL *path );
 		}						\
 	} while ( 0 )
 
-#define DBG_EFI_DEVPATH_IF( level, path ) do {			\
-		if ( DBG_ ## level ) {				\
-			dbg_efi_devpath ( path );		\
-		}						\
+#define DBGC_EFI_OPENERS_IF( level, id, ... ) do {		\
+		DBG_AC_IF ( level, id );			\
+		DBG_EFI_OPENERS_IF ( level, __VA_ARGS__ );	\
+		DBG_DC_IF ( level );				\
 	} while ( 0 )
 
 #define DBGC_EFI_PROTOCOLS_IF( level, id, ... ) do {		\
@@ -154,17 +227,20 @@ extern void dbg_efi_devpath ( EFI_DEVICE_PATH_PROTOCOL *path );
 		DBG_DC_IF ( level );				\
 	} while ( 0 )
 
-#define DBGC_EFI_DEVPATH_IF( level, id, ... ) do {		\
-		DBG_AC_IF ( level, id );			\
-		DBG_EFI_DEVPATH_IF ( level, __VA_ARGS__ );	\
-		DBG_DC_IF ( level );				\
-	} while ( 0 )
-
+#define DBGC_EFI_OPENERS( ... )					\
+	DBGC_EFI_OPENERS_IF ( LOG, ##__VA_ARGS__ )
 #define DBGC_EFI_PROTOCOLS( ... )				\
-	DBGC_EFI_PROTOCOLS_IF( LOG, ##__VA_ARGS__ )
+	DBGC_EFI_PROTOCOLS_IF ( LOG, ##__VA_ARGS__ )
 
-#define DBGC_EFI_DEVPATH( ... )					\
-	DBGC_EFI_DEVPATH_IF( LOG, ##__VA_ARGS__ )
+#define DBGC2_EFI_OPENERS( ... )				\
+	DBGC_EFI_OPENERS_IF ( EXTRA, ##__VA_ARGS__ )
+#define DBGC2_EFI_PROTOCOLS( ... )				\
+	DBGC_EFI_PROTOCOLS_IF ( EXTRA, ##__VA_ARGS__ )
+
+#define DBGCP_EFI_OPENERS( ... )				\
+	DBGC_EFI_OPENERS_IF ( PROFILE, ##__VA_ARGS__ )
+#define DBGCP_EFI_PROTOCOLS( ... )				\
+	DBGC_EFI_PROTOCOLS_IF ( PROFILE, ##__VA_ARGS__ )
 
 extern EFI_STATUS efi_init ( EFI_HANDLE image_handle,
 			     EFI_SYSTEM_TABLE *systab );

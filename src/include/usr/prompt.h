@@ -7,8 +7,9 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 extern int prompt ( const char *text, unsigned long timeout, int key );
+extern int prompt_any ( const char *text, unsigned long timeout );
 
 #endif /* _USR_PROMPT_H */

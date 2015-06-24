@@ -22,9 +22,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <string.h>
@@ -147,6 +151,9 @@ static PXENV_EXIT_t
 pxenv_get_cached_info ( struct s_PXENV_GET_CACHED_INFO *get_cached_info ) {
 	struct pxe_dhcp_packet_creator *creator;
 	union pxe_cached_info *info;
+	struct ll_protocol *ll_protocol = pxe_netdev->ll_protocol;
+	uint8_t tmp_chaddr[16];
+	int valid_pkt = 0;
 	unsigned int idx;
 	size_t len;
 	userptr_t buffer;
@@ -175,8 +182,23 @@ pxenv_get_cached_info ( struct s_PXENV_GET_CACHED_INFO *get_cached_info ) {
 	info = &cached_info[idx];
 
 	/* Construct cached version of packet, if not already constructed. */
-	if ( ! info->dhcphdr.op ) {
+	if ( info->dhcphdr.op ) {
+		/* Validate that the cached packet is for this pxe_netdev and not
+		 * for previous device */
+		if ( ll_protocol->ll_addr_len <= sizeof ( info->dhcphdr.chaddr ) ) {
+			valid_pkt = ( memcmp ( info->dhcphdr.chaddr, pxe_netdev->ll_addr, ll_protocol->ll_addr_len ) == 0 );
+		} else if ( ( rc = ll_protocol->eth_addr ( pxe_netdev->ll_addr, tmp_chaddr ) ) == 0 ) {
+			valid_pkt = ( memcmp ( info->dhcphdr.chaddr, tmp_chaddr, ETH_ALEN ) == 0 );
+		} else if ( ll_protocol->hw_addr_len <= sizeof ( info->dhcphdr.chaddr ) ) {
+			valid_pkt = ( memcmp ( info->dhcphdr.chaddr, pxe_netdev->hw_addr, ll_protocol->hw_addr_len ) == 0 );
+		}
+	}
+
+	if ( valid_pkt ) {
+		DBGC ( &pxe_netdev, "\nCached version of packet already constructed.\n");
+	} else {
 		/* Construct DHCP packet */
+		DBGC ( &pxe_netdev, "\nConstructing DHCP packet...\n");
 		creator = &pxe_dhcp_packet_creators[idx];
 		if ( ( rc = creator->create ( pxe_netdev, info,
 					      sizeof ( *info ) ) ) != 0 ) {

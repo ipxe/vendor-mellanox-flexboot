@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -179,8 +184,8 @@ int create_fakepxebsack ( struct net_device *netdev,
 	int rc;
 
 	/* Identify available settings */
-	proxy_settings = find_settings ( PROXYDHCP_SETTINGS_NAME );
-	pxebs_settings = find_settings ( PXEBS_SETTINGS_NAME );
+	proxy_settings = find_settings ( netdev_settings ( netdev ), PROXYDHCP_SETTINGS_NAME );
+	pxebs_settings = find_settings ( netdev_settings ( netdev ), PXEBS_SETTINGS_NAME );
 	if ( ( ! proxy_settings ) && ( ! pxebs_settings ) ) {
 		/* No PXE boot server; return the regular DHCPACK */
 		return create_fakedhcpack ( netdev, data, max_len );

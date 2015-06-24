@@ -1,0 +1,9 @@
+MlxDebugLogImpl()
+		{
+	dprintf("")
+		}
+
+MlxInfoLogImpl()
+{
+	printf("")
+}

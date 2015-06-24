@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <ipxe/ib_packet.h>
@@ -134,6 +134,17 @@ struct ib_port_info {
 	uint8_t local_phy_errors__overrun_errors;
 	uint16_t max_credit_hint;
 	uint32_t link_round_trip_latency;
+	union {
+		uint32_t link_speed_ext_ena:5;                   /* 0: No State Change; valid only on Set(); 1: 14.0625 Gbps (FDR); 2: 25.78125 Gbps (EDR); 3: 14.0625 Gbps
+								 (FDR) or 25.78125 Gbps (EDR); 4-29: Reserved; 30: Disable extended link speeds/Extended link speeds disabled; 31:
+								 Set to LinkSpeedExtSupported value; response contains actual LinkSpeedExtSupported; */
+		uint32_t RESERVED_AUTO7:3;
+		uint32_t link_speed_ext_sup:4;                   /* 0: Reserved; 1: 14.0625 Gbps (FDR); 2: 25.78125 Gbps (EDR); 3: 14.0625 Gbps (FDR) or 25.78125 Gbps (EDR); 4-15: Reserved */
+		uint32_t link_speed_ext_act:4;                   /* 0: No extended speed active; 1: 14.0625 Gbps (FDR); 2: 25.78125 Gbps (EDR); 3-15: Reserved */
+		uint32_t RESERVED_AUTO6:16;
+
+		uint32_t	ext_val;
+	};
 } __attribute__ (( packed ));
 
 #define IB_LINK_WIDTH_1X		0x01
@@ -169,8 +180,9 @@ struct ib_port_info {
  *
  * Defined in section 14.2.5.7 of the IBA.
  */
+#define IB_NUM_PKEYS		0x20
 struct ib_pkey_table {
-	uint16_t pkey[32];
+	uint16_t pkey[IB_NUM_PKEYS];
 } __attribute__ (( packed ));
 
 /** A subnet management attribute */

@@ -34,6 +34,7 @@ OBJCOPY		:= $(CROSS_COMPILE)objcopy
 NM		:= $(CROSS_COMPILE)nm
 OBJDUMP		:= $(CROSS_COMPILE)objdump
 OPENSSL		:= openssl
+CSPLIT		:= csplit
 PARSEROM	:= ./util/parserom.pl
 FIXROM		:= ./util/fixrom.pl
 SYMCHECK	:= ./util/symcheck.pl
@@ -45,6 +46,7 @@ ZBIN		:= ./util/zbin
 ELF2EFI32	:= ./util/elf2efi32
 ELF2EFI64	:= ./util/elf2efi64
 EFIROM		:= ./util/efirom
+EFIFATBIN	:= ./util/efifatbin
 ICCFIX		:= ./util/iccfix
 EINFO		:= ./util/einfo
 GENKEYMAP	:= ./util/genkeymap.pl
@@ -65,24 +67,32 @@ SRCDIRS		+= net net/oncrpc net/tcp net/udp net/infiniband net/80211
 SRCDIRS		+= image
 SRCDIRS		+= drivers/bus
 SRCDIRS		+= drivers/net
-SRCDIRS		+= drivers/net/e1000
-SRCDIRS		+= drivers/net/e1000e
-SRCDIRS		+= drivers/net/igb
-SRCDIRS		+= drivers/net/igbvf
-SRCDIRS		+= drivers/net/phantom
-SRCDIRS		+= drivers/net/rtl818x
-SRCDIRS		+= drivers/net/ath
-SRCDIRS		+= drivers/net/ath/ath5k
-SRCDIRS		+= drivers/net/ath/ath9k
-SRCDIRS		+= drivers/net/vxge
-SRCDIRS		+= drivers/net/efi
-SRCDIRS		+= drivers/net/tg3
+#SRCDIRS		+= drivers/net/e1000
+#SRCDIRS		+= drivers/net/e1000e
+#SRCDIRS		+= drivers/net/igb
+#SRCDIRS		+= drivers/net/igbvf
+#SRCDIRS		+= drivers/net/phantom
+#SRCDIRS		+= drivers/net/rtl818x
+#SRCDIRS		+= drivers/net/ath
+#SRCDIRS		+= drivers/net/ath/ath5k
+#SRCDIRS		+= drivers/net/ath/ath9k
+#SRCDIRS		+= drivers/net/vxge
+#SRCDIRS		+= drivers/net/efi
+#SRCDIRS		+= drivers/net/tg3
 SRCDIRS		+= drivers/block
 SRCDIRS		+= drivers/nvs
 SRCDIRS		+= drivers/bitbash
 SRCDIRS		+= drivers/infiniband
+SRCDIRS         += drivers/infiniband/mlx_utils_flexboot/src/
+SRCDIRS         += drivers/infiniband/mlx_utils/src/public
+SRCDIRS         += drivers/infiniband/mlx_utils/mlx_lib/mlx_reg_access/
+SRCDIRS         += drivers/infiniband/mlx_utils/mlx_lib/mlx_nvconfig/
+SRCDIRS         += drivers/infiniband/mlx_nodnic/src
+SRCDIRS		+= drivers/usb
 SRCDIRS		+= interface/pxe interface/efi interface/smbios
 SRCDIRS		+= interface/bofm
+SRCDIRS		+= interface/xen
+SRCDIRS		+= interface/hyperv
 SRCDIRS		+= tests
 SRCDIRS		+= crypto crypto/axtls crypto/matrixssl
 SRCDIRS		+= hci hci/commands hci/tui
@@ -95,6 +105,7 @@ SRCDIRS		+= config
 # automatic build system.
 #
 NON_AUTO_SRCS	:=
+NON_AUTO_SRCS	+= core/version.c
 NON_AUTO_SRCS	+= drivers/net/prism2.c
 
 # INCDIRS lists the include path
@@ -144,6 +155,7 @@ all : $(ALL)
 #
 everything :
 	$(Q)$(MAKE) --no-print-directory $(ALL) \
+		bin/3c509.rom bin/intel.rom bin/intel.mrom \
 		bin-i386-efi/ipxe.efi bin-i386-efi/ipxe.efidrv \
 		bin-i386-efi/ipxe.efirom \
 		bin-x86_64-efi/ipxe.efi bin-x86_64-efi/ipxe.efidrv \
@@ -188,8 +200,8 @@ VERSION_PATCH	= 0
 EXTRAVERSION	= +
 MM_VERSION	= $(VERSION_MAJOR).$(VERSION_MINOR)
 VERSION		= $(MM_VERSION).$(VERSION_PATCH)$(EXTRAVERSION)
+ifneq ($(wildcard ../.git),)
 GITVERSION := $(shell git describe --always --abbrev=1 --match "" 2>/dev/null)
-ifneq ($(GITVERSION),)
 VERSION		+= ($(GITVERSION))
 endif
 version :

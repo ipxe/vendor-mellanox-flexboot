@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2014-2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,9 +16,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <string.h>
 #include <stdio.h>
@@ -28,18 +33,15 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/device.h>
 #include <ipxe/job.h>
 #include <ipxe/monojob.h>
-#include <ipxe/nap.h>
 #include <ipxe/timer.h>
 #include <usr/ifmgmt.h>
+#include <ipxe/if_ether.h>
 
 /** @file
  *
  * Network interface management
  *
  */
-
-/** Default time to wait for link-up */
-#define LINK_WAIT_TIMEOUT ( 15 * TICKS_PER_SEC )
 
 /** Default unsuccessful configuration status code */
 #define EADDRNOTAVAIL_CONFIG __einfo_error ( EINFO_EADDRNOTAVAIL_CONFIG )
@@ -93,15 +95,30 @@ static void ifstat_errors ( struct net_device_stats *stats,
 	}
 }
 
+#define NETDEV_ADDRESS_STR_LEN 40
 /**
  * Print status of network device
  *
  * @v netdev		Network device
  */
 void ifstat ( struct net_device *netdev ) {
-	printf ( "%s: %s using %s on %s (%s)\n"
+	char ib_guid[NETDEV_ADDRESS_STR_LEN] = { 0 };
+
+	/* In case of infiniband, print both the GUID and the MAC */
+	if ( memcmp ( netdev->hw_addr, netdev->ll_addr, ETH_ALEN ) ) {
+		snprintf ( ib_guid, NETDEV_ADDRESS_STR_LEN,
+			"GUID %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x - MAC ",
+			netdev->hw_addr[0], netdev->hw_addr[1],
+			netdev->hw_addr[2], netdev->hw_addr[3],
+			netdev->hw_addr[4], netdev->hw_addr[5],
+			netdev->hw_addr[6], netdev->hw_addr[7] );
+		printf("\n");
+	}
+
+	printf ( "%s: %s%s \n"
+		"Using %s on %s (%s)\n"
 		 "  [Link:%s, TX:%d TXE:%d RX:%d RXE:%d]\n",
-		 netdev->name, netdev_addr ( netdev ),
+		 netdev->name, ib_guid, netdev_addr ( netdev ),
 		 netdev->dev->driver_name, netdev->dev->name,
 		 ( netdev_is_open ( netdev ) ? "open" : "closed" ),
 		 ( netdev_link_ok ( netdev ) ? "up" : "down" ),
@@ -142,9 +159,6 @@ struct ifpoller {
 static int ifpoller_progress ( struct ifpoller *ifpoller,
 			       struct job_progress *progress __unused ) {
 
-	/* Reduce CPU utilisation */
-	cpu_nap();
-
 	/* Hand off to current progress checker */
 	return ifpoller->progress ( ifpoller );
 }
@@ -165,12 +179,14 @@ static struct interface_descriptor ifpoller_job_desc =
  * @v configurator	Network device configurator (if applicable)
  * @v timeout		Timeout period, in ticks
  * @v progress		Method to check progress
+ * @v string		Job description to display, or NULL to be silent
  * @ret rc		Return status code
  */
 static int ifpoller_wait ( struct net_device *netdev,
 			   struct net_device_configurator *configurator,
 			   unsigned long timeout,
-			   int ( * progress ) ( struct ifpoller *ifpoller ) ) {
+			   int ( * progress ) ( struct ifpoller *ifpoller ),
+			   const char *string ) {
 	static struct ifpoller ifpoller = {
 		.job = INTF_INIT ( ifpoller_job_desc ),
 	};
@@ -179,7 +195,7 @@ static int ifpoller_wait ( struct net_device *netdev,
 	ifpoller.configurator = configurator;
 	ifpoller.progress = progress;
 	intf_plug_plug ( &monojob, &ifpoller.job );
-	return monojob_wait ( "", timeout );
+	return monojob_wait ( string, timeout );
 }
 
 /**
@@ -220,7 +236,39 @@ int iflinkwait ( struct net_device *netdev, unsigned long timeout ) {
 
 	/* Wait for link-up */
 	printf ( "Waiting for link-up on %s", netdev->name );
-	return ifpoller_wait ( netdev, NULL, timeout, iflinkwait_progress );
+	return ifpoller_wait ( netdev, NULL, timeout, iflinkwait_progress, "" );
+}
+
+/**
+ * Wait for network to settle, with status indication
+ *
+ * @v netdev		Network device
+ * @v link_to		Link timeout period to wait if no link was detected, in ticks
+ * @v network_to	Network timeout period to wait for network to settle, in seconds
+ * @ret rc			Link status. non-zero in case of no link detected
+ */
+int ifnetwork_wait ( struct net_device *netdev, unsigned long link_to,
+					unsigned long network_to ) {
+	int rc;
+
+	/* Make sure device is open */
+	if ( ! netdev_is_open ( netdev ) )
+		return -ENODEV;
+
+	/* Wait for link-up */
+	netdev_poll ( netdev );
+	if ( ( rc = netdev_link_ok ( netdev ) ) ) {
+		/* Link is OK */
+		rc = 0;
+	} else {
+		rc = ifpoller_wait ( netdev, NULL, link_to, iflinkwait_progress, NULL );
+	}
+	/* WA for Chain-loading - need to sleep for few seconds to give
+	 * the switches the opportunity to settle */
+	if ( ! rc )
+		sleep ( network_to );
+
+	return rc;
 }
 
 /**
@@ -289,5 +337,5 @@ int ifconf ( struct net_device *netdev,
 		 ( configurator ? configurator->name : "" ),
 		 ( configurator ? "] " : "" ),
 		 netdev->name, netdev->ll_protocol->ntoa ( netdev->ll_addr ) );
-	return ifpoller_wait ( netdev, configurator, 0, ifconf_progress );
+	return ifpoller_wait ( netdev, configurator, 0, ifconf_progress, "" );
 }

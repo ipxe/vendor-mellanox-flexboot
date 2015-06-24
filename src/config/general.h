@@ -7,25 +7,15 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <config/defaults.h>
 
-/*
- * Branding
- *
- * Vendors may use these strings to add their own branding to iPXE.
- * PRODUCT_NAME is displayed prior to any iPXE branding in startup
- * messages, and PRODUCT_SHORT_NAME is used where a brief product
- * label is required (e.g. in BIOS boot selection menus).
- *
- * To minimise end-user confusion, it's probably a good idea to either
- * make PRODUCT_SHORT_NAME a substring of PRODUCT_NAME or leave it as
- * "iPXE".
- *
- */
-#define PRODUCT_NAME ""
-#define PRODUCT_SHORT_NAME "iPXE"
+#define __BLD_VERSION__
+#ifndef __BUILD_VERSION__
+#define __BUILD_VERSION__	__DATE__"@"__TIME__
+#define __BASE_BUILD_VERSION__ "3.4.4xx"
+#endif
 
 /*
  * Banner timeout configuration
@@ -42,8 +32,21 @@ FILE_LICENCE ( GPL2_OR_LATER );
  * initialisation vector, thus rendering the banner almost invisible
  * to the user.
  */
-#define BANNER_TIMEOUT		20
-#define ROM_BANNER_TIMEOUT	( 2 * BANNER_TIMEOUT )
+#ifdef FLASH_CONFIGURATION
+#define ROM_BANNER_TIMEOUT	( 6 * 20 )
+#else
+#define ROM_BANNER_TIMEOUT	0
+#endif
+
+#define BANNER_TIMEOUT		0
+
+
+/***************************************/
+/************** Temporary **************/
+/***************************************/
+#define NODNIC_DRIVER
+#define IRQ_ENABLED
+/***************************************/
 
 /*
  * Network protocols
@@ -78,18 +81,18 @@ FILE_LICENCE ( GPL2_OR_LATER );
  *
  */
 
-//#undef	SANBOOT_PROTO_ISCSI	/* iSCSI protocol */
+#define		SANBOOT_PROTO_ISCSI	/* iSCSI protocol */
 //#undef	SANBOOT_PROTO_AOE	/* AoE protocol */
-//#undef	SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
+#undef		SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
 //#undef	SANBOOT_PROTO_FCP	/* Fibre Channel protocol */
 
 /*
  * 802.11 cryptosystems and handshaking protocols
  *
  */
-#define	CRYPTO_80211_WEP	/* WEP encryption (deprecated and insecure!) */
-#define	CRYPTO_80211_WPA	/* WPA Personal, authenticating with passphrase */
-#define	CRYPTO_80211_WPA2	/* Add support for stronger WPA cryptography */
+#undef	CRYPTO_80211_WEP	/* WEP encryption (deprecated and insecure!) */
+#undef	CRYPTO_80211_WPA	/* WPA Personal, authenticating with passphrase */
+#undef	CRYPTO_80211_WPA2	/* Add support for stronger WPA cryptography */
 
 /*
  * Name resolution modules
@@ -123,10 +126,10 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 #define	AUTOBOOT_CMD		/* Automatic booting */
 #define	NVO_CMD			/* Non-volatile option storage commands */
-#define	CONFIG_CMD		/* Option configuration console */
+#undef	CONFIG_CMD		/* Option configuration console */
 #define	IFMGMT_CMD		/* Interface management commands */
-#define	IWMGMT_CMD		/* Wireless interface management commands */
-#define FCMGMT_CMD		/* Fibre Channel management commands */
+#undef	IWMGMT_CMD		/* Wireless interface management commands */
+#undef FCMGMT_CMD		/* Fibre Channel management commands */
 #define	ROUTE_CMD		/* Routing table management commands */
 #define IMAGE_CMD		/* Image management commands */
 #define DHCP_CMD		/* DHCP management commands */
@@ -134,27 +137,29 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define MENU_CMD		/* Menu commands */
 #define LOGIN_CMD		/* Login command */
 #define SYNC_CMD		/* Sync command */
-//#define NSLOOKUP_CMD		/* DNS resolving command */
-//#define TIME_CMD		/* Time commands */
-//#define DIGEST_CMD		/* Image crypto digest commands */
-//#define LOTEST_CMD		/* Loopback testing commands */
-//#define VLAN_CMD		/* VLAN commands */
-//#define PXE_CMD		/* PXE commands */
-//#define REBOOT_CMD		/* Reboot command */
-//#define POWEROFF_CMD		/* Power off command */
+#define NSLOOKUP_CMD		/* DNS resolving command */
+#define TIME_CMD		/* Time commands */
+#define DIGEST_CMD		/* Image crypto digest commands */
+#define LOTEST_CMD		/* Loopback testing commands */
+#define VLAN_CMD		/* VLAN commands */
+#define PXE_CMD			/* PXE commands */
+#define REBOOT_CMD		/* Reboot command */
+#undef POWEROFF_CMD		/* Power off command */
 //#define IMAGE_TRUST_CMD	/* Image trust management commands */
-//#define PCI_CMD		/* PCI commands */
-//#define PARAM_CMD		/* Form parameter commands */
-//#define NEIGHBOUR_CMD		/* Neighbour management commands */
-//#define PING_CMD		/* Ping command */
+#define PCI_CMD		/* PCI commands */
+#define PARAM_CMD		/* Form parameter commands */
+#define NEIGHBOUR_CMD		/* Neighbour management commands */
+#define PING_CMD		/* Ping command */
 //#define CONSOLE_CMD		/* Console command */
-//#define IPSTAT_CMD		/* IP statistics commands */
+#define IPSTAT_CMD		/* IP statistics commands */
+//#define PROFSTAT_CMD		/* Profiling commands */
 
 /*
  * ROM-specific options
  *
  */
 #undef	NONPNP_HOOK_INT19	/* Hook INT19 on non-PnP BIOSes */
+#define	AUTOBOOT_ROM_FILTER	/* Autoboot only devices matching our ROM */
 
 /*
  * Error message tables to include
@@ -181,6 +186,9 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #undef	GDBUDP			/* Remote GDB debugging over UDP
 				 * (both may be set) */
 
+#include <config/named.h>
+#include NAMED_CONFIG(general.h)
 #include <config/local/general.h>
+#include LOCAL_NAMED_CONFIG(general.h)
 
 #endif /* CONFIG_GENERAL_H */

@@ -15,12 +15,17 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <assert.h>
 #include <realmode.h>
+#include <bios.h>
 #include <ipxe/console.h>
 #include <ipxe/ansiesc.h>
 #include <ipxe/keymap.h>
@@ -101,7 +106,9 @@ static void bios_handle_ed ( struct ansiesc_context *ctx __unused,
 					   "int $0x10\n\t"
 					   "cli\n\t" )
 			       : : "a" ( 0x0600 ), "b" ( bios_attr << 8 ),
-			           "c" ( 0 ), "d" ( 0xfefe ) );
+				   "c" ( 0 ),
+				   "d" ( ( ( console_height - 1 ) << 8 ) |
+					 ( console_width - 1 ) ) );
 }
 
 /**
@@ -146,11 +153,53 @@ static void bios_handle_sgr ( struct ansiesc_context *ctx __unused,
 	}
 }
 
+/**
+ * Handle ANSI DECTCEM set (show cursor)
+ *
+ * @v ctx		ANSI escape sequence context
+ * @v count		Parameter count
+ * @v params		List of graphic rendition aspects
+ */
+static void bios_handle_dectcem_set ( struct ansiesc_context *ctx __unused,
+				      unsigned int count __unused,
+				      int params[] __unused ) {
+	uint8_t height;
+
+	/* Get character height */
+	get_real ( height, BDA_SEG, BDA_CHAR_HEIGHT );
+
+	__asm__ __volatile__ ( REAL_CODE ( "sti\n\t"
+					   "int $0x10\n\t"
+					   "cli\n\t" )
+			       : : "a" ( 0x0100 ),
+				   "c" ( ( ( height - 2 ) << 8 ) |
+					 ( height - 1 ) ) );
+}
+
+/**
+ * Handle ANSI DECTCEM reset (hide cursor)
+ *
+ * @v ctx		ANSI escape sequence context
+ * @v count		Parameter count
+ * @v params		List of graphic rendition aspects
+ */
+static void bios_handle_dectcem_reset ( struct ansiesc_context *ctx __unused,
+					unsigned int count __unused,
+					int params[] __unused ) {
+
+	__asm__ __volatile__ ( REAL_CODE ( "sti\n\t"
+					   "int $0x10\n\t"
+					   "cli\n\t" )
+			       : : "a" ( 0x0100 ), "c" ( 0x2000 ) );
+}
+
 /** BIOS console ANSI escape sequence handlers */
 static struct ansiesc_handler bios_ansiesc_handlers[] = {
 	{ ANSIESC_CUP, bios_handle_cup },
 	{ ANSIESC_ED, bios_handle_ed },
 	{ ANSIESC_SGR, bios_handle_sgr },
+	{ ANSIESC_DECTCEM_SET, bios_handle_dectcem_set },
+	{ ANSIESC_DECTCEM_RESET, bios_handle_dectcem_reset },
 	{ 0, NULL }
 };
 

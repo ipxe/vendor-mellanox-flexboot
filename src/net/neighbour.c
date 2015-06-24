@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -15,14 +16,20 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
 #include <ipxe/iobuf.h>
 #include <ipxe/retry.h>
 #include <ipxe/timer.h>
@@ -46,8 +53,24 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 /** The neighbour cache */
 struct list_head neighbours = LIST_HEAD_INIT ( neighbours );
+uint32_t total_neighbours = 0;
+#define NEIGHBOUR_DROP_MIN_CACHE_ENTRY 3
 
 static void neighbour_expired ( struct retry_timer *timer, int over );
+
+static int neighbor_add_to_list ( struct neighbour *neighbour ) {
+	list_add ( &neighbour->list, &neighbours );
+	total_neighbours++;
+	return total_neighbours;
+}
+
+static int neighbor_remove_from_list ( struct neighbour *neighbour ) {
+	if ( total_neighbours > 0 ) {
+		list_del ( &neighbour->list );
+		total_neighbours--;
+	}
+	return total_neighbours;
+}
 
 /**
  * Free neighbour cache entry
@@ -91,12 +114,12 @@ static struct neighbour * neighbour_create ( struct net_device *netdev,
 	memcpy ( neighbour->net_dest, net_dest,
 		 net_protocol->net_addr_len );
 	timer_init ( &neighbour->timer, neighbour_expired, &neighbour->refcnt );
-	neighbour->timer.min_timeout = NEIGHBOUR_MIN_TIMEOUT;
-	neighbour->timer.max_timeout = NEIGHBOUR_MAX_TIMEOUT;
+	set_timer_limits ( &neighbour->timer, NEIGHBOUR_MIN_TIMEOUT,
+			   NEIGHBOUR_MAX_TIMEOUT );
 	INIT_LIST_HEAD ( &neighbour->tx_queue );
 
 	/* Transfer ownership to cache */
-	list_add ( &neighbour->list, &neighbours );
+	neighbor_add_to_list ( neighbour );
 
 	DBGC ( neighbour, "NEIGHBOUR %s %s %s created\n", netdev->name,
 	       net_protocol->name, net_protocol->ntoa ( net_dest ) );
@@ -218,7 +241,7 @@ static void neighbour_destroy ( struct neighbour *neighbour, int rc ) {
 	struct io_buffer *iobuf;
 
 	/* Take ownership from cache */
-	list_del ( &neighbour->list );
+	neighbor_remove_from_list ( neighbour );
 
 	/* Stop timer */
 	stop_timer ( &neighbour->timer );
@@ -318,7 +341,7 @@ int neighbour_tx ( struct io_buffer *iobuf, struct net_device *netdev,
 			netdev->name, net_protocol->name,
 			net_protocol->ntoa ( net_dest ) );
 		list_add_tail ( &iobuf->list, &neighbour->tx_queue );
-		return -EAGAIN;
+		return 0;
 	}
 }
 
@@ -403,19 +426,43 @@ struct net_driver neighbour_net_driver __net_driver = {
  *
  * @ret discarded	Number of cached items discarded
  */
-static unsigned int neighbour_discard ( void ) {
+static unsigned int neighbour_discard_last ( void ) {
 	struct neighbour *neighbour;
+	uint8_t zeros_ll_addr[MAX_LL_ADDR_LEN] = { 0 };
+
+	/* Don't drop cache entry if there is less than NEIGHBOUR_DROP_MIN_CACHE_ENTRY */
+	if ( total_neighbours < NEIGHBOUR_DROP_MIN_CACHE_ENTRY )
+		return 0;
 
 	/* Drop oldest cache entry, if any */
 	neighbour = list_last_entry ( &neighbours, struct neighbour, list );
 	if ( neighbour ) {
-		neighbour_destroy ( neighbour, -ENOBUFS );
-		return 1;
-	} else {
-		return 0;
+		/* Don't remove the neighbor if its not yet initialized with REMAC */
+		if ( memcmp ( neighbour->ll_dest, zeros_ll_addr, MAX_LL_ADDR_LEN ) ) {
+			neighbour_destroy ( neighbour, -ENOBUFS );
+			return 1;
+		}
 	}
+
+	return 0;
 }
 
+unsigned int neighbour_discard ( void *ll_addr, size_t ll_addr_len ) {
+	struct neighbour *neighbour;
+	struct neighbour *tmp;
+
+	list_for_each_entry_safe ( neighbour, tmp, &neighbours, list ) {
+		if ( neighbour && neighbour->netdev && neighbour->netdev->ll_protocol &&
+			 neighbour->netdev->ll_protocol->ll_addr_len == ll_addr_len ) {
+			if ( memcmp ( neighbour->ll_dest, ll_addr, ll_addr_len ) == 0 ) {
+				neighbour_destroy ( neighbour, -ENOBUFS );
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
 /**
  * Neighbour cache discarder
  *
@@ -424,5 +471,5 @@ static unsigned int neighbour_discard ( void ) {
  * transfer will cause substantial disruption.
  */
 struct cache_discarder neighbour_discarder __cache_discarder (CACHE_EXPENSIVE)={
-	.discard = neighbour_discard,
+	.discard = neighbour_discard_last,
 };

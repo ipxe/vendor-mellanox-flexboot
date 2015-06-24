@@ -7,7 +7,7 @@
  *
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <bits/errfile.h>
 
@@ -68,6 +68,8 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_fbcon		       ( ERRFILE_CORE | 0x001c0000 )
 #define ERRFILE_ansicol		       ( ERRFILE_CORE | 0x001d0000 )
 #define ERRFILE_ansicoldef	       ( ERRFILE_CORE | 0x001e0000 )
+#define ERRFILE_driver_settings	       ( ERRFILE_CORE | 0x001f0000 )
+#define ERRFILE_status_updater	       ( ERRFILE_CORE | 0x00200000 )
 
 #define ERRFILE_eisa		     ( ERRFILE_DRIVER | 0x00000000 )
 #define ERRFILE_isa		     ( ERRFILE_DRIVER | 0x00010000 )
@@ -76,6 +78,13 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_pci		     ( ERRFILE_DRIVER | 0x00040000 )
 #define ERRFILE_linux		     ( ERRFILE_DRIVER | 0x00050000 )
 #define ERRFILE_pcivpd		     ( ERRFILE_DRIVER | 0x00060000 )
+#define ERRFILE_usb		     ( ERRFILE_DRIVER | 0x00070000 )
+#define ERRFILE_usbhub		     ( ERRFILE_DRIVER | 0x00080000 )
+#define ERRFILE_xhci		     ( ERRFILE_DRIVER | 0x00090000 )
+#define ERRFILE_ehci		     ( ERRFILE_DRIVER | 0x000a0000 )
+#define ERRFILE_uhci		     ( ERRFILE_DRIVER | 0x000b0000 )
+#define ERRFILE_usbhid		     ( ERRFILE_DRIVER | 0x000c0000 )
+#define ERRFILE_usbkbd		     ( ERRFILE_DRIVER | 0x000d0000 )
 
 #define ERRFILE_nvs		     ( ERRFILE_DRIVER | 0x00100000 )
 #define ERRFILE_spi		     ( ERRFILE_DRIVER | 0x00110000 )
@@ -154,7 +163,14 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_intel		     ( ERRFILE_DRIVER | 0x00650000 )
 #define ERRFILE_myson		     ( ERRFILE_DRIVER | 0x00660000 )
 #define ERRFILE_intelx		     ( ERRFILE_DRIVER | 0x00670000 )
-
+#define ERRFILE_snp		     ( ERRFILE_DRIVER | 0x00680000 )
+#define ERRFILE_netfront	     ( ERRFILE_DRIVER | 0x00690000 )
+#define ERRFILE_nii		     ( ERRFILE_DRIVER | 0x006a0000 )
+#define ERRFILE_netvsc		     ( ERRFILE_DRIVER | 0x006b0000 )
+#define ERRFILE_ecm		     ( ERRFILE_DRIVER | 0x006c0000 )
+#define ERRFILE_ncm		     ( ERRFILE_DRIVER | 0x006d0000 )
+#define ERRFILE_usbnet		     ( ERRFILE_DRIVER | 0x006e0000 )
+#define ERRFILE_dm96xx		     ( ERRFILE_DRIVER | 0x006f0000 )
 #define ERRFILE_scsi		     ( ERRFILE_DRIVER | 0x00700000 )
 #define ERRFILE_arbel		     ( ERRFILE_DRIVER | 0x00710000 )
 #define ERRFILE_hermon		     ( ERRFILE_DRIVER | 0x00720000 )
@@ -162,6 +178,12 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_ata		     ( ERRFILE_DRIVER | 0x00740000 )
 #define ERRFILE_srp		     ( ERRFILE_DRIVER | 0x00750000 )
 #define ERRFILE_qib7322		     ( ERRFILE_DRIVER | 0x00760000 )
+#define ERRFILE_smsc75xx	     ( ERRFILE_DRIVER | 0x00770000 )
+#define ERRFILE_intelvf		     ( ERRFILE_DRIVER | 0x00780000 )
+#define ERRFILE_intelxvf	     ( ERRFILE_DRIVER | 0x00790000 )
+#define ERRFILE_golan		     ( ERRFILE_DRIVER | 0x007a0000 )
+#define ERRFILE_hermon_settings	     ( ERRFILE_DRIVER | 0x007b0000 )
+#define ERRFILE_flexboot_nodnic	     ( ERRFILE_DRIVER | 0x007c0000 )
 
 #define ERRFILE_aoe			( ERRFILE_NET | 0x00000000 )
 #define ERRFILE_arp			( ERRFILE_NET | 0x00010000 )
@@ -223,6 +245,9 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_icmp			( ERRFILE_NET | 0x00390000 )
 #define ERRFILE_ping			( ERRFILE_NET | 0x003a0000 )
 #define ERRFILE_dhcpv6			( ERRFILE_NET | 0x003b0000 )
+#define ERRFILE_nfs_uri			( ERRFILE_NET | 0x003c0000 )
+#define ERRFILE_rndis			( ERRFILE_NET | 0x003d0000 )
+#define ERRFILE_pccrc			( ERRFILE_NET | 0x003e0000 )
 
 #define ERRFILE_image		      ( ERRFILE_IMAGE | 0x00000000 )
 #define ERRFILE_elf		      ( ERRFILE_IMAGE | 0x00010000 )
@@ -299,6 +324,14 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define ERRFILE_memmap_settings	      ( ERRFILE_OTHER | 0x003f0000 )
 #define ERRFILE_param_cmd	      ( ERRFILE_OTHER | 0x00400000 )
 #define ERRFILE_deflate		      ( ERRFILE_OTHER | 0x00410000 )
+#define ERRFILE_xenstore	      ( ERRFILE_OTHER | 0x00420000 )
+#define ERRFILE_xenbus		      ( ERRFILE_OTHER | 0x00430000 )
+#define ERRFILE_xengrant	      ( ERRFILE_OTHER | 0x00440000 )
+#define ERRFILE_efi_utils	      ( ERRFILE_OTHER | 0x00450000 )
+#define ERRFILE_efi_wrap	      ( ERRFILE_OTHER | 0x00460000 )
+#define ERRFILE_vmbus		      ( ERRFILE_OTHER | 0x00470000 )
+#define ERRFILE_efi_time	      ( ERRFILE_OTHER | 0x00480000 )
+#define ERRFILE_boot_menu_ui	      ( ERRFILE_OTHER | 0x00490000 )
 
 /** @} */
 

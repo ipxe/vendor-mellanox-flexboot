@@ -608,6 +608,7 @@ static struct ll_protocol net80211_ll_protocol __ll_protocol = {
 	.ll_addr_len = ETH_ALEN,
 	.ll_header_len = IEEE80211_TYP_FRAME_HEADER_LEN +
 				IEEE80211_LLC_HEADER_LEN,
+	.client_id_len = ETH_ALEN,
 };
 
 
@@ -2826,3 +2827,9 @@ struct errortab common_wireless_errors[] __errortab = {
 	__einfo_errortab ( EINFO_ECONNREFUSED_ASSOC_DENIED ),
 	__einfo_errortab ( EINFO_ECONNREFUSED_AUTH_ALGO_UNSUPP ),
 };
+
+/* Drag in objects via net80211_ll_protocol */
+REQUIRING_SYMBOL ( net80211_ll_protocol );
+
+/* Drag in 802.11 configuration */
+REQUIRE_OBJECT ( config_net80211 );

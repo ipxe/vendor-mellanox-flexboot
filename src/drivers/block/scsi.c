@@ -15,9 +15,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
+ *
+ * You can also choose to distribute this program under the terms of
+ * the Unmodified Binary Distribution Licence (as given in the file
+ * COPYING.UBDL), provided that you have satisfied its requirements.
  */
 
-FILE_LICENCE ( GPL2_OR_LATER );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -130,6 +134,33 @@ int scsi_parse_lun ( const char *lun_string, struct scsi_lun *lun ) {
 	}
 
 	return 0;
+}
+
+/**
+ * Parse SCSI sense data
+ *
+ * @v data		Raw sense data
+ * @v len		Length of raw sense data
+ * @v sense		Descriptor-format sense data to fill in
+ */
+void scsi_parse_sense ( const void *data, size_t len,
+			struct scsi_sns_descriptor *sense ) {
+	const union scsi_sns *sns = data;
+
+	/* Avoid returning uninitialised data */
+	memset ( sense, 0, sizeof ( *sense ) );
+
+	/* Copy, assuming descriptor-format data */
+	if ( len < sizeof ( sns->desc ) )
+		return;
+	memcpy ( sense, &sns->desc, sizeof ( *sense ) );
+
+	/* Convert fixed-format to descriptor-format, if applicable */
+	if ( len < sizeof ( sns->fixed ) )
+		return;
+	if ( ! SCSI_SENSE_FIXED ( sns->code ) )
+		return;
+	sense->additional = sns->fixed.additional;
 }
 
 /******************************************************************************
@@ -468,9 +499,10 @@ static void scsicmd_response ( struct scsi_command *scsicmd,
 			underrun = -(response->overrun);
 			DBGC ( scsidev, " underrun -%zd", underrun );
 		}
-		DBGC ( scsidev, " sense %02x:%02x:%08x\n",
-		       response->sense.code, response->sense.key,
-		       ntohl ( response->sense.info ) );
+		DBGC ( scsidev, " sense %02x key %02x additional %04x\n",
+		       ( response->sense.code & SCSI_SENSE_CODE_MASK ),
+		       ( response->sense.key & SCSI_SENSE_KEY_MASK ),
+		       ntohs ( response->sense.additional ) );
 
 		/* Construct error number from sense data */
 		rc = -EIO_SENSE ( response->sense.key & SCSI_SENSE_KEY_MASK );

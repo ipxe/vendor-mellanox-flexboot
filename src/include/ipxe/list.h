@@ -9,7 +9,7 @@
  * list.h.
  */
 
-FILE_LICENCE ( GPL2_ONLY );
+FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <stddef.h>
 #include <assert.h>
@@ -69,6 +69,8 @@ struct list_head {
 #define list_add( new, head ) do {				\
 	list_check ( (head) );					\
 	extern_list_add ( (new), (head) );			\
+	list_check ( (head) );					\
+	list_check ( (new) );					\
 	} while ( 0 )
 static inline void inline_list_add ( struct list_head *new,
 				     struct list_head *head ) {
@@ -91,6 +93,8 @@ extern void extern_list_add ( struct list_head *new,
 #define list_add_tail( new, head ) do {				\
 	list_check ( (head) );					\
 	extern_list_add_tail ( (new), (head) );			\
+	list_check ( (head) );					\
+	list_check ( (new) );					\
 	} while ( 0 )
 static inline void inline_list_add_tail ( struct list_head *new,
 					  struct list_head *head ) {
@@ -397,6 +401,22 @@ extern void extern_list_splice_tail_init ( struct list_head *list,
 	      &pos->member != (head);					      \
 	      pos = tmp,						      \
 	      tmp = list_entry ( tmp->member.next, typeof ( *tmp ), member ) )
+
+/**
+ * Iterate over entries in a list in a reverse order, safe against deletion of the current entry
+ *
+ * @v pos		Iterator
+ * @v tmp		Temporary value (of same type as iterator)
+ * @v head		List head
+ * @v member		Name of list field within iterator's type
+ */
+#define list_for_each_entry_reverse_safe( pos, tmp, head, member )	      \
+	for ( list_check ( (head) ),					      \
+	      pos = list_entry ( (head)->prev, typeof ( *pos ), member ),     \
+	      tmp = list_entry ( pos->member.prev, typeof ( *tmp ), member ); \
+	      &pos->member != (head);					      \
+	      pos = tmp,						      \
+	      tmp = list_entry ( tmp->member.prev, typeof ( *tmp ), member ) )
 
 /**
  * Iterate over entries in a list, starting after current position

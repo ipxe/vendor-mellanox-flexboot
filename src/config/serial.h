@@ -18,12 +18,16 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define	COM3		0x3e8
 #define	COM4		0x2e8
 
+#ifdef MLX_DEBUG
 #define	COMCONSOLE	COM1		/* I/O port address */
+#else
+#define	COMCONSOLE	COM2		/* I/O port address */
+#endif
 
 /* Keep settings from a previous user of the serial port (e.g. lilo or
  * LinuxBIOS), ignoring COMSPEED, COMDATA, COMPARITY and COMSTOP.
  */
-#undef	COMPRESERVE
+#define	COMPRESERVE
 
 #ifndef COMPRESERVE
 #define	COMSPEED	115200		/* Baud rate */
@@ -32,6 +36,9 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define	COMSTOP		1		/* Stop bits */
 #endif
 
+#include <config/named.h>
+#include NAMED_CONFIG(serial.h)
 #include <config/local/serial.h>
+#include LOCAL_NAMED_CONFIG(serial.h)
 
 #endif /* CONFIG_SERIAL_H */
