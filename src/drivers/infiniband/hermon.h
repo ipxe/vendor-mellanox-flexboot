@@ -717,7 +717,9 @@ struct hermonprm_query_defparams_port_st {
 	pseudo_bit_t	boot_pkey[0x00010];
 	pseudo_bit_t	reserved3[0x00010];
 	/* -------------- */
-	pseudo_bit_t	reserved4[0x00016];
+	pseudo_bit_t	reserved4[0x0000e];
+	pseudo_bit_t	client_identifier[0x00004];
+	pseudo_bit_t	mac_admin_bit[0x00004];
 	pseudo_bit_t	iscsi_boot_to_target[0x00002];
 	pseudo_bit_t	reserved5[0x00002];
 	pseudo_bit_t	iscsi_vlan_en[0x00001];
@@ -1210,6 +1212,15 @@ struct hermon_port {
 	struct driver_settings driver_settings;
 	/** port open boolean  */
 	int hermon_is_port_open;
+};
+
+union hermon_nv_virt_conf {
+	struct {
+		uint32_t num_of_vfs	:16;
+		uint32_t rsrvd		:15;
+		uint32_t virt_mode	:1;
+	};
+	uint32_t dword;
 };
 
 /** A Hermon device */

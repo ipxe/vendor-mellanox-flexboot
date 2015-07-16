@@ -47,6 +47,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define PCI_GW_SPACE_NODNIC 0x4
 #define PCI_GW_SPACE_ALL_ICMD 0x3
 #define PCI_GW_SPACE_SEMAPHORE 0xa
+#define PCI_GW_SPACE_CR0 0x2
 
 typedef mlx_uint32	mlx_pci_gw_buffer;
 

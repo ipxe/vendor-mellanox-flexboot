@@ -203,3 +203,37 @@ mlx_memory_cpy(
 bad_param:
 	return status;
 }
+
+mlx_status
+mlx_memory_cpu_to_be32(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+	if ( utils == NULL || destination == NULL ){
+		status = MLX_INVALID_PARAMETER;
+		goto bad_param;
+	}
+	status = mlx_memory_cpu_to_be32_priv(utils, source, destination);
+bad_param:
+	return status;
+}
+
+mlx_status
+mlx_memory_be32_to_cpu(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+	if ( utils == NULL || destination == NULL ){
+		status = MLX_INVALID_PARAMETER;
+		goto bad_param;
+	}
+	status = mlx_memory_be32_to_cpu_priv(utils, source, destination);
+bad_param:
+	return status;
+}

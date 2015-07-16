@@ -34,6 +34,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 enum {
     FLASH_REG_ACCESS        = 0x9001,
+    GET_FW_INFO             = 0x8007,
 };
 
 mlx_status

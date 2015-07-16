@@ -63,6 +63,59 @@ static int hermon_vm_applies ( struct settings *settings ) {
 	return hermon->cap.nv_config_flags.nv_config_sriov_en;
 }
 
+static int hermon_virt_nv_store ( struct driver_settings *driver_settings ) {
+	struct hermon *hermon = ( struct hermon * ) driver_settings->drv_priv;
+	union hermon_nv_virt_conf nv_virt_conf;
+	struct nv_conf *conf = ( struct nv_conf * ) driver_settings->priv_data;
+	struct settings *settings = & ( driver_settings->generic_settings.settings );
+	char buf[255] = {0};
+	uint32_t dword;
+	int rc;
+
+	memset ( &nv_virt_conf, 0, sizeof ( nv_virt_conf ) );
+	DRIVER_SETTINGS_FETCH_SETTING ( settings, & virt_mode_setting );
+	conf->virt_conf.virt_mode = ( buf[0] == 'S' );
+	DRIVER_SETTINGS_FETCH_SETTING ( settings, & virt_num_setting );
+	conf->virt_conf.num_of_vfs = strtoul ( buf, NULL, 10 );
+	nv_virt_conf.virt_mode = conf->virt_conf.virt_mode;
+	nv_virt_conf.num_of_vfs = conf->virt_conf.num_of_vfs;
+	dword = cpu_to_be32 ( nv_virt_conf.dword );
+
+	if ( ( rc = driver_settings->callbacks.tlv_write ( hermon,
+				& dword, 0, VIRTUALIZATION_TYPE, sizeof ( dword ) ) ) ) {
+		return -EACCES;
+	}
+
+	return rc;
+}
+
+static int hermon_virt_read ( struct driver_settings *settings ) {
+	struct hermon *hermon = ( struct hermon * ) settings->drv_priv;
+	struct nv_conf_defaults *defaults = ( struct nv_conf_defaults * ) settings->defaults;
+	union hermon_nv_virt_conf nv_virt_conf;
+	struct nv_conf *conf = ( struct nv_conf * ) settings->priv_data;
+	struct driver_tlv_header tlv_hdr;
+	int rc;
+
+	memset ( &nv_virt_conf, 0, sizeof ( nv_virt_conf ) );
+	memset ( &tlv_hdr, 0, sizeof ( tlv_hdr ) );
+	tlv_hdr.type = VIRTUALIZATION_TYPE;
+	tlv_hdr.length = sizeof ( nv_virt_conf );
+	tlv_hdr.data = &nv_virt_conf;
+
+	if ( ( rc = settings->callbacks.tlv_read ( hermon,
+			& tlv_hdr ) != 0 ) ) {
+		nv_virt_conf.num_of_vfs = defaults->total_vfs;
+		nv_virt_conf.virt_mode = defaults->sriov_en;
+	}
+
+	conf->virt_conf.sriov_valid = 1;
+	conf->virt_conf.virt_mode = nv_virt_conf.virt_mode;
+	conf->virt_conf.num_of_vfs = nv_virt_conf.num_of_vfs;
+
+	return rc;
+}
+
 static int hermon_nv_write_blink_leds ( struct hermon *hermon,
 			struct hermon_port *port, int duration ) {
 	struct nv_port_conf *conf = & ( port->port_nv_conf );
@@ -122,29 +175,15 @@ static int blink_leds_store ( struct settings *settings, const void *data,
 }
 
 static struct driver_setting_operation hermon_setting_ops[] = {
-	{ &virt_mode_setting,	&hermon_vm_applies, NULL, NULL },
-	{ &blink_leds_setting,	&hermon_blink_leds_applies, &blink_leds_store, NULL },
-	{ &wol_setting,			&hermon_wol_applies, NULL, NULL },
+	{ &virt_mode_setting, &hermon_vm_applies, NULL, &hermon_virt_nv_store, &hermon_virt_read },
+	{ &virt_num_setting, NULL, NULL, &hermon_virt_nv_store, &hermon_virt_read },
+	{ &blink_leds_setting,	&hermon_blink_leds_applies, &blink_leds_store, NULL, NULL },
+	{ &wol_setting,			&hermon_wol_applies, NULL, NULL, NULL },
 };
 
 void hermon_update_setting_ops () {
-	struct driver_setting_operation *hermon_ops;
-	struct driver_setting_operation *driver_ops;
-	unsigned int i;
-
-	for ( i = 0 ; i < ( sizeof ( hermon_setting_ops ) /
-		sizeof ( hermon_setting_ops[0] ) ) ; i++ ) {
-		hermon_ops = &hermon_setting_ops[i];
-		driver_ops = find_setting_ops ( hermon_ops->setting );
-		if ( driver_ops ) {
-			if ( hermon_ops->applies )
-				driver_ops->applies = hermon_ops->applies;
-			if ( hermon_ops->store )
-				driver_ops->store = hermon_ops->store;
-			if ( hermon_ops->nv_store )
-				driver_ops->nv_store = hermon_ops->nv_store;
-		}
-	}
+	driver_setting_update_setting_ops ( hermon_setting_ops,
+		( sizeof ( hermon_setting_ops ) / sizeof ( hermon_setting_ops[0] ) ) );
 }
 
 static int hermon_open_wrapper ( void *priv ) {
@@ -203,8 +242,8 @@ int hermon_init_settings ( struct hermon *hermon ) {
 }
 
 struct driver_device_name hermon_device_names [] = {
-	{ 0x1003, "ConnectX3 HCA" },
-	{ 0x1007, "ConnectX3-Pro HCA" },
+	{ 0x1003, "ConnectX-3 HCA" },
+	{ 0x1007, "ConnectX-3Pro HCA" },
 };
 
 char * get_device_name ( struct hermon *hermon ) {

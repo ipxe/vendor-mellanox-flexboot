@@ -29,6 +29,11 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/netdevice.h>
 #include <ipxe/driver_settings.h>
 
+/*
+ * If defined, use interrupts in NODNIC driver
+ */
+#define NODNIC_IRQ_ENABLED
+
 #define FLEXBOOT_NODNIC_MAX_PORTS		2
 #define FLEXBOOT_NODNIC_PORT_BASE		1
 
@@ -74,6 +79,7 @@ struct flexboot_nodnic_queue_pair {
 struct flexboot_nodnic_completion_queue {
 	nodnic_cq *nodnic_completion_queue;
 };
+
 /** A flexboot_nodnic device */
 struct flexboot_nodnic {
 	/** PCI device */
@@ -90,11 +96,7 @@ struct flexboot_nodnic {
 	u16 port_mask;
 	struct driver_settings driver_settings;
 	struct nv_conf_defaults defaults;
-	/** golan ini configurations */
 	struct nv_conf_ini ini_configurations;
-	/* golan general settings */
-	struct driver_settings nodnic_settings;
-	/* NV configurations */
 	struct nv_conf nodnic_nv_conf;
 	/** device private data */
 	void *priv_data;

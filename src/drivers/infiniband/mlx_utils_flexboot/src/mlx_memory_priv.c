@@ -7,6 +7,7 @@
 
 #include <ipxe/malloc.h>
 #include <stddef.h>
+#include <byteswap.h>
 #include <ipxe/io.h>
 
 #include "mlx_memory_priv.h"
@@ -142,6 +143,31 @@ mlx_memory_cpy_priv(
 {
 	mlx_status status = MLX_SUCCESS;
 	memcpy(destination_buffer, source_buffer, length);
+	return status;
+}
+
+mlx_status
+mlx_memory_cpu_to_be32_priv(
+			IN mlx_utils *utils __unused,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+	*destination = cpu_to_be32(source);
+	return status;
+}
+
+
+mlx_status
+mlx_memory_be32_to_cpu_priv(
+			IN mlx_utils *utils __unused,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+	*destination = be32_to_cpu(source);
 	return status;
 }
 

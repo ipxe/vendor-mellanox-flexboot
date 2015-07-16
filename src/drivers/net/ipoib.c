@@ -162,8 +162,10 @@ static struct ipoib_mac * ipoib_find_remac ( struct ipoib_device *ipoib,
 					     const struct ipoib_remac *remac ) {
 	struct ipoib_peer *peer;
 
-	/* Check for broadcast REMAC */
-	if ( is_broadcast_ether_addr ( remac ) )
+	/* Check for broadcast or multicast REMAC.  We transmit
+	 * multicasts as broadcasts for simplicity.
+	 */
+	if ( is_multicast_ether_addr ( remac ) )
 		return &ipoib->broadcast;
 
 	/* Try to find via REMAC cache */
@@ -860,7 +862,7 @@ static void ipoib_link_state_changed ( struct ib_device *ibdev ) {
 	netdev_link_err ( netdev, ( rc ? rc : -EINPROGRESS_JOINING ) );
 
 	/* Join new broadcast group */
-	if ( ib_is_open ( ibdev ) && ib_link_ok ( ibdev ) &&
+	if ( ib_is_open ( ibdev ) && ib_link_ok ( ibdev ) && ( ipoib->qp ) &&
 	     ( ( rc = ipoib_join_broadcast_group ( ipoib ) ) != 0 ) ) {
 		DBGC ( ipoib, "IPoIB %p could not rejoin broadcast group: "
 		       "%s\n", ipoib, strerror ( rc ) );

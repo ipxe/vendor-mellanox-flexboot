@@ -1922,6 +1922,12 @@ static int golan_mcast_attach(struct ib_device *ibdev,
 	struct golan_cmd_layout	*cmd;
 	int rc;
 
+	if ( qp == NULL ) {
+		DBGC( golan, "%s: Invalid pointer, could not attach QPN to MCG\n",
+			__FUNCTION__ );
+		return -EFAULT;
+	}
+
 	cmd = write_cmd(golan, DEF_CMD_IDX, GOLAN_CMD_OP_ATTACH_TO_MCG, 0x0,
 					GEN_MBOX, NO_MBOX,
 					sizeof(struct golan_attach_mcg_mbox_in),
@@ -2094,14 +2100,7 @@ out:
  *
  * @v ibdev		Infiniband device
  */
-static void golan_ib_close ( struct ib_device *ibdev) {
-	DBG ( "%s\n", __FUNCTION__ );
-
-	if ( ! ibdev )
-		return;
-
-	golan_bring_down( ib_get_drvdata( ibdev ) );
-}
+static void golan_ib_close ( struct ib_device *ibdev __unused ) {}
 
 /**
  * Initialise Infiniband link
@@ -2110,19 +2109,15 @@ static void golan_ib_close ( struct ib_device *ibdev) {
  * @ret rc		Return status code
  */
 static int golan_ib_open ( struct ib_device *ibdev ) {
-	DBG ( "%s\n", __FUNCTION__ );
+	DBG ( "%s start\n", __FUNCTION__ );
 
 	if ( ! ibdev )
 		return -EINVAL;
 
-	if ( golan_bring_up ( ib_get_drvdata( ibdev ) ) ) {
-		printf("golan bringup failed\n");
-		return -1;
-	}
-
 	ib_smc_set_port_info (ibdev, golan_mad);
 	ib_smc_update(ibdev, golan_mad);
 
+	DBG ( "%s end\n", __FUNCTION__ );
 	return 0;
 }
 
@@ -2198,7 +2193,6 @@ static int golan_probe_normal ( struct pci_device *pci ) {
 				i + GOLAN_PORT_BASE);
 	}
 
-	golan_bring_down( golan );
 	return 0;
 
 	i = golan->caps.num_ports;
@@ -2398,42 +2392,48 @@ struct flexboot_nodnic_callbacks shomron_nodnic_callbacks = {
 
 static int shomron_nodnic_supported = 0;
 
-#if ( defined ( NODNIC_DRIVER ) && defined ( DEVICE_CX4 ) )
 static int shomron_nodnic_is_supported ( struct pci_device *pci ) {
+	if ( pci->device == 0x1011 )
+		return 0;
+
 	return flexboot_nodnic_is_supported ( pci );
 }
-#else
-static int shomron_nodnic_is_supported ( struct pci_device *pci __unused ) {
-	return 0;
-}
-#endif
 /**************************************************************************/
 
 static int golan_probe ( struct pci_device *pci ) {
-	int rc;
+	int rc = -ENOTSUP;
 
 	DBG ( "%s: start\n", __FUNCTION__ );
 
 	if ( ! pci ) {
 		printf ( "%s: PCI is NULL\n", __FUNCTION__ );
-		return -EINVAL;
+		rc = -EINVAL;
+		goto probe_done;
 	}
 
 	shomron_nodnic_supported = shomron_nodnic_is_supported ( pci );
 	if ( boot_post_shell ) {
-		if ( ! shomron_nodnic_supported )
-			return 0;
+		if ( ! shomron_nodnic_supported ) {
+			rc = 0;
+			goto probe_done;
+		}
 	}
 
-	/* boot time and not nodnic */
-	if ( ! shomron_nodnic_supported ) {
-		return golan_probe_normal ( pci );
+	if ( shomron_nodnic_supported ) {
+		rc = flexboot_nodnic_probe ( pci, &shomron_nodnic_callbacks, NULL );
+		if ( rc == 0 ) {
+			DBG ( "%s: Using NODNIC driver\n", __FUNCTION__ );
+			goto probe_done;
+		}
+		shomron_nodnic_supported = 0;
 	}
 
-	DBG ( "%s: Using NODNIC driver\n", __FUNCTION__ );
+	if ( ! boot_post_shell && ! shomron_nodnic_supported ) {
+		DBG ( "%s: Using normal driver\n", __FUNCTION__ );
+		rc = golan_probe_normal ( pci );
+	}
 
-	rc = flexboot_nodnic_probe ( pci, &shomron_nodnic_callbacks, NULL );
-
+probe_done:
 	DBG ( "%s: rc = %d\n", __FUNCTION__, rc );
 	return rc;
 }
@@ -2445,11 +2445,14 @@ static void golan_remove ( struct pci_device *pci ) {
 		if ( ! shomron_nodnic_supported )
 			return;
 	}
-	/* boot time and not nodnic */
+
 	if ( ! shomron_nodnic_supported ) {
+		DBG ( "%s: Using normal driver remove\n", __FUNCTION__ );
 		golan_remove_normal ( pci );
 		return;
 	}
+
+	DBG ( "%s: Using NODNIC driver remove\n", __FUNCTION__ );
 
 	flexboot_nodnic_remove ( pci );
 
@@ -2458,7 +2461,8 @@ static void golan_remove ( struct pci_device *pci ) {
 
 static struct pci_device_id golan_nics[] = {
 	PCI_ROM ( 0x15b3, 0x1011, "ConnectIB", "ConnectIB HCA driver: DevID 4113", 0 ),
-	PCI_ROM ( 0x15b3, 0x1013, "ConnectX4", "ConnectX4 HCA driver, DevID 4115", 0 ),
+	PCI_ROM ( 0x15b3, 0x1013, "ConnectX-4", "ConnectX-4 HCA driver, DevID 4115", 0 ),
+	PCI_ROM ( 0x15b3, 0x1015, "ConnectX-4Lx", "ConnectX-4Lx HCA driver, DevID 4117", 0 ),
 };
 
 struct pci_driver golan_driver __pci_driver = {

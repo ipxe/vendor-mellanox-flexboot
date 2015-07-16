@@ -56,7 +56,14 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "flexboot_nodnic.h"
 #include "mlx_port.h"
 
+/*
+ * If defined, use interrupts in normal driver
+ */
+#undef HERMON_IRQ_ENABLED
+
 extern void ( * ipoib_hw_guid2mac ) ( const void *hw_addr, void *ll_addr );
+static uint8_t g_mac_admin_bit = 0x00;
+static uint8_t g_fact_mac_addr[ETH_ALEN];
 
 static struct hermon_port* hermon_get_port_from_ibdev(struct ib_device *ibdev)
 {
@@ -2584,7 +2591,7 @@ static int hermon_opreq_action ( struct hermon *hermon )
 	return	0;
 }
 
-#ifdef IRQ_ENABLED
+#ifdef HERMON_IRQ_ENABLED
 static void hermon_arm_eq ( struct hermon *hermon ) {
 	struct hermon_event_queue *heq = &hermon->eq;
 
@@ -3551,6 +3558,8 @@ static int hermon_port_get_defaults ( struct hermon *hermon, unsigned int port_n
 		port->defaults.iscsi_ipv4_dhcp_en		= MLX_GET ( &def.port, iscsi_ipv4_dhcp_en );
 		port->defaults.iscsi_lun_busy_retry_count	= MLX_GET ( &def.port, iscsi_lun_busy_retry_count );
 		port->defaults.iscsi_link_up_delay_time		= MLX_GET ( &def.port, iscsi_link_up_delay_time );
+		port->defaults.client_identifier	= MLX_GET ( &def.port, client_identifier );
+		port->defaults.mac_admin_bit	= MLX_GET ( &def.port, mac_admin_bit );
 	}
 	return 0;
 }
@@ -3754,8 +3763,11 @@ static int hermon_init ( struct hermon *hermon ) {
 			hermon, strerror ( rc ) );
 		goto err_setup_mpt;
 	}
-	for ( i = 0 ; i < hermon->num_ports ; i++ )
+	for ( i = 0 ; i < hermon->num_ports ; i++ ) {
+		if ( ! ( hermon->port_mask & ( i + HERMON_PORT_BASE ) ) )
+			continue;
 		hermon->port[i].ibdev->rdma_key = hermon->lkey;
+	}
 
 	/* Set up event queue */
 	if ( ( rc = hermon_create_eq ( hermon ) ) != 0 ) {
@@ -4019,18 +4031,23 @@ static struct ib_device_operations hermon_ib_operations = {
 	.set_pkey_table	= hermon_inform_sma,
 };
 
-static void hermon_guid2mac ( const void *hw_addr __unused, void *ll_addr __unused ) {
+static void hermon_guid2mac ( const void *hw_addr, void *ll_addr ) {
 	const uint8_t *guid = hw_addr;
 	uint8_t *eth_addr = ll_addr;
-	/* TODO: implement */
-	printf("hermon_guid2mac\n");
+	uint8_t mac_admin_bit_mask;
 
-	eth_addr[0] = guid[0];
-	eth_addr[1] = guid[1];
-	eth_addr[2] = guid[2];
-	eth_addr[3] = guid[5];
-	eth_addr[4] = guid[6];
-	eth_addr[5] = guid[7];
+	if ( g_mac_admin_bit < MAC_ADMIN_BIT_FACTORY_MAC ) {
+		mac_admin_bit_mask = ( g_mac_admin_bit == 2 ) ? 0x02 : 0x00;
+		eth_addr[0] = ( guid[0] | mac_admin_bit_mask );
+		eth_addr[1] = guid[1];
+		eth_addr[2] = guid[2];
+		eth_addr[3] = guid[5];
+		eth_addr[4] = guid[6];
+		eth_addr[5] = guid[7];
+	} else {
+		memcpy ( eth_addr, g_fact_mac_addr, ETH_ALEN );
+	}
+
 }
 
 /**
@@ -4047,9 +4064,10 @@ static int hermon_register_ibdev ( struct hermon *hermon,
 
 	/* Initialize the ipoib_hw_guid2mac function in ipoib in
 	 * case we want to use FW GUID2MAC */
-	/* TODO: get the ini value of this; implement hermon_guid2mac */
-	if ( 0 )
+	ipoib_hw_guid2mac = NULL;
+	if ( g_mac_admin_bit > MAC_ADMIN_BIT_DEFAULT ) {
 		ipoib_hw_guid2mac = hermon_guid2mac;
+	}
 
 	/* Initialise parameters using SMC */
 	ib_smc_init ( ibdev, hermon_mad );
@@ -4476,7 +4494,7 @@ static void hermon_eth_close ( struct net_device *netdev ) {
 	hermon_close ( hermon );
 }
 
-#ifdef IRQ_ENABLED
+#ifdef HERMON_IRQ_ENABLED
 static void hermon_eth_irq ( struct net_device *netdev, int enable ) {
 	struct hermon_port *port = netdev->priv;
 	struct ib_device *ibdev = port->ibdev;
@@ -4500,7 +4518,7 @@ static struct net_device_operations hermon_eth_operations = {
 	.close		= hermon_eth_close,
 	.transmit	= hermon_eth_transmit,
 	.poll		= hermon_eth_poll,
-#ifdef IRQ_ENABLED
+#ifdef HERMON_IRQ_ENABLED
 	.irq		= hermon_eth_irq,
 #endif
 };
@@ -5165,6 +5183,18 @@ static int hermon_probe_normal ( struct pci_device *pci ) {
 		if ( ! ( hermon->port_mask & ( i + HERMON_PORT_BASE ) ) )
 			continue;
 		port = &hermon->port[i];
+
+		/* We need to initialize the MAC admin bit and the g_fact_mac_addr
+		 * before registering IPoIB device due to the fact that IPoIB probe
+		 * will use these values
+		 */
+		if ( port->type == &hermon_port_type_ib ) {
+			driver_settings_get_nv_ib_mac_admin_bit( hermon,
+						i + 1, hermon_flash_read_tlv_wrapper,
+						& ( port->defaults ), &g_mac_admin_bit );
+			memcpy ( g_fact_mac_addr, port->port_nv_conf.phys_mac, ETH_ALEN );
+		}
+
 		if ( ( rc = port->type->register_dev ( hermon, port ) ) != 0 )
 			goto err_register;
 
@@ -5284,48 +5314,6 @@ static void hermon_remove_normal ( struct pci_device *pci ) {
  **************************************************************************/
 static int hermon_nodnic_supported = 0;
 
-#ifndef NODNIC_DRIVER
-static int hermon_nodnic_is_supported ( struct pci_device *pci __unused, struct hermon **hermon __unused ) {
-	return 0;
-}
-#else
-/*
-#define INLINE_TLV_DATA_OFFSET 0
-#define TLV_DATA_OFFSET 0x2
-int hermon_get_inline_tlv_link_type ( struct hermon *hermon, unsigned int port,
-		uint8_t *link_type ) {
-	u64 inline_param = ( ( u64 )( cpu_to_be32 ( TLV_DATA_OFFSET ) ) << 32 );
-	unsigned int input_mod = ( ( port << 16 ) | ( VPI_LINK_TYPE ) );
-	unsigned int op_mod = 0xe;
-	u32 inline_tlv_data = 0;
-	int rc = 0;
-
-	if ( link_type == NULL ) {
-		return -EINVAL;
-	}
-
-	if ( ( rc =  hermon_cmd ( hermon,
-						HERMON_HCR_INOUT_CMD ( HERMON_HCR_MOD_STAT_CFG,
-						0, sizeof ( inline_param ),
-						0, sizeof ( inline_param ) ),
-						op_mod, &inline_param, input_mod, &inline_param, 0 ) ) != 0 ) {
-		DBGC ( hermon, "%s: port %d in-line flash access failed\n",
-				__FUNCTION__, port );
-		return rc;
-	}
-
-	inline_tlv_data = cpu_to_be32( ( u32 )( inline_param >> INLINE_TLV_DATA_OFFSET ) );
-	*link_type = (inline_tlv_data & 0x1);
-
-	return 0;
-}
-*/
-static int hermon_get_inline_tlv_link_type ( struct hermon *hermon __unused,
-		unsigned int port __unused, uint8_t *link_type ) {
-	*link_type = 2;
-	return 0;
-}
-
 static int hermon_read_flash_for_nodnic ( struct hermon *hermon ) {
 	struct driver_settings *driver_settings;
 	struct hermon_port *port;
@@ -5377,11 +5365,24 @@ err_start_firmware:
 	return rc;
 }
 
+static int hermon_get_pci_class_code ( struct hermon *hermon, uint32_t *class_code ) {
+	int rc;
+	uint32_t value;
+
+	if ( ( rc = pci_read_config_dword ( hermon->pci, 0x8, &value ) ) == 0 ) {
+		value >>= 8;
+		DBGC ( hermon, "Class Code = 0x%x\n", value );
+		*class_code = value;
+	}
+
+	return rc;
+}
+
+#define PCI_ETHERNET_NETWORK_CLASS_CODE	0x020000
 static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon **hermon ) {
 	struct hermon *hermon_for_nodnic;
-	unsigned int i = 0;
 	int rc;
-	uint8_t link_type = 0;
+	uint32_t class_code = 0;
 
 	if ( ! hermon ) {
 		return -EINVAL;
@@ -5400,39 +5401,47 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon **
 	hermon_pci_init ( hermon_for_nodnic );
 
 	if ( ( rc = hermon_get_num_ports ( hermon_for_nodnic ) ) ) {
+		rc = -ENOTSUP;
 		goto err_get_num_ports;
 	}
 
-	/* Check link layer configuration */
-	for ( i = 0; i < hermon_for_nodnic->num_ports; i++ ) {
-		if ( ( rc = hermon_get_inline_tlv_link_type ( hermon_for_nodnic, i + 1, &link_type ) ) ) {
-			DBGC ( hermon_for_nodnic, "Port %d failed to get inline TLV for link type (rc = %d)\n",
-					i + 1, rc );
-		} else {
-			DBGC ( hermon_for_nodnic, "Port %d link type is %d\n", i + 1, link_type );
-		}
-		if ( ( rc ) || ( link_type == 0 ) || ( link_type & 0x1 ) ) {
+	/*
+	 * NODNIC driver supports only Ethernet protocol, thus we need to know
+	 * if the ports are Ethernet ports or not.
+	 *
+	 * Use the PCI Class Code as a work around to determine if we can run
+	 * NODNIC driver or not. NODNIC driver will be activated only if the
+	 * device is Ethernet Network Controller.
+	 *
+	 * This WA should be deleted when the FW implements the sensing mechanism
+	 * in driverless mode.
+	 */
+	if ( ( rc = hermon_get_pci_class_code ( hermon_for_nodnic, &class_code ) ) == 0 ) {
+		if ( class_code != PCI_ETHERNET_NETWORK_CLASS_CODE ) {
 			rc = -ENOTSUP;
-			goto err_port_is_ib;
+			goto err_bad_class_code;
 		}
 	}
 
 	/* Check if NODNIC interface is supported */
-	if ( flexboot_nodnic_is_supported ( pci ) ) {
+	if ( flexboot_nodnic_is_supported ( pci ) == 0 ) {
+		rc = -ENOTSUP;
+	} else {
 		DBGC ( hermon_for_nodnic, "NODNIC is supported\n" );
 		hermon_read_flash_for_nodnic ( hermon_for_nodnic );
 		*hermon = hermon_for_nodnic;
-	} else {
+		rc = 0;
+	}
+
+err_bad_class_code:
+err_get_num_ports:
+	if ( rc ) {
 		DBGC ( hermon_for_nodnic, "NODNIC is not supported\n" );
-		rc = -ENOTSUP;
 		hermon_free ( hermon_for_nodnic );
 	}
-err_port_is_ib:
-err_get_num_ports:
 err_alloc:
 	return ( rc == 0 );
 }
-#endif
 
 static mlx_status hermon_nodnic_fill_eth_send_wqe ( struct ib_device *ibdev,
 			   struct ib_queue_pair *qp, struct ib_address_vector *av __unused,
@@ -5548,7 +5557,7 @@ static struct flexboot_nodnic_callbacks hermon_nodnic_callbacks = {
 	.cqe_set_owner = hermon_nodnic_cqe_set_owner,
 	.get_settings = hermon_nodnic_get_settings,
 	.update_settings_ops = hermon_update_setting_ops,
-#ifdef IRQ_ENABLED
+#ifdef NODNIC_IRQ_ENABLED
 	.irq = flexboot_nodnic_eth_irq,
 #endif
 };
@@ -5562,7 +5571,8 @@ static int hermon_probe ( struct pci_device *pci ) {
 
 	if ( ! pci ) {
 		printf ( "%s: PCI is NULL\n", __FUNCTION__ );
-		return -EINVAL;
+		rc = -EINVAL;
+		goto probe_done;
 	}
 
 	/* Use the regular driver for boot menu configuration and if
@@ -5572,7 +5582,8 @@ static int hermon_probe ( struct pci_device *pci ) {
 
 	if ( boot_post_shell || ( ! hermon_nodnic_supported ) ) {
 		DBG ( "%s: Using normal driver\n", __FUNCTION__ );
-		return hermon_probe_normal ( pci );
+		rc = hermon_probe_normal ( pci );
+		goto probe_done;
 	}
 
 	DBG ( "%s: Using NODNIC driver\n", __FUNCTION__ );
@@ -5581,6 +5592,8 @@ static int hermon_probe ( struct pci_device *pci ) {
 
 	if ( hermon )
 		hermon_free ( hermon );
+
+probe_done:
 	DBG ( "%s: rc = %d\n", __FUNCTION__, rc );
 	return rc;
 }
@@ -5602,8 +5615,8 @@ static void hermon_remove ( struct pci_device *pci ) {
 }
 
 static struct pci_device_id hermon_nics[] = {
-	PCI_ROM ( 0x15b3, 0x1003, "ConnectX3", "ConnectX3 HCA driver, DevID 4099", 0 ),
-	PCI_ROM ( 0x15b3, 0x1007, "ConnectX3-Pro", "ConnectX3-Pro HCA driver, DevID 4103", 0 ),
+	PCI_ROM ( 0x15b3, 0x1003, "ConnectX-3", "ConnectX-3 HCA driver, DevID 4099", 0 ),
+	PCI_ROM ( 0x15b3, 0x1007, "ConnectX-3Pro", "ConnectX-3Pro HCA driver, DevID 4103", 0 ),
 };
 
 struct pci_driver hermon_driver __pci_driver = {

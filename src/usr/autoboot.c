@@ -107,9 +107,6 @@ __weak int pxe_menu_boot ( struct net_device *netdev __unused ) {
  */
 static struct uri * parse_next_server_and_filename ( struct in_addr next_server,
 						     const char *filename ) {
-#ifndef NET_PROTO_IPV6
-	char buf[ 23 /* "tftp://xxx.xxx.xxx.xxx/" */ + strlen ( filename ) + 1 /* NUL */ ];
-#endif
 	struct uri *uri;
 
 	/* Parse filename */
@@ -117,26 +114,10 @@ static struct uri * parse_next_server_and_filename ( struct in_addr next_server,
 	if ( ! uri )
 		return NULL;
 
-    /*#ifndef NET_PROTO_IPV6
-     *      Construct a tftp:// URI for the filename, if applicable.
-     *      We can't just rely on the current working URI, because the
-     *      relative URI resolution will remove the distinction between
-     *      filenames with and without initial slashes, which is
-     *      significant for TFTP.
-     *#else
-     *      Construct a TFTP URI for the filename, if applicable
-     *#endif
-     */
-
+    /* Construct a TFTP URI for the filename, if applicable */
 	if ( next_server.s_addr && filename[0] && ! uri_is_absolute ( uri ) ) {
 		uri_put ( uri );
-#ifndef NET_PROTO_IPV6
-               snprintf ( buf, sizeof ( buf ), "tftp://%s/%s",
-                               inet_ntoa ( next_server ), filename );
-               uri = parse_uri ( buf );
-#else
 		uri = tftp_uri ( next_server, 0, filename );
-#endif
 		if ( ! uri )
 			return NULL;
 	}

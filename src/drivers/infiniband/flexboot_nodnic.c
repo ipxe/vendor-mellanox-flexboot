@@ -1307,10 +1307,10 @@ int flexboot_nodnic_is_supported ( struct pci_device *pci ) {
 	memset ( &utils, 0, sizeof ( utils ) );
 
 	status = mlx_utils_init ( &utils, pci );
-	MLX_FATAL_CHECK_STATUS ( status, utils_init_err, "mlx_utils_init failed" );
+	MLX_CHECK_STATUS ( pci, status, utils_init_err, "mlx_utils_init failed" );
 
 	status = mlx_pci_gw_init ( &utils );
-	MLX_FATAL_CHECK_STATUS ( status, pci_gw_init_err, "mlx_pci_gw_init failed" );
+	MLX_CHECK_STATUS ( pci, status, pci_gw_init_err, "mlx_pci_gw_init failed" );
 
 	status = mlx_pci_gw_read ( &utils, PCI_GW_SPACE_NODNIC,
 			NODNIC_NIC_INTERFACE_SUPPORTED_OFFSET, &buffer );
@@ -1395,6 +1395,7 @@ int flexboot_nodnic_invalidate_tlv_wrapper ( void *drv_priv, uint32_t tlv_mod,
 	memset ( &tlv_hdr, 0, sizeof ( tlv_hdr ) );
 	tlv_hdr.type = tlv_type;
 	tlv_hdr.type_mod = tlv_mod;
+	tlv_hdr.version     = driver_settings_get_tlv_version ( tlv_type );
 
 	return flexboot_nodnic_tlv_access ( flexboot_nodnic, &tlv_hdr, FLEXBOOT_NODNIC_TLV_ACCESS_INVALIDATE );
 }
@@ -1409,6 +1410,7 @@ static int flexboot_nodnic_flash_write_tlv_wrapper ( void *drv_priv, void *src, 
 	tlv_hdr.type = tlv_type;
 	tlv_hdr.type_mod = port_num;
 	tlv_hdr.data = src;
+	tlv_hdr.version     = driver_settings_get_tlv_version ( tlv_type );
 
 	return flexboot_nodnic_tlv_access ( flexboot_nodnic, &tlv_hdr, FLEXBOOT_NODNIC_TLV_ACCESS_WRITE );
 }
@@ -1658,7 +1660,7 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 
 	/* device reg*/
 	status = flexboot_nodnic_set_ports_type( flexboot_nodnic_priv );
-	MLX_FATAL_CHECK_STATUS(status, err_set_ports_types,
+	MLX_CHECK_STATUS( flexboot_nodnic_priv, status, err_set_ports_types,
 						"flexboot_nodnic_set_ports_type failed");
 
 	status = flexboot_nodnic_ports_register_dev( flexboot_nodnic_priv );
@@ -1717,13 +1719,14 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 	DBGC ( flexboot_nodnic_priv, "%s: %s IRQ function\n",
 			__FUNCTION__, ( callbacks->irq ? "Valid" : "No" ) );
 	flexboot_nodnic_eth_operations.irq = callbacks->irq;
-	return status;
+	return 0;
 
-reg_err:
 	flexboot_nodnic_ports_unregister_dev ( flexboot_nodnic_priv );
+reg_err:
 err_set_ports_types:
 err_thin_init_ports:
 err_alloc_ibdev:
+	destroy_driver_settings ();
 err_init_settings:
 err_set_masking:
 get_ini_and_def_err:

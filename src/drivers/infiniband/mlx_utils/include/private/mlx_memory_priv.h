@@ -98,4 +98,17 @@ mlx_memory_cpy_priv(
 					IN mlx_size length
 					);
 
+mlx_status
+mlx_memory_cpu_to_be32_priv(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			);
+
+mlx_status
+mlx_memory_be32_to_cpu_priv(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			);
 #endif /* STUB_MLXUTILS_INCLUDE_PRIVATE_MEMORYPRIV_H_ */

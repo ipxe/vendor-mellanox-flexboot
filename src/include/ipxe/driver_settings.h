@@ -36,6 +36,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define STR_SRIOV		"SR-IOV"
 #define STR_IPV4		"IPv4"
 #define STR_ONE_TIME_DISABLED "One time disabled"
+#define STR_FACTORY_MAC	"Use factory MAC"
 
 #define APPLIES 1
 #define DOES_NOT_APPLY 0
@@ -88,6 +89,8 @@ enum {
 	BOOT_SETTINGS_TYPE				= 0x2021,
 	ISCSI_GENERAL_SETTINGS_TYPE		= 0x2100,
 	IB_BOOT_SETTING_TYPE			= 0x2022,
+	IB_DHCP_SETTINGS_TYPE			= 0x2023,
+	GLOPAL_PCI_SETTINGS_TYPE		= 0x80,
 
 	// Types for iSCSI strings
 	DHCP_VEND_ID					= 0x2101,
@@ -142,6 +145,8 @@ struct nv_port_conf_defaults {
 	uint8_t iscsi_ipv4_dhcp_en;
 	uint8_t iscsi_lun_busy_retry_count;
 	uint8_t iscsi_link_up_delay_time;
+	uint8_t client_identifier;
+	uint8_t mac_admin_bit;
 };
 
 struct nv_conf_defaults {
@@ -173,6 +178,24 @@ struct nv_conf_ini {
 #define ISCSI_INITIATOR_NAME_STR_LEN	224
 #define ISCSI_CHAP_ID_STR_LEN			129
 #define ISCSI_CHAP_PASS_STR_LEN			17
+
+/*
+ * DRIVER_SETTINGS_FETCH_SETTING
+ * Usage Prerequisites:
+ * In the caller function must exist
+ * 1- integer parameter "rc" to hold the returned code.
+ * 2- byte array "buf" with reasonable size to hold the result. (default = 256)
+ *
+ */
+#define DRIVER_SETTINGS_FETCH_SETTING( settings, setting )					\
+	do {																	\
+		memset ( buf, 0, sizeof ( buf ) );									\
+		if ( ( rc = fetchf_setting ( settings, setting , NULL, NULL, buf,	\
+							sizeof ( buf ) ) ) <= 0 ) {						\
+				DBGC ( settings, "Failed to fetch %s setting (rc = %d)\n",	\
+						( setting )->name, rc );							\
+		}																	\
+	} while ( 0 )
 
 #define DRIVER_STORE_SETTING( id, settings, setting, data )				\
 	do {																\
@@ -339,10 +362,20 @@ struct nv_iscsi_conf {
 	struct nv_port_conf_defaults defaults;
 };
 
+union nv_ib_dhcp_conf {
+	struct {
+		uint32_t reserved			:24;
+		uint32_t client_identifier	:4;
+		uint32_t mac_admin_bit		:4;
+	};
+	uint32_t dword;
+};
+
 struct nv_nic_conf {
 	union nv_nic_boot_conf		boot_conf;
 	union nv_wol_conf			wol_conf;
 	union nv_nic_ib_boot_conf	ib_boot_conf;
+	union nv_ib_dhcp_conf 		ib_dhcp_conf;
 };
 
 union nv_rom_banner_timeout_conf {
@@ -353,13 +386,10 @@ union nv_rom_banner_timeout_conf {
 	uint32_t dword;
 };
 
-union nv_virt_conf {
-	struct {
-		uint32_t num_of_vfs	: 16;
-		uint32_t rsrvd		: 15;
-		uint32_t virt_mode	: 1;
-	};
-	uint32_t dword;
+struct nv_virt_conf_st {
+	uint8_t	sriov_valid;
+	uint16_t num_of_vfs;
+	uint16_t virt_mode;
 };
 
 #define FW_VER_STR_LEN			12
@@ -373,7 +403,7 @@ struct firmware_image_props {
 #define MAC_ADDRESS_STR_LEN		18
 struct nv_conf {
 	struct firmware_image_props fw_image_props;
-	union nv_virt_conf virt_conf;
+	struct nv_virt_conf_st virt_conf;
 	union nv_rom_banner_timeout_conf rom_banner_to;
 	char device_name[DEVICE_NAME_STR_LEN];
 	char virtual_mac[MAC_ADDRESS_STR_LEN];
@@ -403,6 +433,13 @@ enum {
 	ISCSI_BOOT_TO_TARGET_ENABLE	= 0,
 	ISCSI_BOOT_TO_TARGET_DISABLE	= 1,
 	ISCSI_BOOT_TO_TARGET_ONE_TIME_DISABLE	= 2,
+};
+
+enum {
+	MAC_ADMIN_BIT_DEFAULT	= 0x0,
+	MAC_ADMIN_BIT_OFF	= 0x01,
+	MAC_ADMIN_BIT_ON	= 0x02,
+	MAC_ADMIN_BIT_FACTORY_MAC	= 0x03,
 };
 
 struct options_list {
@@ -473,6 +510,8 @@ struct driver_setting_operation {
 			  size_t len, const struct setting *setting );
 	/* Store setting to flash ( or NULL if not supported ) */
 	int ( * nv_store ) ( struct driver_settings *settings );
+	/* Read setting from flash ( or NULL if not supported ) */
+	int ( * nv_read ) ( struct driver_settings *settings );
 };
 
 struct extended_setting {
@@ -614,4 +653,9 @@ int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 int driver_settings_get_tlv_version ( uint32_t tlv_type );
 int driver_settings_get_iscsi_boot_to_target_val ( struct settings *settings );
 int driver_settings_get_ib_pkey_val ( struct settings *settings );
+int driver_settings_get_nv_ib_mac_admin_bit ( void *priv_data, unsigned int port,
+		tlv_read_fn read_tlv_fn, struct nv_port_conf_defaults  *defaults,
+		uint8_t *mac_admin_bit );
+void driver_setting_update_setting_ops ( struct driver_setting_operation setting_ops[],
+		uint32_t setting_ops_len );
 #endif /*DRIVER_SETTINGS_H_*/

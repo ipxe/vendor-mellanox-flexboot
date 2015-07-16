@@ -23,6 +23,85 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_memory.h"
 #include "mlx_bail.h"
 
+#define TlvMappingEntry( _tlv_type, _real_tlv_type, _class_code) { \
+  .tlv_type = _tlv_type,                     \
+  .real_tlv_type = _real_tlv_type,                   \
+  .class_code = _class_code,                  \
+  }
+
+struct nvconfig_tlv_mapping nvconfig_tlv_mapping[] = {
+		TlvMappingEntry(0x10, 0x10, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x80, 0x80, NVRAM_TLV_CLASS_GLOBAL),
+		TlvMappingEntry(0x81, 0x81, NVRAM_TLV_CLASS_GLOBAL),
+		TlvMappingEntry(0x2010, 0x210, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2011, 0x211, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2020, 0x2020, NVRAM_TLV_CLASS_PHYSICAL_PORT),
+		TlvMappingEntry(0x2021, 0x221, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2023, 0x223, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2100, 0x230, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2101, 0x231, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2102, 0x232, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2103, 0x233, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2104, 0x234, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2105, 0x235, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2106, 0x236, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2107, 0x237, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2108, 0x238, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2109, 0x239, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x210A, 0x23A, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2200, 0x240, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2201, 0x241, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2202, 0x242, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2203, 0x243, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2204, 0x244, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2205, 0x245, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0x2207, 0x247, NVRAM_TLV_CLASS_HOST),
+		TlvMappingEntry(0, 0, 0),
+};
+
+static
+mlx_status
+nvconfig_get_tlv_type_and_class(
+		IN	mlx_uint16	tlv_type,
+		OUT mlx_uint16	*real_tlv_type,
+		OUT NVRAM_CLASS_CODE *class_code
+		)
+{
+	mlx_uint8 index = 0;
+	for ( ; nvconfig_tlv_mapping[index].tlv_type != 0 ; index ++) {
+		if ( nvconfig_tlv_mapping[index].tlv_type == tlv_type) {
+			*real_tlv_type = nvconfig_tlv_mapping[index].real_tlv_type;
+			*class_code = nvconfig_tlv_mapping[index].class_code;
+			return MLX_SUCCESS;
+		}
+	}
+	return MLX_NOT_FOUND;
+}
+static
+void
+nvconfig_fill_tlv_type(
+		IN mlx_uint8 port,
+		IN NVRAM_CLASS_CODE class_code,
+		IN mlx_uint16 tlv_type,
+		OUT union nvconfig_tlv_type *nvconfig_tlv_type
+		)
+{
+	switch (class_code) {
+	case NVRAM_TLV_CLASS_GLOBAL:
+		nvconfig_tlv_type->global.param_class = NVRAM_TLV_CLASS_GLOBAL;
+		nvconfig_tlv_type->global.param_idx = tlv_type;
+		break;
+	case NVRAM_TLV_CLASS_HOST:
+		nvconfig_tlv_type->per_host.param_class = NVRAM_TLV_CLASS_HOST;
+		nvconfig_tlv_type->per_host.param_idx = tlv_type;
+		break;
+	case NVRAM_TLV_CLASS_PHYSICAL_PORT:
+		nvconfig_tlv_type->per_port.param_class = NVRAM_TLV_CLASS_HOST;
+		nvconfig_tlv_type->per_port.param_idx = tlv_type;
+		nvconfig_tlv_type->per_port.port = port;
+		break;
+	}
+}
 mlx_status
 nvconfig_query_capability(
 		IN mlx_utils *utils,
@@ -35,15 +114,19 @@ nvconfig_query_capability(
 	mlx_status status = MLX_SUCCESS;
 	struct nvconfig_nvqc nvqc;
 	mlx_uint32 reg_status;
+	NVRAM_CLASS_CODE class_code;
+	mlx_uint16 real_tlv_type;
 
 	if (utils == NULL || read_supported == NULL || write_supported == NULL) {
 		status = MLX_INVALID_PARAMETER;
 		goto bad_param;
 	}
+
+	status = nvconfig_get_tlv_type_and_class(tlv_type, &real_tlv_type, &class_code);
+	MLX_CHECK_STATUS(utils, status, tlv_not_supported, "tlv not supported");
+
 	mlx_memory_set(utils, &nvqc, 0, sizeof(nvqc));
-	nvqc.tlv_type.param_class = 0x1;
-	nvqc.tlv_type.param_idx = tlv_type;
-	nvqc.tlv_type.port = port;
+	nvconfig_fill_tlv_type(port, class_code, real_tlv_type, &nvqc.tlv_type);
 
 	status = mlx_reg_access(utils, REG_ID_NVQC, REG_ACCESS_READ, &nvqc, sizeof(nvqc),
 			&reg_status);
@@ -56,6 +139,7 @@ nvconfig_query_capability(
 	*read_supported = nvqc.support_rd;
 	*write_supported = nvqc.support_wr;
 reg_err:
+tlv_not_supported:
 bad_param:
 	return status;
 }
@@ -70,16 +154,19 @@ nvconfig_nvdata_invalidate(
 	mlx_status status = MLX_SUCCESS;
 	struct nvconfig_header nv_header;
 	mlx_uint32 reg_status;
+	NVRAM_CLASS_CODE class_code;
+	mlx_uint16 real_tlv_type;
 
 	if (utils == NULL) {
 		status = MLX_INVALID_PARAMETER;
 		goto bad_param;
 	}
-	mlx_memory_set(utils, &nv_header, 0, sizeof(nv_header));
 
-	nv_header.tlv_type.param_class = 0x1;
-	nv_header.tlv_type.param_idx = tlv_type;
-	nv_header.tlv_type.port = port;
+	status = nvconfig_get_tlv_type_and_class(tlv_type, &real_tlv_type, &class_code);
+	MLX_CHECK_STATUS(utils, status, tlv_not_supported, "tlv not supported");
+
+	mlx_memory_set(utils, &nv_header, 0, sizeof(nv_header));
+	nvconfig_fill_tlv_type(port, class_code, real_tlv_type, &nv_header.tlv_type);
 
 	status = mlx_reg_access(utils, REG_ID_NVDI, REG_ACCESS_WRITE, &nv_header, sizeof(nv_header),
 			&reg_status);
@@ -90,6 +177,7 @@ nvconfig_nvdata_invalidate(
 		goto reg_err;
 	}
 reg_err:
+tlv_not_supported:
 bad_param:
 	return status;
 }
@@ -109,29 +197,42 @@ nvconfig_nvdata_access(
 	struct nvconfig_nvda nvda;
 	mlx_uint32 reg_status;
 	mlx_uint32 real_size_to_read;
+	mlx_uint32 index;
+	NVRAM_CLASS_CODE class_code;
+	mlx_uint16 real_tlv_type;
+	mlx_size data_size_align_to_dword;
 
 	if (utils == NULL || data == NULL || data_size > NVCONFIG_MAX_TLV_SIZE) {
 		status = MLX_INVALID_PARAMETER;
 		goto bad_param;
 	}
 
+	status = nvconfig_get_tlv_type_and_class(tlv_type, &real_tlv_type, &class_code);
+	MLX_CHECK_STATUS(utils, status, tlv_not_supported, "tlv not supported");
+
+	data_size_align_to_dword = ((data_size + 3) / sizeof(mlx_uint32)) * sizeof(mlx_uint32);
 	mlx_memory_set(utils, &nvda, 0, sizeof(nvda));
-	nvda.nv_header.length = ((data_size + 3) / sizeof(mlx_uint32)) * sizeof(mlx_uint32);
+	nvda.nv_header.length = data_size_align_to_dword;
 	nvda.nv_header.rd_en = 0;
 	nvda.nv_header.over_en = 1;
 	nvda.nv_header.version = *version;
-	nvda.nv_header.tlv_type.param_class = 0x1;
-	nvda.nv_header.tlv_type.param_idx = tlv_type;
-	nvda.nv_header.tlv_type.port = port;
-	mlx_memory_cpy(utils, nvda.data, data, data_size);
 
+	nvconfig_fill_tlv_type(port, class_code, real_tlv_type, &nvda.nv_header.tlv_type);
+
+	mlx_memory_cpy(utils, nvda.data, data, data_size);
+	for (index = 0 ; index * 4 < NVCONFIG_MAX_TLV_SIZE ; index++) {
+		mlx_memory_be32_to_cpu(utils,(((mlx_uint32 *)nvda.data)[index]), ((mlx_uint32 *)nvda.data) + index);
+	}
 	status = mlx_reg_access(utils, REG_ID_NVDA, opt, &nvda,
-			data_size + sizeof(nvda.nv_header), &reg_status);
+			data_size_align_to_dword + sizeof(nvda.nv_header), &reg_status);
 	MLX_CHECK_STATUS(utils, status, reg_err, "mlx_reg_access failed ");
 	if (reg_status != 0) {
 		MLX_DEBUG_ERROR(utils,"mlx_reg_access failed with status = %d\n", reg_status);
 		status = MLX_FAILED;
 		goto reg_err;
+	}
+	for (index = 0 ; index * 4 < NVCONFIG_MAX_TLV_SIZE ; index++) {
+		mlx_memory_cpu_to_be32(utils,(((mlx_uint32 *)nvda.data)[index]), ((mlx_uint32 *)nvda.data) + index);
 	}
 	if (opt == REG_ACCESS_READ) {
 		real_size_to_read = (nvda.nv_header.length > data_size) ? data_size :
@@ -140,6 +241,7 @@ nvconfig_nvdata_access(
 		*version = nvda.nv_header.version;
 	}
 reg_err:
+tlv_not_supported:
 bad_param:
 	return status;
 }

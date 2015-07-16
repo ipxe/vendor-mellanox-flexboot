@@ -40,14 +40,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #define BANNER_TIMEOUT		0
 
-
-/***************************************/
-/************** Temporary **************/
-/***************************************/
-#define NODNIC_DRIVER
-#define IRQ_ENABLED
-/***************************************/
-
 /*
  * Network protocols
  *
@@ -56,6 +48,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define	NET_PROTO_IPV4		/* IPv4 protocol */
 #undef	NET_PROTO_IPV6		/* IPv6 protocol */
 #undef	NET_PROTO_FCOE		/* Fibre Channel over Ethernet protocol */
+#define	NET_PROTO_STP		/* Spanning Tree protocol */
 
 /*
  * PXE support

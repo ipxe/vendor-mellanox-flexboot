@@ -13,15 +13,10 @@
 
 FILE_LICENCE ( GPL2_OR_LATER );
 
-#define	COM1		0x3f8
-#define	COM2		0x2f8
-#define	COM3		0x3e8
-#define	COM4		0x2e8
-
 #ifdef MLX_DEBUG
-#define	COMCONSOLE	COM1		/* I/O port address */
+#define	COMCONSOLE	COM1	/* I/O port address */
 #else
-#define	COMCONSOLE	COM2		/* I/O port address */
+#define	COMCONSOLE	0	/* Serial console support is present but no COM port will be touched */
 #endif
 
 /* Keep settings from a previous user of the serial port (e.g. lilo or

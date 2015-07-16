@@ -724,6 +724,11 @@ int ib_mcast_attach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
 	struct ib_multicast_gid *mgid;
 	int rc;
 
+	if ( qp == NULL ) {
+		DBGC ( ibdev, "Invalid pointer, could not attach QPN to MCG\n" );
+		return -EFAULT;
+	}
+
 	/* Add to software multicast GID list */
 	mgid = zalloc ( sizeof ( *mgid ) );
 	if ( ! mgid ) {

@@ -308,6 +308,33 @@ struct golan_mboxes {
 	void	*outbox;
 };
 
+union golan_nv_virt_conf {
+	struct {
+		uint32_t reserved0				:24;
+		uint32_t sriov_valid			:1;
+		uint32_t full_vf_qos_valid		:1;
+		uint32_t fpp_valid				:1;
+		uint32_t num_pfs_valid			:1;
+		uint32_t num_vf_msix_valid		:1;
+		uint32_t num_pf_msix_valid		:1;
+		uint32_t vf_bar_size_valid		:1;
+		uint32_t pf_bar_size_valid		:1;
+		/*-------------------*/
+		uint32_t num_of_vfs				:16;
+		uint32_t num_of_pfs				:4;
+		uint32_t reserved1				:9;
+		uint32_t fpp_en					:1;
+		uint32_t full_vf_qos			:1;
+		uint32_t virt_mode				:1;
+		/*-------------------*/
+		uint32_t log_pf_uar_bar_size	:6;
+		uint32_t log_vf_uar_bar_size	:6;
+		uint32_t num_pf_msix			:10;
+		uint32_t num_vf_msix			:10;
+	};
+	uint32_t dword[3];
+};
+
 #define GOLAN_OPEN	0x1
 
 struct golan {

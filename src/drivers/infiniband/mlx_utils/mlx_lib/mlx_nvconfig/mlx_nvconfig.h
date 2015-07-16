@@ -25,15 +25,45 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_reg_access.h"
 #include "mlx_utils.h"
 
-struct nvconfig_tlv_type {
+typedef enum {
+	NVRAM_TLV_CLASS_GLOBAL = 0,
+	NVRAM_TLV_CLASS_PHYSICAL_PORT = 1,
+	NVRAM_TLV_CLASS_HOST = 3,
+} NVRAM_CLASS_CODE;
+
+struct nvconfig_tlv_type_per_port {
 	 mlx_uint32 param_idx	:16;
 	 mlx_uint32 port		:8;
 	 mlx_uint32 param_class	:8;
 };
 
+struct nvconfig_tlv_type_per_host {
+	mlx_uint32 param_idx	:10;
+	mlx_uint32 function		:8;
+	mlx_uint32 host			:6;
+	mlx_uint32 param_class	:8;
+};
+
+struct nvconfig_tlv_type_global {
+	mlx_uint32 param_idx	:24;
+	mlx_uint32 param_class	:8;
+};
+
+struct nvconfig_tlv_mapping{
+	mlx_uint16	tlv_type;
+	mlx_uint16	real_tlv_type;
+	NVRAM_CLASS_CODE class_code;
+};
+
+union nvconfig_tlv_type {
+	struct nvconfig_tlv_type_per_port per_port;
+	struct nvconfig_tlv_type_per_host per_host;
+	struct nvconfig_tlv_type_global global;
+};
+
 
 struct nvconfig_nvqc {
-	struct nvconfig_tlv_type tlv_type;
+	union nvconfig_tlv_type tlv_type;
 /* -------------- */
 	 mlx_uint32 support_rd	:1; /*the configuration item is supported and can be read */
 	 mlx_uint32 support_wr	:1; /*the configuration item is supported and can be updated */
@@ -44,9 +74,8 @@ struct nvconfig_nvqc {
 
 
 struct nvconfig_header {
-	 mlx_uint32 length		:8; /*Size of configuration item data in bytes between 0..256 */
+	 mlx_uint32 length		:9; /*Size of configuration item data in bytes between 0..256 */
 	 mlx_uint32 reserved0	:3;
-	 mlx_uint32 shadow		:1; /* 0 - FW writes configuration item directly, 1 - FW writes configuration to a temporary aread untill NVCT operation is called */
 	 mlx_uint32 version		:4; /* Configuration item version */
 	 mlx_uint32 reserved1	:8;
 
@@ -56,11 +85,11 @@ struct nvconfig_header {
 	 mlx_uint32 over_en		:1; /*enables overwriting the TLV by lower priorities
 									0 - Can only be overwritten by the current lifecycle priority
 									1 - Allowed to be overwritten by subsequent lifecycle priorities */
-	 mlx_uint32 reserved2	:2;
-	 mlx_uint32 default_value		:1; /*when set in query , will display the default configuration */
-	 mlx_uint32 reserved3	:3;
+	 mlx_uint32 header_type	:2;
+	 mlx_uint32 priority		:2;
+	 mlx_uint32 valid	:2;
 /* -------------- */
-	 struct nvconfig_tlv_type tlv_type;;
+	 union nvconfig_tlv_type tlv_type;;
 /* -------------- */
 	mlx_uint32 crc			:16;
 	mlx_uint32 reserved		:16;

@@ -98,5 +98,18 @@ mlx_memory_cpy(
 					IN mlx_size length
 					);
 
+mlx_status
+mlx_memory_cpu_to_be32(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			);
+
+mlx_status
+mlx_memory_be32_to_cpu(
+			IN mlx_utils *utils,
+			IN mlx_uint32 source,
+			IN mlx_uint32 *destination
+			);
 
 #endif /* STUB_MLXUTILS_INCLUDE_PUBLIC_MEMORY_H_ */

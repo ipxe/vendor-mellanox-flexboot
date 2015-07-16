@@ -1,8 +1,5 @@
 /*
- * Copyright (C) 2007 Michael Brown <mbrown@fensystems.co.uk>.
- *
- * Based in part upon the original driver by Mellanox Technologies
- * Ltd.  Portions may be Copyright (c) Mellanox Technologies Ltd.
+ * Copyright (C) 2013-2015 Mellanox Technologies Ltd.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -20,12 +17,7 @@
  * 02110-1301, USA.
  */
 
-/*
- * MlxDebug.c
- *
- *  Created on: Jan 21, 2015
- *      Author: moshikos
- */
+FILE_LICENCE ( GPL2_OR_LATER );
 
 #pragma GCC push_options
 #pragma GCC optimize 0
@@ -41,6 +33,7 @@
 #include <stdio.h>
 #include <ipxe/gdbserial.h>
 #include <ipxe/gdbstub.h>
+#include <ipxe/uart.h>
 #include "mlx_debug.h"
 
 #else
@@ -118,7 +111,8 @@ void MlxDebugInitializeSerial()
 				"Init debugger: Waiting to sync with debugger on serial port\n"
 				"############################################################\n"
 				);
-	gdbstub_start ( gdbserial_configure() );
+	gdbstub_start ( gdbserial_configure( COM1, UART_MAX_BAUD,
+			( UART_LCR_WLS1 | UART_LCR_WLS1 ) ) );
 	printf ( "System synched with debugger\n"
 			 "############################################################\n");
 }

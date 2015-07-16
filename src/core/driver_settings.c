@@ -550,15 +550,18 @@ struct extended_setting ext_target_chapsec __table_entry ( NV_CONFIG, 01 ) = {
 	.type = INPUT,
 };
 
-#define DRIVER_SETTINGS_FETCH_SETTING( settings, setting )					\
-	do {																	\
-		memset ( buf, 0, sizeof ( buf ) );									\
-		if ( ( rc = fetchf_setting ( settings, setting , NULL, NULL, buf,	\
-							sizeof ( buf ) ) ) <= 0 ) {						\
-				DBGC ( settings, "Failed to fetch %s setting (rc = %d)\n",	\
-						( setting )->name, rc );							\
-		}																	\
-	} while ( 0 )
+struct setting ib_mac_admin_setting __setting ( SETTING_FLEXBOOT, ib_mac_admin ) = {
+	.name = "mac_admin_bit",
+	.description = "Mac admin bit",
+	.type = &setting_type_string,
+	.scope = &nic_scope,
+	.hidden = 1
+};
+
+struct extended_setting ext_ib_mac_admin __table_entry ( NV_CONFIG, 01 ) = {
+	.setting = &ib_mac_admin_setting,
+	.type = OPTION,
+};
 
 /*************************** Extended Settings functions ********************************/
 
@@ -731,6 +734,7 @@ static struct extended_options extended_options_list[] = {
 	{ &ext_dhcp_iscsi,			2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_iscsi_chap,			2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_iscsi_mutual_chap,	2, { STR_DISABLE, STR_ENABLE } },
+	{ &ext_ib_mac_admin,	4,	{ STR_NONE, STR_DISABLE, STR_ENABLE, STR_FACTORY_MAC  } },
 };
 
 static struct extended_description extended_description_list[] = {
@@ -1483,26 +1487,6 @@ static int iscsi_target_chapsec_nv_store ( struct driver_settings *driver_settin
 		sizeof ( conf->iscsi.first_tgt_params.chap_pass ), FIRST_TGT_CHAP_PWD );
 }
 
-static int virt_nv_store ( struct driver_settings *driver_settings ) {
-	struct nv_conf *conf = ( struct nv_conf * ) driver_settings->priv_data;
-	struct settings *settings = & ( driver_settings->generic_settings.settings );
-	char buf[255] = {0};
-	uint32_t dword;
-	int rc;
-
-	DRIVER_SETTINGS_FETCH_SETTING ( settings, &virt_mode_setting );
-	conf->virt_conf.virt_mode = ( buf[0] == 'S' );
-	DRIVER_SETTINGS_FETCH_SETTING ( settings, &virt_num_setting );
-	conf->virt_conf.num_of_vfs = strtoul ( buf, NULL, 10 );
-	dword = cpu_to_be32 ( conf->virt_conf.dword );
-
-	if ( ( rc = driver_settings->callbacks.tlv_write ( driver_settings->drv_priv,
-				&dword, 0, VIRTUALIZATION_TYPE, sizeof (dword) ) ) ) {
-		return -EACCES;
-	}
-	return 0;
-}
-
 static int flexboot_menu_to_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_conf *conf = ( struct nv_conf * ) driver_settings->priv_data;
 	uint8_t buf = 0;
@@ -1632,7 +1616,6 @@ int virt_id_check_or_restore ( struct settings *settings, const void *data,
 	}
 
 	number = ntohl ( * ( int32_t * ) data );
-
 	if ( number > MAX_VIRTUAL_ID || number < MIN_VIRTUAL_ID )
 		return INVALID_INPUT;
 
@@ -1771,47 +1754,58 @@ int flexboot_menu_to_restore ( struct settings *settings, const void *data,
 	return SUCCESS;
 }
 
+/*
+ * driver_setting_operation structure layout:
+ * setting		- the actual setting
+ * applies_fn	- If exists, this will check if the setting can be applied
+ * store_fn		- If exists, this function will check the input's validity and
+ * 				  store it as the setting's value (or restore the default value)
+ * nv_store_fn	- If exists, this will store the setting's value in NV memory
+ * nv_read_fn	- If exists, this will read the setting's value from NV memory
+ *
+ */
 static struct driver_setting_operation driver_setting_operations[] = {
-	{ &virt_mode_setting,			NULL, &virt_mode_restore, &virt_nv_store },
-	{ &virt_num_setting,			NULL, &virt_num_check_or_restore, &virt_nv_store },
-	{ &virt_num_max_setting,		NULL, NULL, NULL },
-	{ &blink_leds_setting,			NULL, NULL, NULL },
-	{ &device_name_setting, 		NULL, NULL, NULL },
-	{ &chip_type_setting,			NULL, NULL, NULL },
-	{ &flexboot_menu_to_setting,	NULL, &flexboot_menu_to_restore, &flexboot_menu_to_nv_store },
-	{ &pci_id_setting,				NULL, NULL, NULL },
-	{ &bus_dev_fun_setting,			NULL, NULL, NULL },
-	{ &mac_add_setting,				NULL, NULL, NULL },
-	{ &phy_mac_setting,				NULL, NULL, NULL },
-	{ &flex_version_setting,		NULL, NULL, NULL },
-	{ &fw_version_setting,			NULL, NULL, NULL },
-	{ &boot_protocol_setting, 		NULL, &boot_protocol_restore, &nic_boot_nv_store },
-	{ &virt_lan_setting,			NULL, &virt_lan_restore, &nic_boot_nv_store },
-	{ &virt_id_setting,				NULL, &virt_id_check_or_restore, &nic_boot_nv_store },
-	{ &opt_rom_setting,				NULL, &opt_rom_restore, &nic_boot_nv_store },
-	{ &boot_retries_setting,		NULL, &boot_retries_restore, &nic_boot_nv_store },
-	{ &wol_setting,					NULL, NULL, &wol_nv_store },
-	{ &boot_pkey_setting,			NULL, &boot_pkey_restore, &nic_ib_boot_nv_store },
-	{ &dhcp_ip_setting,				NULL, &dhcp_ip_restore, &dhcp_flags_nv_store },
-	{ &dhcp_iscsi_setting,			NULL, &dhcp_iscsi_restore, &dhcp_flags_nv_store },
-	{ &iscsi_chap_setting,			NULL, &iscsi_chap_restore, &iscsi_gen_flags_nv_store },
-	{ &iscsi_mutual_chap_setting,	NULL, &iscsi_mutual_chap_restore, &iscsi_gen_flags_nv_store },
-	{ &iscsi_boot_to_target_setting, NULL, &iscsit_boot_to_target_restore, &iscsi_gen_flags_nv_store },
-	{ &ip_ver_setting, 				NULL, NULL, NULL },
-	{ &ipv4_add_setting,			NULL, &ipv4_address_store, &ipv4_address_nv_store },
-	{ &subnet_mask_setting, 		NULL, &subnet_mask_store, &subnet_mask_nv_store },
-	{ &ipv4_gateway_setting,		NULL, &ipv4_gateway_store, &ipv4_gateway_nv_store },
-	{ &ipv4_dns_setting,			NULL, &ipv4_dns_store, &ipv4_dns_nv_store },
-	{ &iscsi_init_name_setting,		NULL, &iscsi_initiator_name_store, &iscsi_initiator_name_nv_store },
-	{ &init_chapid_setting,			NULL, &iscsi_initiator_chapid_store, &iscsi_initiator_chapid_nv_store },
-	{ &init_chapsec_setting,		NULL, &iscsi_initiator_chapsec_store, &iscsi_initiator_chapsec_nv_store },
-	{ &connect_setting,				NULL, &connect_restore, &connect_nv_store },
-	{ &target_ip_setting,			NULL, &target_ip_store, &target_ip_nv_store },
-	{ &tcp_port_setting,			NULL, &target_tcp_port_store, &target_tcp_port_nv_store },
-	{ &boot_lun_setting,			NULL, &target_boot_lun_store, &target_boot_lun_nv_store },
-	{ &iscsi_target_name_setting,	NULL, &target_iscsi_name_store, &target_iscsi_name_nv_store },
-	{ &target_chapid_setting,		NULL, &iscsi_target_chapid_store, &iscsi_target_chapid_nv_store, },
-	{ &target_chapsec_setting,		NULL, &iscsi_target_chapsec_store, &iscsi_target_chapsec_nv_store },
+	{ &virt_mode_setting,			NULL, &virt_mode_restore, NULL, NULL },
+	{ &virt_num_setting,			NULL, &virt_num_check_or_restore, NULL, NULL },
+	{ &virt_num_max_setting,		NULL, NULL, NULL, NULL },
+	{ &blink_leds_setting,			NULL, NULL, NULL, NULL },
+	{ &device_name_setting, 		NULL, NULL, NULL, NULL },
+	{ &chip_type_setting,			NULL, NULL, NULL, NULL },
+	{ &flexboot_menu_to_setting,	NULL, &flexboot_menu_to_restore, &flexboot_menu_to_nv_store, NULL },
+	{ &pci_id_setting,				NULL, NULL, NULL, NULL },
+	{ &bus_dev_fun_setting,			NULL, NULL, NULL, NULL },
+	{ &mac_add_setting,				NULL, NULL, NULL, NULL },
+	{ &phy_mac_setting,				NULL, NULL, NULL, NULL },
+	{ &flex_version_setting,		NULL, NULL, NULL, NULL },
+	{ &fw_version_setting,			NULL, NULL, NULL, NULL },
+	{ &boot_protocol_setting, 		NULL, &boot_protocol_restore, &nic_boot_nv_store, NULL },
+	{ &virt_lan_setting,			NULL, &virt_lan_restore, &nic_boot_nv_store, NULL },
+	{ &virt_id_setting,				NULL, &virt_id_check_or_restore, &nic_boot_nv_store, NULL },
+	{ &opt_rom_setting,				NULL, &opt_rom_restore, &nic_boot_nv_store, NULL },
+	{ &boot_retries_setting,		NULL, &boot_retries_restore, &nic_boot_nv_store, NULL },
+	{ &wol_setting,					NULL, NULL, &wol_nv_store, NULL },
+	{ &boot_pkey_setting,			NULL, &boot_pkey_restore, &nic_ib_boot_nv_store, NULL },
+	{ &dhcp_ip_setting,				NULL, &dhcp_ip_restore, &dhcp_flags_nv_store, NULL },
+	{ &dhcp_iscsi_setting,			NULL, &dhcp_iscsi_restore, &dhcp_flags_nv_store, NULL },
+	{ &iscsi_chap_setting,			NULL, &iscsi_chap_restore, &iscsi_gen_flags_nv_store, NULL },
+	{ &iscsi_mutual_chap_setting,	NULL, &iscsi_mutual_chap_restore, &iscsi_gen_flags_nv_store, NULL },
+	{ &iscsi_boot_to_target_setting, NULL, &iscsit_boot_to_target_restore, &iscsi_gen_flags_nv_store, NULL },
+	{ &ip_ver_setting, 				NULL, NULL, NULL, NULL },
+	{ &ipv4_add_setting,			NULL, &ipv4_address_store, &ipv4_address_nv_store, NULL },
+	{ &subnet_mask_setting, 		NULL, &subnet_mask_store, &subnet_mask_nv_store, NULL },
+	{ &ipv4_gateway_setting,		NULL, &ipv4_gateway_store, &ipv4_gateway_nv_store, NULL },
+	{ &ipv4_dns_setting,			NULL, &ipv4_dns_store, &ipv4_dns_nv_store, NULL },
+	{ &iscsi_init_name_setting,		NULL, &iscsi_initiator_name_store, &iscsi_initiator_name_nv_store, NULL },
+	{ &init_chapid_setting,			NULL, &iscsi_initiator_chapid_store, &iscsi_initiator_chapid_nv_store, NULL },
+	{ &init_chapsec_setting,		NULL, &iscsi_initiator_chapsec_store, &iscsi_initiator_chapsec_nv_store, NULL },
+	{ &connect_setting,				NULL, &connect_restore, &connect_nv_store, NULL },
+	{ &target_ip_setting,			NULL, &target_ip_store, &target_ip_nv_store, NULL },
+	{ &tcp_port_setting,			NULL, &target_tcp_port_store, &target_tcp_port_nv_store, NULL },
+	{ &boot_lun_setting,			NULL, &target_boot_lun_store, &target_boot_lun_nv_store, NULL },
+	{ &iscsi_target_name_setting,	NULL, &target_iscsi_name_store, &target_iscsi_name_nv_store, NULL },
+	{ &target_chapid_setting,		NULL, &iscsi_target_chapid_store, &iscsi_target_chapid_nv_store, NULL },
+	{ &target_chapsec_setting,		NULL, &iscsi_target_chapsec_store, &iscsi_target_chapsec_nv_store, NULL },
+	{ &ib_mac_admin_setting,		NULL, NULL, NULL, NULL },
 };
 
 const struct setting * ipxe_iscsi_settings[] = {
@@ -1827,6 +1821,7 @@ const struct setting * ipxe_iscsi_settings[] = {
 		&root_path_setting,
 		&uriboot_retry_delay_setting,
 		&uriboot_retry_setting,
+		&network_wait_to_setting,
 		NULL
 };
 
@@ -2331,6 +2326,24 @@ static int driver_flash_read_nic_ib_boot_config ( struct driver_settings *driver
 	return rc;
 }
 
+static int driver_flash_read_nic_ib_dhcp_config (
+		struct driver_settings *driver_settings, unsigned int port_num ) {
+	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
+	union nv_ib_dhcp_conf *ib_dhcp_conf = & ( port_conf->nic.ib_dhcp_conf );
+	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
+	int rc;
+
+	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
+			IB_DHCP_SETTINGS_TYPE, port_num, sizeof ( *ib_dhcp_conf ),
+			NULL , ib_dhcp_conf ) ) != 0 ) {
+		DBGC ( driver_settings, "Failed to read InfiniBand DHCP settings (rc = %d)."
+				" Using default behavior.\n", rc );
+		ib_dhcp_conf->mac_admin_bit =  defaults->mac_admin_bit;
+	}
+
+	return rc;
+}
+
 static int driver_flash_read_iscsi_initiator_ipv4_addr ( struct driver_settings *driver_settings,
 		unsigned int port_num, struct nv_iscsi_initiator_params *initiator_params ) {
 	int rc = 0;
@@ -2677,6 +2690,28 @@ static int driver_set_nic_settings ( struct driver_settings *driver_settings ) {
 			driver_settings_get_boot_ret_str ( conf->boot_retry_count ) );
 	DRIVER_STORE_SETTING( driver_settings, origin, boot_retries_setting, buf );
 	DRIVER_STORE_STR_SETTING( driver_settings, origin, wol_setting, ( nic_conf->wol_conf.en_wol_magic ? STR_ENABLE : STR_DISABLE ) );
+
+	/* Ib DHCP settings store */
+	switch ( nic_conf->ib_dhcp_conf.mac_admin_bit ) {
+	case MAC_ADMIN_BIT_OFF:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin,
+				ib_mac_admin_setting, STR_DISABLE );
+		break;
+	case MAC_ADMIN_BIT_ON:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin,
+				ib_mac_admin_setting, STR_ENABLE );
+		break;
+	case MAC_ADMIN_BIT_FACTORY_MAC:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin,
+				ib_mac_admin_setting, STR_FACTORY_MAC );
+		break;
+
+	default:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin,
+				ib_mac_admin_setting, STR_NONE );
+		break;
+	}
+
 	return 0;
 }
 
@@ -2805,6 +2840,11 @@ int driver_settings_get_port_nvdata ( struct driver_settings *driver_settings,
 		DBGC ( driver_settings, "Failed to read NIC ib configuration from NV memory (rc = %d)\n", rc );
 	}
 
+	/* Read InfiniBand DHCP configuration from NV memory */
+	if ( ( rc = driver_flash_read_nic_ib_dhcp_config ( driver_settings, port_num ) ) ) {
+		DBGC ( driver_settings, "Failed to read InfiniBand DHCP settings from NV memory (rc = %d)\n", rc );
+	}
+
 	/* Read iSCSI configuration from NV memory */
 	if ( ( rc = driver_flash_read_iscsi_config ( driver_settings, port_num) ) ) {
 		DBGC ( driver_settings, "Failed to read iSCSI configuration from NV memory (rc = %d)\n", rc );
@@ -2840,17 +2880,19 @@ int driver_register_port_nv_settings ( struct driver_settings *driver_settings )
 }
 
 static int driver_flash_read_virtualization_settings ( struct driver_settings *driver_settings ) {
-	struct nv_conf *conf = ( struct nv_conf * ) driver_settings->priv_data;
-	struct nv_conf_defaults *defaults = ( struct nv_conf_defaults * ) driver_settings->defaults;
+	struct driver_setting_operation *op = find_setting_ops ( & virt_mode_setting );
 	int rc = 0;
 
-	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
-			VIRTUALIZATION_TYPE, 0, sizeof ( conf->virt_conf.dword ), 0,
-			& conf->virt_conf.dword ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read the virtualization configuration from the flash (rc = %d)\n", rc );
-		conf->virt_conf.num_of_vfs      = defaults->total_vfs;
-		conf->virt_conf.virt_mode       = defaults->sriov_en;
+	if ( op && op->nv_read ) {
+		if ( ( rc = op->nv_read ( driver_settings ) ) != 0 ) {
+			DBGC ( driver_settings, "Failed to read the virtualization"
+					" configuration from the flash (rc = %d)\n", rc );
+		}
+	} else {
+		DBGC ( driver_settings, "nv_read for virt_mode_setting setting not found.\n" );
+		rc = -EACCES;
 	}
+
 	return rc;
 }
 
@@ -2942,6 +2984,31 @@ int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 	return 0;
 }
 
+int driver_settings_get_nv_ib_mac_admin_bit ( void *priv_data, unsigned int port,
+		tlv_read_fn read_tlv_fn, struct nv_port_conf_defaults  *defaults,
+		uint8_t *mac_admin_bit ) {
+	struct driver_tlv_header tlv;
+	union nv_ib_dhcp_conf ib_dhcp_conf;
+	int rc;
+
+	memset ( &ib_dhcp_conf, 0, sizeof ( ib_dhcp_conf ) );
+	memset ( &tlv, 0, sizeof ( tlv ) );
+	tlv.type		= IB_DHCP_SETTINGS_TYPE;
+	tlv.type_mod	= port;
+	tlv.length		= sizeof ( ib_dhcp_conf );
+	tlv.data		= ( void* ) &ib_dhcp_conf;
+
+	if ( ( rc = read_tlv_fn ( priv_data, &tlv ) ) ) {
+		DBGC ( priv_data, "Failed to read the boot TLV from the flash (rc = %d)\n", rc );
+		/* This failure could be due to missing TLV - return the default value */
+		*mac_admin_bit		= defaults->mac_admin_bit;
+	} else {
+		*mac_admin_bit		= ib_dhcp_conf.mac_admin_bit;
+	}
+
+	return 0;
+}
+
 int driver_settings_get_tlv_version ( uint32_t tlv_type ) {
 	int version = 0;
 
@@ -2954,4 +3021,26 @@ int driver_settings_get_tlv_version ( uint32_t tlv_type ) {
 		break;
 	}
 	return version;
+}
+
+void driver_setting_update_setting_ops ( struct driver_setting_operation setting_ops[],
+		uint32_t setting_ops_len ) {
+	struct driver_setting_operation *next_ops;
+	struct driver_setting_operation *driver_ops;
+	unsigned int i;
+
+	for ( i = 0 ; i < setting_ops_len ; i++ ) {
+		next_ops = &setting_ops[i];
+		driver_ops = find_setting_ops ( next_ops->setting );
+		if ( driver_ops ) {
+			if ( next_ops->applies )
+				driver_ops->applies = next_ops->applies;
+			if ( next_ops->store )
+				driver_ops->store = next_ops->store;
+			if ( next_ops->nv_store )
+				driver_ops->nv_store = next_ops->nv_store;
+			if ( next_ops->nv_read )
+				driver_ops->nv_read = next_ops->nv_read;
+		}
+	}
 }

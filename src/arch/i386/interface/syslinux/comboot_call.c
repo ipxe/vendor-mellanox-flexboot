@@ -42,8 +42,6 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/image.h>
 #include <ipxe/version.h>
 #include <usr/imgmgmt.h>
-#include "config/console.h"
-#include "config/serial.h"
 
 /** The "SYSLINUX" version string */
 static char __bss16_array ( syslinux_version, [32] );
@@ -262,18 +260,10 @@ static __asmcall void int21 ( struct i386_all_regs *ix86 ) {
 		break;
 
 	case 0x04: /* Write Character to Serial Port */
-#ifdef CONSOLE_SERIAL
-		serial_putc ( ix86->regs.dl );
-		ix86->flags &= ~CF;
-#else
-		{
-			static int printed = 0;
-			if ( ! printed ) {
-				printed = 1;
-				DBG ( "Serial console is disabled\n" );
-			}
+		if ( serial_console.base ) {
+			uart_transmit ( &serial_console, ix86->regs.dl );
+			ix86->flags &= ~CF;
 		}
-#endif
 		break;
 
 	case 0x09: /* Write DOS String to Console */
@@ -466,15 +456,12 @@ static __asmcall void int22 ( struct i386_all_regs *ix86 ) {
 		break;
 
 	case 0x000B: /* Get Serial Console Configuration */
-#if defined(CONSOLE_SERIAL) && !defined(COMPRESERVE)
-		ix86->regs.dx = COMCONSOLE;
-		ix86->regs.cx = 115200 / COMSPEED;
-		ix86->regs.bx = 0;
-#else
-		ix86->regs.dx = 0;
-#endif
-
-		ix86->flags &= ~CF;
+		if ( serial_console.base ) {
+			ix86->regs.dx = ( ( intptr_t ) serial_console.base );
+			ix86->regs.cx = serial_console.divisor;
+			ix86->regs.bx = 0;
+			ix86->flags &= ~CF;
+		}
 		break;
 	case 0x000C: /* Perform final cleanup */
 		shutdown_boot();

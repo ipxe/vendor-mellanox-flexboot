@@ -24,7 +24,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL )
 	( PMM_HANDLE_BASE | 0x00001000 )
 #define PMM_HANDLE_BASE_DECOMPRESS_TO \
 	( PMM_HANDLE_BASE | 0x00002000 )
-#define PCI_FUNC_MASK 0x07
 
 /* ROM banner timeout, converted to a number of (18Hz) timer ticks. */
 #define ROM_BANNER_TIMEOUT_TICKS ( ( 18 * ROM_BANNER_TIMEOUT ) / 10 )
@@ -442,23 +441,27 @@ no_pmm:
 	popw	%bx
 #if ( ! defined ( MLX_QEMU ) && ! defined ( DEVICE_CIB ) )
  #ifdef DEVICE_CX3
+	/*
+	 * reading ppf to check if there is driver up
+	 * having one indicates that this prefix is running while UEFI driver is up
+	 * therefore we should not do any HCA commands, and gently continue (and posting BEV) 
+	 */
+	call	test_device_ownership
+	testl	%eax, %eax
+	jnz	93f
 	call 	check_nv_cfg_en
 	call	get_flexboot_menu_to
-	pushw	%cs
-	call	check_op_rom_en
- #elif defined(DEVICE_CX4)
+#elif defined(DEVICE_CX4)
 	call 	gw_get_cap_ofst
 	cmpb	$0 ,mlx_cap_ofst
    	/* on error skip other functions */
     	je		93f
 	call 	check_nv_cfg_en
 	call	get_flexboot_menu_to
-	/*push cs to make a 32 bit jump
+ #endif
+	/* push cs to make a 32 bit jump */
 	pushw	%cs
 	call	check_op_rom_en
-   	*/
-
- #endif
  93:
 #endif
    popw		%bx
@@ -478,11 +481,6 @@ no_pmm:
 	xorw	%si, %si
 	xorw	%di, %di
 	cs rep	movsb
-.endif
-	/* Skip prompt if this is not the first PCI function, if applicable */
-.ifeqs	BUSTYPE, "PCIR"
-	testb	$PCI_FUNC_MASK, init_pci_busdevfn
-	jnz	no_shell
 .endif
 	/* check reasult and act according to it */
 	cmpw 	$0x0, (flexboot_menu_to)
@@ -908,11 +906,13 @@ exec_message_post_install:
  */
 check_op_rom_en:
 	pushl 	%esi
+#ifdef DEVICE_CX3
+	movl    $1, %eax
 	/* get number of ports , store in %esi */
-	movl 	$1, %eax
 	call	get_num_ports
  	cmpl    $0xffffffff, %eax
  	je 	delete_bev
+
  	/* get port conf - start from port 1 */
 	movl	%eax, %esi;
 	movl 	$1, %eax
@@ -925,6 +925,11 @@ port_loop:
 	incl	%eax
 	decl	%esi
 	jnz	port_loop
+#elif defined(DEVICE_CX4)
+	call	check_host_op_rom_en
+	testl	%eax, %eax
+	jnz	99f
+#endif
 delete_bev:
 #ifndef MLX_QEMU
 	movl	$0x0, %eax
@@ -1054,7 +1059,7 @@ my_pci_write_config_dword:
 	ret
 	.size	my_pci_write_config_dword, . - my_pci_write_config_dword
 
-#define TLV_ROM_BNR_TYPE 0x2010
+
 #define TLV_ROM_BNR_ENTRY_OFST 0x2
 #define INI_PARAM_ROM_BNR_MB_OFST 0x0
 #define INI_PARAM_ROM_BNR_TO_BIT_OFST 16
@@ -1062,6 +1067,7 @@ my_pci_write_config_dword:
 #define ROM_BANNER_TO_TLV_MASK 0xf
 
 #ifdef DEVICE_CX3
+#define TLV_ROM_BNR_TYPE 0x2010
 #define GW_ADDR_ADDR 0x58
 #define GW_DATA_ADDR 0x5c
 #define HCR_INPUT_H_OFFSET 0x80680
@@ -1072,7 +1078,7 @@ my_pci_write_config_dword:
 #define	HCR_OUTPUT_H_OFFSET 0x8068C
 #define HCR_TOKEN_MOD_OFFSET 0x80694
 #define HCR_OFFSET 0x80698
-
+#define HCR_PPF_OFFSET 0x8069C
 #define HCR_TOKEN	 0xffff0000
 #define HCR_OPMOD_SHIFT 12
 #define	HCR_T_BIT 21
@@ -1133,7 +1139,13 @@ cmd_pend:
 	ret
  .size	cmd_pend, . - cmd_pend
 
+test_device_ownership:
+	movl	$HCR_PPF_OFFSET, %eax
+	call 	gw_read_dword
+	ret
+.size  test_device_ownership, . - test_device_ownership
 
+	
 /*
  * Description - check device NVMEM configuration enabled
  * IN  	       -  NON
@@ -1632,7 +1644,8 @@ get_num_ports:
 	addl	$24, %esp
 	cmpl    $0xffffffff, %eax
 	je	99f
-	shrl	$16, %eax 
+	shrl	$16, %eax
+	andl	$0xff, %eax 
 99:
 	ret
 .size get_num_ports, . -get_num_ports 
@@ -1663,8 +1676,7 @@ get_tlv_value:
 	orl  	%ss:6(%ebp), %eax
 	pushl 	%eax
 	/* in_param_l */
-	shll 	$16, %eax
-	orl  	%ss:10(%ebp), %eax
+	movl  	%ss:10(%ebp), %eax
 	pushl 	%eax   /* dword offset */
 	/* in_param_h */
 	pushl 	$0	
@@ -1838,6 +1850,8 @@ gw_write_dword: //offset at eax (HCR)!
  	.size	gw_write_dword, . - gw_write_dword
 
 #elif defined(DEVICE_CX4) || defined(DEVICE_CIB)
+#define TLV_ROM_BNR_TYPE 0x210
+
 /*
  * Description - check device NVMEM configuration enabled
  * IN  	       -  NON
@@ -1872,8 +1886,8 @@ get_flexboot_menu_to:
 	pushl	$TLV_ROM_BNR_ENTRY_OFST
 	/* push TLV type to the stack */
 	pushl	$TLV_ROM_BNR_TYPE
-	/* port number is passed in %eax*/
-	movl	$0x1, %eax
+	/* port zero cause per host class */
+	movl	$0x0, %eax
 	call 	get_tlv_value
 	/* pop passed parameter */
 	addl    $8 , %esp
@@ -1881,7 +1895,6 @@ get_flexboot_menu_to:
 	popl	%eax
 	/* %eax holds the wanted parameter */
 	andl	$ROM_BANNER_TO_TLV_MASK, %eax
-
 #ifdef MLX_QEMU
 /* due to a bug in QEMU running enviourment make sure time out is not zero */
 	movl 	$12, %eax
@@ -1903,35 +1916,36 @@ get_flexboot_menu_to:
 * read TLV , no TLV read INI.
 * if NO TLV & INI return dis (0)
 *
-* IN - eax : port number
+* IN -  NONE
 * OUT - eax :  en(1) / dis (0)
 *
 */
-#define BOOT_SETTINGS_TYPE 0x2021
+#define BOOT_SETTINGS_TYPE 0x221
 #define	OP_ROM_EN_INI_MASK 0x20000000
 #define	OP_ROM_EN_TLV_MASK 0x80ff0000
 #define	OP_ROM_EN_TLV_OFST 0x2
-check_port_en:
+check_host_op_rom_en:
 	/* save edx/eax/ecx register to stack */
 	pushl	%edx
 	pushl	%ecx
 	/* place holder low dword of 64 bit value */
 	pushl	$0xffffffff
-	/* push TLV type to the stack */
-	pushl	$BOOT_SETTINGS_TYPE
 	/* push TLV entry offset */
 	pushl	$OP_ROM_EN_TLV_OFST
-	/* push port number */
-	pushl	%eax
+	/* push TLV type to the stack */
+	pushl	$BOOT_SETTINGS_TYPE
+	/* port zero cause per host class */
+	movl	$0x0, %eax
 	call 	get_tlv_value
 	/* pop passed parameter */
-	addl    $8 , %esp
+	addl    $8, %esp
 	/* pop resault */
 	popl	%ecx
 	/* check failure */
 	cmpl	$0xffffffff, %eax
 	je		98f
-	/* value was read from TLV */
+	/* align wanted word to first word */
+	shrl	$16, %ecx
 	/* save option rom enable bit value */
 	movl	%ecx, %edx
 	/* legacy boot protocol check */
@@ -1947,41 +1961,7 @@ check_port_en:
 	popl	%ecx
 	popl	%edx
 	ret
-.size check_port_en, . -check_port_en
-
-
-/*
- * Description - Read numer of ports using mod_stat
- * IN 	       - eax : port number
- * OUT 	       - eax : number of ports
- */
-get_num_ports:
-	/* place holder for the lower part of the 64 bit value returned. */
-	pushl $0x0
-	/* opcode */
-	//pushl	$MLX4_CMD_MOD_STAT_CFG
-	/* opcode modifier */
-	//pushl	$MOD_STAT_CFG_GET_INLINE_MOD
-	/* input_mod  */
-	shll 	$8, %eax
-	//orl  	$MOD_STAT_CFG_MAC_NUM_PORTS_OFFSET, %eax
-	pushl 	%eax
-	/* in_param_l */
-	pushl 	$0
-	/* in_param_h */
-	pushl 	$0
-	/* invoke command */
-	//call hca_cmd
-	addl	$24, %esp
-	movl	$0x10000, %eax
-	cmpl    $0xffffffff, %eax
-	je	99f
-	shrl	$16, %eax
-99:
-	ret
-.size get_num_ports, . -get_num_ports
-
-
+.size check_host_op_rom_en, . -check_host_op_rom_en
 
 #define MLX_ICMD_SEMAPHORE_ADDR 0x0
 #define COMMON_SEMAPHORES_FLASH_PROGRAMMING_OFST 0x10
@@ -2188,7 +2168,6 @@ gw_write_to_space:
 	movl	%esi, %ecx
 	/* write data */
 	call	my_pci_write_config_dword
-
 
 	/* set flag bit to monitor later for successful space write access */
 	movzbw	mlx_cap_ofst, %di
@@ -2532,8 +2511,6 @@ write_nv_access:
 	/* first dword all zero except over_en bit */
 	movl	$0x02000000, %esi
 	orl		%ss:14(%ebp), %esi
-	//orl		$0x4, %esi
-	//movl	$0x02000004, %esi
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	movl	$NV_ACCESS_BASE_OFFSET, %edx
 	call	gw_write_to_space
@@ -2544,8 +2521,8 @@ write_nv_access:
 	shll	$NV_ACCESS_PORT_ALIGN, %esi
 	/* TLV type in first byte */
 	orl		%ss:6(%ebp), %esi
-	/* set class byte*/
-	orl		$0x01000000, %esi
+	/* set param class byte ( set to per host) */
+	orl		$0x03000000, %esi
 	addl	$0x4, %edx
 	call	gw_write_to_space
 
@@ -2563,7 +2540,7 @@ write_nv_access:
 .size write_nv_access, . - write_nv_access
 
 /*
-* IN -  eax : port number or 0 for globals
+* IN -  eax : port number or 0 for NON per port settings
 		%esp :
 *			 [esp] + 2  = TLV_TYPE
 *			 [esp] + 6  = TLV_ENTRY_OFFST
@@ -2624,15 +2601,6 @@ get_tlv_value:
 	pushl	%esi
 	call 	write_nv_access
 	addl	$12, %esp
-
-	/* push data value */
-/*
-	movl	$0x0, %esi
-	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
-	movl	$TLV_ENTRIES_BASE_OFFSET, %edx
-	addl	%ss:10(%ebp), %edx
-	call	gw_write_to_space
-*/
 	/* run icmd give a go bit %eax will hold the return code*/
 	/* busy is set to 1 */
 	pushl	$0x1

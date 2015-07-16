@@ -177,6 +177,24 @@ static struct net_device_operations vlan_operations = {
 	.irq		= vlan_irq,
 };
 
+static struct net_device_operations vlan_operations_no_irq = {
+	.open		= vlan_open,
+	.close		= vlan_close,
+	.transmit	= vlan_transmit,
+	.poll		= vlan_poll,
+};
+
+/**
+ * Check if the net device is a VLAN device
+ *
+ * @v netdev	Network device
+ * @ret rc	True if it is a VLAN
+ */
+static int is_vlan_device ( struct net_device *netdev ) {
+	return ( ( netdev->op == &vlan_operations_no_irq ) ||
+			 ( netdev->op == &vlan_operations ) );
+}
+
 /**
  * Synchronise VLAN device
  *
@@ -212,7 +230,7 @@ struct net_device * vlan_find ( struct net_device *trunk, unsigned int tag ) {
 	struct vlan_device *vlan;
 
 	for_each_netdev ( netdev ) {
-		if ( netdev->op != &vlan_operations )
+		if ( ! is_vlan_device ( netdev ) )
 			continue;
 		vlan = netdev->priv;
 		if ( ( vlan->trunk == trunk ) && ( vlan->tag == tag ) )
@@ -232,7 +250,7 @@ struct net_device* vlan_present ( struct net_device *trunk ) {
 	struct vlan_device *vlan;
 
 	for_each_netdev ( netdev ) {
-		if ( netdev->op != &vlan_operations )
+		if ( ! is_vlan_device ( netdev ) )
 			continue;
 		vlan = netdev->priv;
 		if ( vlan->trunk == trunk )
@@ -331,7 +349,7 @@ struct net_protocol vlan_protocol __net_protocol = {
 unsigned int vlan_tag ( struct net_device *netdev ) {
 	struct vlan_device *vlan;
 
-	if ( netdev->op == &vlan_operations ) {
+	if ( is_vlan_device ( netdev ) ) {
 		vlan = netdev->priv;
 		return vlan->tag;
 	} else {
@@ -359,7 +377,7 @@ unsigned int vlan_tag ( struct net_device *netdev ) {
 int vlan_can_be_trunk ( struct net_device *trunk ) {
 
 	return ( ( trunk->ll_protocol->ll_addr_len == ETH_ALEN ) &&
-		 ( trunk->op != &vlan_operations ) );
+		 ( ! is_vlan_device ( trunk ) ) );
 }
 
 /**
@@ -413,7 +431,12 @@ int vlan_create ( struct net_device *trunk, unsigned int tag,
 		rc = -ENOMEM;
 		goto err_alloc_etherdev;
 	}
-	netdev_init ( netdev, &vlan_operations );
+
+	if ( netdev_irq_supported ( trunk ) )
+		netdev_init ( netdev, &vlan_operations );
+	else
+		netdev_init ( netdev, &vlan_operations_no_irq );
+
 	netdev->dev = trunk->dev;
 	memcpy ( netdev->hw_addr, trunk->ll_addr, ETH_ALEN );
 	vlan = netdev->priv;
@@ -461,7 +484,7 @@ int vlan_destroy ( struct net_device *netdev ) {
 	struct net_device *trunk;
 
 	/* Sanity check */
-	if ( netdev->op != &vlan_operations ) {
+	if ( ! is_vlan_device ( netdev ) ) {
 		DBGC ( netdev, "VLAN %s cannot destroy non-VLAN device\n",
 		       netdev->name );
 		return -ENOTTY;
@@ -489,7 +512,7 @@ static void vlan_notify ( struct net_device *trunk ) {
 	struct vlan_device *vlan;
 
 	for_each_netdev ( netdev ) {
-		if ( netdev->op != &vlan_operations )
+		if ( ! is_vlan_device ( netdev ) )
 			continue;
 		vlan = netdev->priv;
 		if ( vlan->trunk == trunk )
@@ -508,7 +531,7 @@ static int vlan_remove_first ( struct net_device *trunk ) {
 	struct vlan_device *vlan;
 
 	for_each_netdev ( netdev ) {
-		if ( netdev->op != &vlan_operations )
+		if ( ! is_vlan_device ( netdev ) )
 			continue;
 		vlan = netdev->priv;
 		if ( vlan->trunk == trunk ) {

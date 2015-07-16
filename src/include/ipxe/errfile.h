@@ -91,6 +91,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_i2c_bit		     ( ERRFILE_DRIVER | 0x00120000 )
 #define ERRFILE_spi_bit		     ( ERRFILE_DRIVER | 0x00130000 )
 #define ERRFILE_nvsvpd		     ( ERRFILE_DRIVER | 0x00140000 )
+#define ERRFILE_uart		     ( ERRFILE_DRIVER | 0x00150000 )
 
 #define ERRFILE_3c509		     ( ERRFILE_DRIVER | 0x00200000 )
 #define ERRFILE_bnx2		     ( ERRFILE_DRIVER | 0x00210000 )
@@ -248,6 +249,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_nfs_uri			( ERRFILE_NET | 0x003c0000 )
 #define ERRFILE_rndis			( ERRFILE_NET | 0x003d0000 )
 #define ERRFILE_pccrc			( ERRFILE_NET | 0x003e0000 )
+#define ERRFILE_stp			( ERRFILE_NET | 0x003f0000 )
 
 #define ERRFILE_image		      ( ERRFILE_IMAGE | 0x00000000 )
 #define ERRFILE_elf		      ( ERRFILE_IMAGE | 0x00010000 )

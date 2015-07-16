@@ -27,6 +27,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  * @ret rc		Return status code
  */
 __asmcall int main ( void ) {
+	DBG ( "FlexBoot main() started...\n" );
 	/*
 	 * The below is effective only
 	 * if MLX_BULLSEYE is defined
