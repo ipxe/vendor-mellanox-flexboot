@@ -965,19 +965,8 @@ int dhcp_create_packet ( struct dhcp_packet *dhcppkt,
 		 netdev->ll_protocol->ll_addr_len );
 	memcpy ( dhcphdr->options, options, options_len );
 
-	/* If the local link-layer address functions only as a name
-	 * (i.e. cannot be used as a destination address), then
-	 * request broadcast responses.
-	 */
-	if ( netdev->ll_protocol->flags & LL_NAME_ONLY )
-		dhcphdr->flags |= htons ( BOOTP_FL_BROADCAST );
-
-	/* If the network device already has an IPv4 address then
-	 * unicast responses from the DHCP server may be rejected, so
-	 * request broadcast responses.
-	 */
-	if ( ipv4_has_any_addr ( netdev ) )
-		dhcphdr->flags |= htons ( BOOTP_FL_BROADCAST );
+	/* Always set the broadcast bit */
+	dhcphdr->flags |= htons ( BOOTP_FL_BROADCAST );
 
 	/* Initialise DHCP packet structure */
 	memset ( dhcppkt, 0, sizeof ( *dhcppkt ) );

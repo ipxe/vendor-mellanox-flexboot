@@ -28,6 +28,8 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 #define NV_CONFIG __table( struct extended_setting, "nv_config")
 
+#define DRIVER_MAX_STR_LEN_SETTING	255
+
 #define STR_ENABLE		"Enabled"
 #define STR_DISABLE		"Disabled"
 #define STR_ISCSI		"iSCSI"
@@ -91,6 +93,7 @@ enum {
 	IB_BOOT_SETTING_TYPE			= 0x2022,
 	IB_DHCP_SETTINGS_TYPE			= 0x2023,
 	GLOPAL_PCI_SETTINGS_TYPE		= 0x80,
+	GLOPAL_PCI_CAPS_TYPE			= 0x81,
 
 	// Types for iSCSI strings
 	DHCP_VEND_ID					= 0x2101,
@@ -218,8 +221,6 @@ struct nv_conf_ini {
 			}																	\
 		}																		\
 	} while (0)
-
-#define DRIVER_MAX_STR_LEN_SETTING	255
 
 #define DRIVER_STORE_STR_SETTING( id, settings, setting, data )			\
 	do {																\
@@ -387,12 +388,13 @@ union nv_rom_banner_timeout_conf {
 };
 
 struct nv_virt_conf_st {
+	uint8_t sriov_support;
 	uint8_t	sriov_valid;
 	uint16_t num_of_vfs;
 	uint16_t virt_mode;
 };
 
-#define FW_VER_STR_LEN			12
+#define FW_VER_STR_LEN			DRIVER_MAX_STR_LEN_SETTING
 #define FLEXBOOT_VER_STR_LEN	12
 struct firmware_image_props {
 	char family_fw_version[FW_VER_STR_LEN];
@@ -559,6 +561,7 @@ extern struct setting fw_version_setting __setting( SETTING_HERMON, fw_version )
 extern struct setting boot_protocol_setting __setting( SETTING_HERMON, boot_protocol );
 extern struct setting virt_lan_setting __setting( SETTING_HERMON, virt_lan );
 extern struct setting virt_id_setting __setting( SETTING_HERMON, virt_id );
+extern struct setting boot_pkey_setting __setting( SETTING_FLEXBOOT, boot_pkey );
 extern struct setting link_speed_setting __setting( SETTING_HERMON, link_speed );
 extern struct setting opt_rom_setting __setting( SETTING_HERMON, opt_rom );
 extern struct setting boot_retries_setting __setting( SETTING_HERMON, boot_retries );
@@ -646,7 +649,7 @@ int driver_register_nv_settings ( struct driver_settings *driver_settings );
 int driver_settings_get_port_nvdata ( struct driver_settings *driver_settings,
 		unsigned int port_num );
 int driver_settings_get_nvdata ( struct driver_settings *driver_settings );
-void copy_netdev_settings_to_netdev ( struct net_device *src, struct net_device *dest );
+void move_trunk_settings_to_vlan ( struct net_device *src, struct net_device *dest );
 int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 		u8* boot_enable, tlv_read_fn read_tlv_fn,
 		struct nv_port_conf_defaults  *defaults );

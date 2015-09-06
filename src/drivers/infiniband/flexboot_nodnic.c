@@ -41,6 +41,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <usr/ifmgmt.h>
 #include <mlx_nvconfig.h>
 #include <mlx_pci_gw.h>
+#include <mlx_vmac.h>
 #include <ipxe/boot_menu_ui.h>
 
 /***************************************************************************
@@ -701,45 +702,6 @@ static struct ib_queue_pair_operations flexboot_nodnic_eth_qp_op = {
 	.alloc_iob = alloc_iob,
 };
 
-static
-int __unused flexboot_nodnic_eth_add_steer ( struct ib_device *ibdev,
-			   struct ib_queue_pair *eth_qp )
-{
-	struct flexboot_nodnic *flexboot_nodnic = ib_get_drvdata ( ibdev );
-	struct flexboot_nodnic_port *port = &flexboot_nodnic->port[ibdev->port - 1];
-	mlx_mac_address mcast_mac = { {0xff, 0xff, 0xff, 0xff, 0xff, 0xff} };
-	mlx_mac_address ucast_mac;
-	mlx_uint32 buffer = 0;
-	int rc;
-
-	/* Join broadcast mutlicast group */
-	rc = ib_mcast_attach ( ibdev, eth_qp, ( union ib_gid * ) &mcast_mac );
-	if ( rc != 0 ) {
-		printf ( "flexboot_nodnic could not attach to broadcast MCG: %s\n",
-		       strerror ( rc ) );
-		return rc;
-	}
-
-	/* Add MAC to unicast group */
-	rc = nodnic_port_query(&port->port_priv, nodnic_port_option_mac_high,
-				&buffer);
-	MLX_CHECK_STATUS(flexboot_nodnic->device_priv, rc, mac_err,
-			"failed to query mac high");
-	memcpy(&ucast_mac + 4, &buffer, 2);
-	rc = nodnic_port_query(&port->port_priv, nodnic_port_option_mac_low,
-			&buffer);
-	MLX_CHECK_STATUS(flexboot_nodnic->device_priv, rc, mac_err,
-			"failed to query mac low");
-	memcpy(&ucast_mac, &buffer, 4);
-	rc = ib_mcast_attach ( ibdev, eth_qp, ( union ib_gid * ) &ucast_mac );
-	if ( rc != 0 ) {
-		printf ( "flexboot_nodnic could not attach to unicast MCG: %s\n",
-			   strerror ( rc ) );
-		return rc;
-	}
-mac_err:
-	return 0;
-}
 /**
  * Transmit packet via flexboot_nodnic Ethernet device
  *
@@ -828,7 +790,6 @@ static void flexboot_nodnic_eth_poll ( struct net_device *netdev) {
 	struct flexboot_nodnic_port *port = netdev->priv;
 	struct ib_device *ibdev = port->ibdev;
 
-	/* TODO: Read port events */
 	ib_poll_eq ( ibdev );
 }
 
@@ -1023,6 +984,7 @@ static struct net_device_operations flexboot_nodnic_eth_operations = {
 	.transmit	= flexboot_nodnic_eth_transmit,
 	.poll		= flexboot_nodnic_eth_poll,
 };
+
 /**
  * Register flexboot_nodnic Ethernet device
  */
@@ -1292,10 +1254,6 @@ static void flexboot_nodnic_updater ( void *priv, uint8_t status ) {
 	}
 }
 
-int flexboot_nodnic_link_type ( struct flexboot_nodnic_port_type *type ) {
-	return ( type == &flexboot_nodnic_port_type_eth );
-}
-
 int flexboot_nodnic_is_supported ( struct pci_device *pci ) {
 	mlx_utils utils;
 	mlx_pci_gw_buffer buffer;
@@ -1421,6 +1379,43 @@ static int flexboot_nodnic_flash_read_tlv_wrapper ( void *drv_priv
 	return flexboot_nodnic_tlv_access ( flexboot_nodnic , tlv_hdr,  FLEXBOOT_NODNIC_TLV_ACCESS_READ );
 }
 
+void flexboot_nodnic_copy_mac ( uint8_t mac_addr[], uint32_t low_byte,
+		uint16_t high_byte ) {
+	union mac_addr {
+		struct {
+			uint32_t low_byte;
+			uint16_t high_byte;
+		};
+		uint8_t mac_addr[ETH_ALEN];
+	} mac_addr_aux;
+
+	mac_addr_aux.high_byte = high_byte;
+	mac_addr_aux.low_byte = low_byte;
+
+	mac_addr[0] = mac_addr_aux.mac_addr[5];
+	mac_addr[1] = mac_addr_aux.mac_addr[4];
+	mac_addr[2] = mac_addr_aux.mac_addr[3];
+	mac_addr[3] = mac_addr_aux.mac_addr[2];
+	mac_addr[4] = mac_addr_aux.mac_addr[1];
+	mac_addr[5] = mac_addr_aux.mac_addr[0];
+}
+
+static mlx_status flexboot_nodnic_get_factory_mac (
+		struct flexboot_nodnic *flexboot_nodnic_priv, uint8_t port ) {
+	struct mlx_vmac_query_virt_mac virt_mac;
+	mlx_status status;
+
+	status = mlx_vmac_query_virt_mac ( flexboot_nodnic_priv->device_priv.utils,
+			&virt_mac );
+	if ( ! status ) {
+		flexboot_nodnic_copy_mac (
+				flexboot_nodnic_priv->port[port].port_nv_conf.phys_mac,
+				virt_mac.parmanent_mac_low, virt_mac.parmanent_mac_high );
+	}
+
+	return status;
+}
+
 /**
  * Set port masking
  *
@@ -1469,7 +1464,19 @@ static int flexboot_nodnic_set_port_masking ( struct flexboot_nodnic *flexboot_n
 static void flexboot_nodnic_get_ro_pci_settings ( void *drv_priv ) {
 	struct flexboot_nodnic *flexboot_nodnic = ( struct flexboot_nodnic * ) drv_priv;
 	struct pci_device *pci = flexboot_nodnic->pci;
-	/* TODO: Add get FW version */
+	struct firmware_image_props *fw_image_props;
+	mlx_uint16 fw_ver_minor = 0, fw_ver_sub_minor = 0, fw_ver_major = 0;
+
+	if ( nodnic_device_get_fw_version ( & flexboot_nodnic->device_priv,
+		&fw_ver_minor, &fw_ver_sub_minor, &fw_ver_major ) ) {
+		DBGC ( flexboot_nodnic, "%s: Failed to query firmware version\n", __FUNCTION__ );
+	} else {
+		fw_image_props = & ( flexboot_nodnic->nodnic_nv_conf.fw_image_props );
+		snprintf ( fw_image_props->family_fw_version,
+			sizeof ( fw_image_props->family_fw_version ),
+			"%d.%d.%d", fw_ver_major, fw_ver_minor, fw_ver_sub_minor );
+	}
+
 	strcpy( flexboot_nodnic->nodnic_nv_conf.bdf_name,pci->dev.name );
 	strcpy ( flexboot_nodnic->nodnic_nv_conf.device_name,pci->id->name );
 	flexboot_nodnic->nodnic_nv_conf.desc_dev_id =  pci->dev.desc.device;
@@ -1534,11 +1541,11 @@ static int flexboot_nodnic_port_get_defaults ( struct flexboot_nodnic *flexboot_
 		DBGC ( flexboot_nodnic, "Failed to get port %d default values (rc = %d)\n", rc, port_num );
 		return rc;
 	} else {
-		port->defaults.boot_protocol			= 1;
-		port->defaults.boot_option_rom_en		= 1;
-		port->defaults.boot_vlan        		= 4;
-		port->defaults.iscsi_dhcp_params_en		= 1;
-		port->defaults.iscsi_ipv4_dhcp_en		= 1;
+		port->defaults.boot_protocol			= DEFAULT_BOOT_PROTOCOL;
+		port->defaults.boot_option_rom_en		= DEFAULT_OPTION_ROM_EN;
+		port->defaults.boot_vlan        		= DEFAULT_BOOT_VLAN;
+		port->defaults.iscsi_dhcp_params_en		= DEFAULT_ISCSI_DHCP_PARAM_EN;
+		port->defaults.iscsi_ipv4_dhcp_en		= DEFAULT_ISCSI_IPV4_DHCP_EN;
 	}
 
 	return 0;
@@ -1561,13 +1568,13 @@ static int flexboot_nodnic_get_ini_and_defaults ( struct flexboot_nodnic *flexbo
 		return rc;
 	} else {
 		/* Defaults configurations  */
-		flexboot_nodnic->defaults.flexboot_menu_to = 12;
+		flexboot_nodnic->defaults.flexboot_menu_to = DEFAULT_FLEXBOOT_MENU_TO;
 	}
 
 	/* Set max virtual functions
 	 * caps.max_funix contains 1 Pf, so the Vf number is (caps.max_funix - 1)
 	 */
-	flexboot_nodnic->defaults.max_vfs = 1;
+	flexboot_nodnic->defaults.max_vfs = DEFAULT_MAX_VFS;
 
 	/* Get the ports default values */
 	for ( i = 0 ; i < device_priv->device_cap.num_ports ; i++ ) {
@@ -1672,8 +1679,10 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 			continue;
 		port = & ( flexboot_nodnic_priv->port[i] );
 		flexboot_nodnic_init_port_settings ( flexboot_nodnic_priv, port );
-		if ( ! flexboot_nodnic_priv->callbacks->get_settings )
+		if ( ! flexboot_nodnic_priv->callbacks->get_settings ) {
 			driver_settings_get_port_nvdata ( & ( port->driver_settings ), i + 1 );
+			flexboot_nodnic_get_factory_mac ( flexboot_nodnic_priv, i );
+		}
 		driver_register_port_nv_settings ( & ( port->driver_settings ) );
 
 		if ( ! boot_post_shell ) {
@@ -1704,7 +1713,7 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 			if ( ( rc = vlan_create ( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id, 1 ) ) )
 				DBGC ( flexboot_nodnic_priv, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
 			else if ( ( vlan = vlan_find( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id ) ) )
-				copy_netdev_settings_to_netdev ( port->netdev, vlan );
+				move_trunk_settings_to_vlan ( port->netdev, vlan );
 			else
 				DBGC ( flexboot_nodnic_priv, "Failed to find the VLAN device (rc = %d)\n", rc );
 		}

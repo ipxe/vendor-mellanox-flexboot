@@ -26,7 +26,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/device.h>
 #include <ipxe/console.h>
 #include <ipxe/init.h>
+#ifdef MLX_BULLSEYE
 #include "mlx_bullseye.h"
+#endif
 
 /** @file
  *
@@ -130,7 +132,9 @@ void shutdown ( int flags ) {
 	 * it will work only on QEMU machine
 	 * or native machine with console redirection
 	 */
+#ifdef MLX_BULLSEYE
 	MlxBullseyeDump();
+#endif
 
 	/* Reset console */
 	console_reset();

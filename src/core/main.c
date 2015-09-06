@@ -19,7 +19,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/init.h>
 #include <ipxe/version.h>
 #include <usr/autoboot.h>
+#ifdef MLX_BULLSEYE
 #include "mlx_bullseye.h"
+#endif
 
 /**
  * Main entry point
@@ -32,7 +34,9 @@ __asmcall int main ( void ) {
 	 * The below is effective only
 	 * if MLX_BULLSEYE is defined
 	 */
+#ifdef MLX_BULLSEYE
 	MlxBullseyeInit();
+#endif
 
 	/* Perform one-time-only initialisation (e.g. heap) */
 	initialise();

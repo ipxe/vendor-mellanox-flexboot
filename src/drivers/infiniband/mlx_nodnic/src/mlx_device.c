@@ -99,6 +99,9 @@ nodnic_device_start_nodnic(
 	mlx_uint32			buffer = 0;
 	mlx_boolean			nodnic_supported = 0;
 
+	status = wait_for_device_initialization(device_priv);
+	MLX_FATAL_CHECK_STATUS(status, wait_for_fw_err, "failed to initialize device");
+
 	status = check_nodnic_interface_supported(device_priv, &nodnic_supported);
 	MLX_FATAL_CHECK_STATUS(status, read_err,"failed to check nic_interface_supported");
 
@@ -116,6 +119,7 @@ init_err:
 read_err:
 write_err:
 nodnic_unsupported:
+wait_for_fw_err:
 	return status;
 }
 

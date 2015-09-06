@@ -225,18 +225,13 @@ static int udp_tx ( struct udp_connection *udp, struct io_buffer *iobuf,
  * @ret udp		UDP connection, or NULL
  */
 static struct udp_connection * udp_demux ( struct sockaddr_tcpip *local ) {
-	static const struct sockaddr_tcpip empty_sockaddr = { .pad = { 0, } };
 	struct udp_connection *udp;
 
 	list_for_each_entry ( udp, &udp_conns, list ) {
 		if ( ( ( udp->local.st_family == local->st_family ) ||
 		       ( udp->local.st_family == 0 ) ) &&
 		     ( ( udp->local.st_port == local->st_port ) ||
-		       ( udp->local.st_port == 0 ) ) &&
-		     ( ( memcmp ( udp->local.pad, local->pad,
-				  sizeof ( udp->local.pad ) ) == 0 ) ||
-		       ( memcmp ( udp->local.pad, empty_sockaddr.pad,
-				  sizeof ( udp->local.pad ) ) == 0 ) ) ) {
+		       ( udp->local.st_port == 0 ) ) ) {
 			return udp;
 		}
 	}

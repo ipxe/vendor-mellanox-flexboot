@@ -39,17 +39,25 @@ static int golan_blink_leds_applies ( struct settings *settings __unused ) {
 	return DOES_NOT_APPLY;
 }
 
-static int golan_vm_applies ( struct settings *settings __unused ) {
-	return DOES_NOT_APPLY;
-}
-
 static int shomron_virt_read ( struct driver_settings *settings ) {
 	struct flexboot_nodnic *flexboot_nodnic = ( struct flexboot_nodnic * ) settings->drv_priv;
 	struct nv_conf_defaults *defaults = ( struct nv_conf_defaults * ) settings->defaults;
 	union golan_nv_virt_conf nv_virt_conf;
+	union golan_nv_virt_caps nv_virt_caps;
 	struct nv_conf *conf = ( struct nv_conf * ) settings->priv_data;
 	struct driver_tlv_header tlv_hdr;
 	int rc;
+
+	memset ( &nv_virt_caps, 0, sizeof ( nv_virt_caps ) );
+	memset ( &tlv_hdr, 0, sizeof ( tlv_hdr ) );
+	tlv_hdr.type = GLOPAL_PCI_CAPS_TYPE;
+	tlv_hdr.length = sizeof ( nv_virt_caps );
+	tlv_hdr.data = &nv_virt_caps;
+	if ( ( rc = settings->callbacks.tlv_read ( flexboot_nodnic, &tlv_hdr ) ) ) {
+		DBGC ( flexboot_nodnic, "Failed to read global PCI capabilities\n" );
+	}
+	conf->virt_conf.sriov_support = nv_virt_caps.sriov_support;
+	conf->max_num_of_vfs_supported = nv_virt_caps.max_vfs_per_pf;
 
 	memset ( &nv_virt_conf, 0, sizeof ( nv_virt_conf ) );
 	memset ( &tlv_hdr, 0, sizeof ( tlv_hdr ) );
@@ -97,8 +105,8 @@ static int shomron_virt_nv_store ( struct driver_settings *driver_settings ) {
 }
 
 static struct driver_setting_operation golan_setting_ops[] = {
-	{ &virt_mode_setting,	&golan_vm_applies, NULL, &shomron_virt_nv_store, &shomron_virt_read },
-	{ &virt_num_setting, NULL, NULL, &shomron_virt_nv_store, &shomron_virt_read },
+	{ &virt_mode_setting,	NULL, NULL, &shomron_virt_nv_store, &shomron_virt_read },
+	{ &virt_num_setting, 	NULL, NULL, &shomron_virt_nv_store, &shomron_virt_read },
 	{ &blink_leds_setting,	&golan_blink_leds_applies, NULL, NULL, NULL },
 	{ &wol_setting,			&golan_wol_applies, NULL, NULL, NULL },
 };

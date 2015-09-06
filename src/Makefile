@@ -87,6 +87,7 @@ SRCDIRS         += drivers/infiniband/mlx_utils_flexboot/src/
 SRCDIRS         += drivers/infiniband/mlx_utils/src/public
 SRCDIRS         += drivers/infiniband/mlx_utils/mlx_lib/mlx_reg_access/
 SRCDIRS         += drivers/infiniband/mlx_utils/mlx_lib/mlx_nvconfig/
+SRCDIRS         += drivers/infiniband/mlx_utils/mlx_lib/mlx_vmac/
 SRCDIRS         += drivers/infiniband/mlx_nodnic/src
 SRCDIRS		+= drivers/usb
 SRCDIRS		+= interface/pxe interface/efi interface/smbios

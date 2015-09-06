@@ -33,8 +33,16 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define MLX_ICMD_SEMAPHORE_ID 1234
 
 enum {
-    FLASH_REG_ACCESS        = 0x9001,
-    GET_FW_INFO             = 0x8007,
+	FLASH_REG_ACCESS	= 0x9001,
+	GET_FW_INFO			= 0x8007,
+	QUERY_VIRTUAL_MAC	= 0x9003,
+	SET_VIRTUAL_MAC		= 0x9004,
+	OCSD_INIT			= 0xf004,
+};
+
+struct mlx_icmd_ocsd {
+	mlx_uint32 reserved;
+	mlx_uint64 address;
 };
 
 mlx_status

@@ -29,9 +29,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  * after a valid DHCPOFFER is received.  We'll wait through this
  * timeout for it.  The PXE spec indicates waiting through the 4 & 8
  * second timeouts, iPXE by default stops after 2.
+ * FlexBoot waits for 16 seconds to be legacy compatible and give more time
+ * for proxy offers to be recevied
  */
 //#define DHCP_DISC_PROXY_TIMEOUT_SEC	2
-#define DHCP_DISC_PROXY_TIMEOUT_SEC	11	/* as per PXE spec */
+//#define DHCP_DISC_PROXY_TIMEOUT_SEC	11	/* as per PXE spec */
+#define DHCP_DISC_PROXY_TIMEOUT_SEC    16
 
 /*
  * Per the PXE spec, requests are also tried 4 times, but at timeout
@@ -49,10 +52,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /*
  * A ProxyDHCP offer without PXE options also goes through a request
  * phase using these same parameters, but note the early break below.
+ * FlexBoot uses a timeout of 49 for legacy compatibility
  */
 #define DHCP_PROXY_START_TIMEOUT_SEC	0
 //#define DHCP_PROXY_END_TIMEOUT_SEC	10
-#define DHCP_PROXY_END_TIMEOUT_SEC	8	/* as per PXE spec */
+//#define DHCP_PROXY_END_TIMEOUT_SEC	8	/* as per PXE spec */
+#define DHCP_PROXY_END_TIMEOUT_SEC	49
 
 /*
  * A ProxyDHCP request timeout should not induce a failure condition,
@@ -79,8 +84,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  * Increment to the next PXE Boot server, if available, after this
  * this much time has elapsed.
  */
-//#define PXEBS_MAX_TIMEOUT_SEC		3
-#define PXEBS_MAX_TIMEOUT_SEC		7	/* as per PXE spec */
+#define PXEBS_MAX_TIMEOUT_SEC		3
+//#define PXEBS_MAX_TIMEOUT_SEC		7	/* as per PXE spec */
 
 #include <config/local/dhcp.h>
 

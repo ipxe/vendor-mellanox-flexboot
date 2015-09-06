@@ -30,6 +30,17 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/driver_settings.h>
 
 /*
+ * Default values
+ */
+#define DEFAULT_FLEXBOOT_MENU_TO 14
+#define DEFAULT_MAX_VFS 8
+#define DEFAULT_BOOT_PROTOCOL 1
+#define DEFAULT_OPTION_ROM_EN 1
+#define DEFAULT_BOOT_VLAN 1
+#define DEFAULT_ISCSI_DHCP_PARAM_EN 1
+#define DEFAULT_ISCSI_IPV4_DHCP_EN 1
+
+/*
  * If defined, use interrupts in NODNIC driver
  */
 #define NODNIC_IRQ_ENABLED
@@ -175,8 +186,9 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 		void *drv_priv );
 void flexboot_nodnic_remove ( struct pci_device *pci );
 void flexboot_nodnic_eth_irq ( struct net_device *netdev, int enable );
-int flexboot_nodnic_link_type ( struct flexboot_nodnic_port_type *type );
 int flexboot_nodnic_is_supported ( struct pci_device *pci );
 void swab_settings_bits ( uint32 tlv_type, void *data, uint32_t length );
+void flexboot_nodnic_copy_mac ( uint8_t mac_addr[], uint32_t low_byte,
+		uint16_t high_byte );
 
 #endif /* SRC_DRIVERS_INFINIBAND_FLEXBOOT_NODNIC_FLEXBOOT_NODNIC_H_ */

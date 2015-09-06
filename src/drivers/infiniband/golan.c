@@ -43,6 +43,74 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "golan_settings.h"
 #include "mlx_bail.h"
 
+/******************************************************************************/
+/************* Very simple memory management for umalloced pages **************/
+/******* Temporary solution until full memory management is implemented *******/
+/******************************************************************************/
+#define GOLAN_PAGES	20
+struct golan_page {
+	struct list_head list;
+	userptr_t addr;
+};
+
+static void golan_free_pages ( struct list_head *head ) {
+	struct golan_page *page, *tmp;
+	list_for_each_entry_safe ( page, tmp, head, list ) {
+		list_del ( &page->list );
+		ufree ( page->addr );
+		free ( page );
+	}
+}
+
+static int golan_init_pages ( struct list_head *head ) {
+	struct golan_page *new_entry;
+	int rc, i;
+
+	if ( !head ) {
+		rc = -EINVAL;
+		goto err_golan_init_pages_bad_param;
+	}
+
+	INIT_LIST_HEAD ( head );
+
+	for ( i = 0; i < GOLAN_PAGES; i++ ) {
+		new_entry = zalloc ( sizeof ( *new_entry ) );
+		if ( new_entry == NULL ) {
+			rc = -ENOMEM;
+			goto err_golan_init_pages_alloc_page;
+		}
+		new_entry->addr = umalloc ( GOLAN_PAGE_SIZE );
+		if ( new_entry->addr == UNULL ) {
+			free ( new_entry );
+			rc = -ENOMEM;
+			goto err_golan_init_pages_alloc_page;
+		}
+		list_add ( &new_entry->list, head );
+	}
+
+	return 0;
+
+err_golan_init_pages_alloc_page:
+	golan_free_pages ( head );
+err_golan_init_pages_bad_param:
+	return rc;
+}
+
+static userptr_t golan_get_page ( struct list_head *head ) {
+	struct golan_page *page;
+	userptr_t addr;
+
+	if ( list_empty ( head ) )
+		return UNULL;
+
+	page = list_first_entry ( head, struct golan_page, list );
+	list_del ( &page->list );
+	addr = page->addr;
+	free ( page );
+	return addr;
+}
+
+/******************************************************************************/
 
 const char *golan_qp_state_as_string[] = {
 	"RESET",
@@ -431,7 +499,6 @@ static inline int golan_take_pages ( struct golan *golan, uint32_t pages, __be16
 			return rc;
 		}
 
-		/* TODO: validate RC */
 		pages -= out_num_entries;
 	}
 	DBGC( golan , "%s Pages handled\n", __FUNCTION__);
@@ -732,7 +799,7 @@ static int golan_create_eq(struct golan *golan)
 
 	eq->cons_index	= 0;
 	eq->size	= GOLAN_NUM_EQES * sizeof(eq->eqes[0]);
-	addr		= umalloc(GOLAN_PAGE_SIZE);
+	addr		= golan_get_page ( &golan->pages );
 	if (!addr) {
 		rc = -ENOMEM;
 		goto err_create_eq_eqe_alloc;
@@ -958,7 +1025,7 @@ static int golan_create_cq(struct ib_device *ibdev,
 		goto err_create_cq_db_alloc;
 	}
 
-	addr = umalloc(GOLAN_PAGE_SIZE);
+	addr = golan_get_page ( &golan->pages );
 	if (!addr) {
 		rc = -ENOMEM;
 		goto err_create_cq_cqe_alloc;
@@ -1080,8 +1147,10 @@ static int golan_create_qp_aux(struct ib_device *ibdev,
 	struct golan_create_qp_mbox_in_data *in;
 	struct golan_cmd_layout *cmd;
 	struct golan_create_qp_mbox_out *out;
-	int rc;
 	userptr_t addr;
+	uint32_t wqe_size_in_bytes;
+	uint32_t max_qp_size_in_wqes;
+	int rc;
 
 	golan_qp = zalloc(sizeof(*golan_qp));
 	if (!golan_qp) {
@@ -1090,21 +1159,28 @@ static int golan_create_qp_aux(struct ib_device *ibdev,
 	}
 
 	/* Calculate receive queue size */
-	golan_qp->rq.size = qp->recv.num_wqes * GOALN_RECV_WQE_SIZE;
-	if (golan_qp->rq.size > be16_to_cpu(golan->caps.max_wqe_sz_rq)) {	// CHECK THIS
-		printf("%s receive wq size [%d] > max size [%d]\n", __FUNCTION__,
-				golan_qp->rq.size, be16_to_cpu(golan->caps.max_wqe_sz_rq));
+	golan_qp->rq.size = qp->recv.num_wqes * GOLAN_RECV_WQE_SIZE;
+	if (GOLAN_RECV_WQE_SIZE > be16_to_cpu(golan->caps.max_wqe_sz_rq)) {
+		printf("%s receive wqe size [%d] > max wqe size [%d]\n", __FUNCTION__,
+				GOLAN_RECV_WQE_SIZE, be16_to_cpu(golan->caps.max_wqe_sz_rq));
 		rc = -EINVAL;
 		goto err_create_qp_rq_size;
 	}
 
+	wqe_size_in_bytes = GOLAN_WQEBBS_PER_SEND_WQE * GOLAN_SEND_WQE_BB_SIZE;
 	/* Calculate send queue size */
-	golan_qp->sq.size = GOLAN_WQEBBS_PER_SEND_WQE;
-	golan_qp->sq.size = (qp->send.num_wqes * (golan_qp->sq.size * GOLAN_SEND_WQE_BB_SIZE));
-	if (golan_qp->sq.size > be16_to_cpu(golan->caps.max_wqe_sz_sq)) {	// CHECK THIS
-		printf("%s send wq size [%d] > max size [%d]\n", __FUNCTION__,
-				golan_qp->sq.size,
+	if (wqe_size_in_bytes >	be16_to_cpu(golan->caps.max_wqe_sz_sq)) {
+		printf("%s send WQE size [%d] > max WQE size [%d]\n", __FUNCTION__,
+				wqe_size_in_bytes,
 				be16_to_cpu(golan->caps.max_wqe_sz_sq));
+		rc = -EINVAL;
+		goto err_create_qp_sq_wqe_size;
+	}
+	golan_qp->sq.size = (qp->send.num_wqes * wqe_size_in_bytes);
+	max_qp_size_in_wqes = (1 << ((uint32_t)(golan->caps.log_max_qp_sz)));
+	if (qp->send.num_wqes > max_qp_size_in_wqes) {
+		printf("%s send wq size [%d] > max wq size [%d]\n", __FUNCTION__,
+				golan_qp->sq.size, max_qp_size_in_wqes);
 		rc = -EINVAL;
 		goto err_create_qp_sq_size;
 	}
@@ -1112,7 +1188,7 @@ static int golan_create_qp_aux(struct ib_device *ibdev,
 	golan_qp->size = golan_qp->sq.size + golan_qp->rq.size;
 
 	/* allocate dma memory for WQEs (1 page is enough) - should change it */
-	addr = umalloc(GOLAN_PAGE_SIZE);
+	addr = golan_get_page ( &golan->pages );
 	if (!addr) {
 		rc = -ENOMEM;
 		goto err_create_qp_wqe_alloc;
@@ -1177,6 +1253,7 @@ err_create_qp_db_alloc:
 	ufree((userptr_t)golan_qp->wqes);
 err_create_qp_wqe_alloc:
 err_create_qp_sq_size:
+err_create_qp_sq_wqe_size:
 err_create_qp_rq_size:
 	free ( golan_qp );
 err_create_qp:
@@ -1447,7 +1524,7 @@ static int golan_post_send(struct ib_device *ibdev,
 	ctrl->opmod_idx_opcode	= cpu_to_be32(GOLAN_SEND_OPCODE |
 						  ((u32)(golan_qp->sq.next_idx) <<
 						  GOLAN_WQE_CTRL_WQE_IDX_BIT));
-	ctrl->qpn_ds		= cpu_to_be32(GOALN_SEND_WQE_SIZE >> 4) |
+	ctrl->qpn_ds		= cpu_to_be32(GOLAN_SEND_WQE_SIZE >> 4) |
 							  golan_qp->doorbell_qpn;
 	ctrl->fm_ce_se		= 0x8;//10 - 0 - 0
 	data			= &wqe->data;
@@ -2152,6 +2229,12 @@ static int golan_probe_normal ( struct pci_device *pci ) {
 		rc = -ENOMEM;
 		goto err_golan_alloc;
 	}
+
+	if ( golan_init_pages( &golan->pages ) ) {
+		rc = -ENOMEM;
+		goto err_golan_golan_init_pages;
+	}
+
 	/* Setup PCI bus and HCA BAR */
 	pci_set_drvdata( pci, golan );
 	golan->pci = pci;
@@ -2208,6 +2291,8 @@ err_golan_probe_alloc_ibdev:
 	golan_bring_down ( golan );
 err_golan_bringup:
 err_fw_ver_cmdif:
+	golan_free_pages( &golan->pages );
+err_golan_golan_init_pages:
 	free ( golan );
 err_golan_alloc:
 	printf ("%s rc = %d\n", __FUNCTION__, rc);
@@ -2234,6 +2319,8 @@ static void golan_remove_normal ( struct pci_device *pci ) {
 	}
 
 	golan_bring_down(golan);
+
+	golan_free_pages( &golan->pages );
 	free(golan);
 }
 

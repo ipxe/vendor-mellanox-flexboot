@@ -439,8 +439,7 @@ no_pmm:
 	pushw   init_pci_busdevfn
 	xorl	%ebx, %ebx
 	popw	%bx
-#if ( ! defined ( MLX_QEMU ) && ! defined ( DEVICE_CIB ) )
- #ifdef DEVICE_CX3
+#ifdef DEVICE_CX3
 	/*
 	 * reading ppf to check if there is driver up
 	 * having one indicates that this prefix is running while UEFI driver is up
@@ -451,21 +450,26 @@ no_pmm:
 	jnz	93f
 	call 	check_nv_cfg_en
 	call	get_flexboot_menu_to
-#elif defined(DEVICE_CX4)
+#endif /* DEVICE_CX3 */
+#ifdef DEVICE_CX4
 	call 	gw_get_cap_ofst
 	cmpb	$0 ,mlx_cap_ofst
    	/* on error skip other functions */
-    	je		93f
+    je		93f
+    call 	wait_fw_up
+    testl	%eax, %eax
+    jnz		93f
 	call 	check_nv_cfg_en
 	call	get_flexboot_menu_to
- #endif
+#endif /* DEVICE_CX4 */
+#if defined ( DEVICE_CX4 ) || defined ( DEVICE_CX3 )
 	/* push cs to make a 32 bit jump */
 	pushw	%cs
 	call	check_op_rom_en
  93:
-#endif
+#endif /* DEVICE_CX4 || DEVICE_CX3 */
    popw		%bx
-#endif
+#endif /* FLASH_CONFIGURATION */
 	/* Copy self to option ROM space, if applicable.  Required for
 	 * PCI3.0, which loads us to a temporary location in low
 	 * memory.  Will be a no-op for lower PCI versions.
@@ -669,13 +673,9 @@ init_post_shell:
 	.size   init_post_shell, . - init_post_shell
 
 flexboot_menu_to:
-#ifdef MLX_QEMU
-	/* due to a bug in QEMU running enviourment make sure time out is not zero */
-	.word 0x00d8
-#else
 	.word 0
-#endif
 	.size flexboot_menu_to, . - flexboot_menu_to
+
 #if defined(DEVICE_CX4) || defined(DEVICE_CIB)
 mlx_cap_ofst:
 	.byte 0
@@ -931,16 +931,14 @@ port_loop:
 	jnz	99f
 #endif
 delete_bev:
-#ifndef MLX_QEMU
 	movl	$0x0, %eax
 	movb    $0x0, (pnpheader + 0x1a)
 	movb    $0x0, (pnpheader + 0x1b)
-#endif
 99:
 	popl	%esi
 	lret
 	.size check_op_rom_en, . - check_op_rom_en
-#endif //FLASH_CONFIGURATION
+#endif /* FLASH_CONFIGURATION */
 
 /* Wait for key press specified by %bl (masked by %bh)
  *
@@ -1078,7 +1076,7 @@ my_pci_write_config_dword:
 #define	HCR_OUTPUT_H_OFFSET 0x8068C
 #define HCR_TOKEN_MOD_OFFSET 0x80694
 #define HCR_OFFSET 0x80698
-#define HCR_PPF_OFFSET 0x8069C
+#define HCR_PPF_OFFSET 0x1f724 
 #define HCR_TOKEN	 0xffff0000
 #define HCR_OPMOD_SHIFT 12
 #define	HCR_T_BIT 21
@@ -1140,12 +1138,15 @@ cmd_pend:
  .size	cmd_pend, . - cmd_pend
 
 test_device_ownership:
+	pushl	%edi
+	movw    $GW_ADDR_ADDR, %di
 	movl	$HCR_PPF_OFFSET, %eax
 	call 	gw_read_dword
+	popl	%edi
 	ret
 .size  test_device_ownership, . - test_device_ownership
 
-	
+
 /*
  * Description - check device NVMEM configuration enabled
  * IN  	       -  NON
@@ -1257,7 +1258,7 @@ read_tlv_ini_get_tlv:
 		and pass parameter to get_tlv_value */
 	movl	%ss:6(%ebp), %eax
 	/* place holder for the lower word of the returned QWORD */
-	pushl $0xffffffff;
+	pushl 	$0xffffffff;
 	/* push TLV entry offset */
 	movl	%ss:10(%ebp), %edx
 	pushl	%edx
@@ -1645,7 +1646,7 @@ get_num_ports:
 	cmpl    $0xffffffff, %eax
 	je	99f
 	shrl	$16, %eax
-	andl	$0xff, %eax 
+	andl	$0xff, %eax
 99:
 	ret
 .size get_num_ports, . -get_num_ports 
@@ -1891,15 +1892,18 @@ get_flexboot_menu_to:
 	call 	get_tlv_value
 	/* pop passed parameter */
 	addl    $8 , %esp
+	/* put returned status in edx */
+	movl	%eax, %edx
 	/* wanted result should be in lower dword */
 	popl	%eax
+	/* check if return faild status */
+	cmpl	$0xffffffff, %edx
+	jne		1f
+	movl	$DEFAULT_BANNER_TIMEOUT, %eax
+1:
 	/* %eax holds the wanted parameter */
 	andl	$ROM_BANNER_TO_TLV_MASK, %eax
-#ifdef MLX_QEMU
-/* due to a bug in QEMU running enviourment make sure time out is not zero */
-	movl 	$12, %eax
-#endif
-	movl $0, %edx
+	movl	$0, %edx
 	/* 18 * ax = (ax*16+ax*2) */
 	movw	%ax, %dx
 	shlw	$4, %ax
@@ -1928,8 +1932,8 @@ check_host_op_rom_en:
 	/* save edx/eax/ecx register to stack */
 	pushl	%edx
 	pushl	%ecx
-	/* place holder low dword of 64 bit value */
-	pushl	$0xffffffff
+	/* place holder low dword of 64 bit value, set default value to 1 */
+	pushl	$0x1
 	/* push TLV entry offset */
 	pushl	$OP_ROM_EN_TLV_OFST
 	/* push TLV type to the stack */
@@ -1943,19 +1947,19 @@ check_host_op_rom_en:
 	popl	%ecx
 	/* check failure */
 	cmpl	$0xffffffff, %eax
-	je		98f
+	je		1f
 	/* align wanted word to first word */
 	shrl	$16, %ecx
 	/* save option rom enable bit value */
 	movl	%ecx, %edx
 	/* legacy boot protocol check */
 	andl	$0xff, %ecx
-	jz		98f
+	jz		1f
    /* check enable option rom bit (use 15 insted of 31 cause already shifted) */
 	shrl	$15, %edx
 	movl	%edx, %ecx
 	andl	$0x1, %ecx
-98:
+1:
 	movl 	%ecx, %eax
 99:
 	popl	%ecx
@@ -2051,9 +2055,7 @@ cap_loop:
 1:
 	movw	%di, %ax
 	movb	%al, mlx_cap_ofst
-#ifdef MLX_QEMU
-	movb	$MLX_SPECIFIC_CAP_OFST,mlx_cap_ofst
-#endif
+
 	/* Restore registers  values */
 	popl	%edi
 	popl	%ecx
@@ -2539,13 +2541,62 @@ write_nv_access:
 	ret
 .size write_nv_access, . - write_nv_access
 
+#define FW_INIALIZATION_TIMEOUT_IN_TICKS 180
+#define PCI_GW_SPACE_NODNIC 0x4
+#define PCI_GW_SPACE_NODNIC_INIT_DWORD_OFST 0x1fc
+#define INIT_BIT_MASK	0x80000000
+/* wait_fw_up:
+*	waits until firmware up bit at Nodnic space (offset 0x1fc) is cleared
+*	or a timeout of 10 sec is up.
+*
+* Parameters:
+*   %bx  : PCI bus:dev.fn
+* Returns:
+*   %eax: 1 = if timeout expired and fw initialization bit is not cleared.
+*		  0 = fw initialization bit is cleared.
+*/
+wait_fw_up:
+	pushl	%edx
+	pushl	%esi
+	/* hold gw ownership */
+	call	gw_hold_ownership
+	testl	%eax, %eax
+	jz 		99f
+	movl	$FW_INIALIZATION_TIMEOUT_IN_TICKS, %esi
+retry_check:
+	/* Nodnic space */
+	movw	$PCI_GW_SPACE_NODNIC, %ax
+	/* offset in Nodnic space */
+	movl	$PCI_GW_SPACE_NODNIC_INIT_DWORD_OFST,%edx
+	call	gw_read_from_space
+	andl	$INIT_BIT_MASK, %eax
+	testl	%eax, %eax
+	jz		1f
+	call	wait_for_tick
+	decl	%esi
+	jns		retry_check /* jump if ZF not cleared */
+	movl	$0x1, %eax
+1:
+	call	gw_release_ownership
+99:
+	popl	%esi
+	popl	%edx
+	ret
+
+.size wait_fw_up, . - wait_fw_up
+
 /*
 * IN -  eax : port number or 0 for NON per port settings
-		%esp :
+*		bx  : PCI bus:dev.fn
+*		esp :
 *			 [esp] + 2  = TLV_TYPE
 *			 [esp] + 6  = TLV_ENTRY_OFFST
 * OUT - eax : high of the 64 bit or FFFFFFFF on failure
 *			[esp] + 10	= lower part of the 64 bit returned value from tlv
+*						 or zero on case of error.
+* Notes:
+* if GW hold ownership fails, then [esp] + 10 will not set to zero,
+* to keep option of default value in case of hold ownership failure.
 */
 get_tlv_value:
 /* save ebp register on stack */
@@ -2555,20 +2606,27 @@ get_tlv_value:
 	/* Preserve registers values */
 	pushl	%edx
 	pushl	%esi
-
-	/* save port number in esi cause some function change %eax value*/
+	/* save port number in esi cause gw_hold_ownership may change %eax value*/
 	movl	%eax, %esi
 	/* hold gw ownership */
 	call	gw_hold_ownership
-	testl	%eax, %eax
+	movl	%eax, %edx
+	movl	$0xffffffff, %eax
+	testl	%edx, %edx
 	/* exit if failed to hold owner ship */
-	jz 	101f
+	jz 		99f
+	/* return value of 0 in case of any error from this point on */
+	movl	$0x0, %ss:14(%ebp)
 	/* hold "Tools ICMD" semaphore in common semaphore space */
 	movl	$MLX_ICMD_SEMAPHORE_ADDR,%edx
 	call 	hold_common_semaphore
-	testl	%eax, %eax
-	/* exit if failed to hold owner ship */
-	jz 	100f
+	movl	%eax, %edx
+	movl	$0xffffffff, %eax
+	testl	%edx, %edx
+	/* exit if failed to hold ICMD semaphore */
+	jz 		3f
+	/* by default return 1 on stack */
+	movl	$0x1, %ss:14(%ebp)
 	/* busy is set to 0 */
 	pushl	$0x0
 	/* set op code */
@@ -2578,7 +2636,6 @@ get_tlv_value:
 
 	/* access_type read ( = 1) */
 	pushl	$OP_TLV_READ_ACCESS_TYPE
-	//pushl	$0x2 //$OP_TLV_WRITE_ACCESS_TYPE
 	/* set op code */
 	pushl	$REG_ID_NVDA
 	call 	write_op_tlv
@@ -2608,9 +2665,8 @@ get_tlv_value:
 	pushl	$FLASH_REG_ACCESS
 	call 	icmd_access
 	addl	$0x8, %esp
-
 	cmpl	$0x0, %eax
-	jne		98f
+	jne		1f
 	/* read MB (lower dword) will be on stack */
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	movl	$TLV_ENTRIES_BASE_OFFSET, %edx
@@ -2621,19 +2677,19 @@ get_tlv_value:
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	addl	$0x4, %edx
 	call	gw_read_from_space
-	jmp		99f
-98:
+	jmp		2f
+1:
 	/* error code */
-	movl	$0xfffffff, %eax
+	movl	$0xffffffff, %eax
 
-99:
+2:
 	/* release "Tools ICMD" semaphore in common semaphore space */
-	movl	$MLX_ICMD_SEMAPHORE_ADDR,%edx
+	movl	$MLX_ICMD_SEMAPHORE_ADDR, %edx
 	call 	release_common_semaphore
-100:
+3:
 	/* release gw ownership */
 	call 	gw_release_ownership
-101:
+99:
 	/* restore registers values */
 	popl	%esi
 	popl	%edx

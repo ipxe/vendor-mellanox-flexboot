@@ -4211,7 +4211,7 @@ void hermon_eth_release_steer ( struct ib_device *ibdev,
 
 	list_for_each_entry_safe ( mgid, tmp, &eth_qp->mgids, list ) {
 		memcpy ( &gid, &mgid->gid, sizeof ( union ib_gid ) );
-		hermon_mcast_detach ( ibdev, eth_qp, &gid );
+		ib_mcast_detach ( ibdev, eth_qp, &gid );
 	}
 
 	in_mod = ( ( MLX4_MC_STEER << 1 ) |
@@ -4488,7 +4488,9 @@ static void hermon_eth_close ( struct net_device *netdev ) {
 	hermon_eth_release_steer ( ibdev, port->eth_qp );
 	/* Tear down the queues */
 	ib_destroy_qp ( ibdev, port->eth_qp );
+	port->eth_qp = NULL;
 	ib_destroy_cq ( ibdev, port->eth_cq );
+	port->eth_cq = NULL;
 
 	/* Close hardware */
 	hermon_close ( hermon );
@@ -5229,7 +5231,7 @@ static int hermon_probe_normal ( struct pci_device *pci ) {
 			if ( ( rc = vlan_create ( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id, 1 ) ) )
 				DBGC ( hermon, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
 			else if ( ( vlan = vlan_find( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id ) ) )
-				copy_netdev_settings_to_netdev ( port->netdev, vlan );
+				move_trunk_settings_to_vlan ( port->netdev, vlan );
 			else
 				DBGC ( hermon, "Failed to find the VLAN device (rc = %d)\n", rc );
 		}
@@ -5317,6 +5319,7 @@ static int hermon_nodnic_supported = 0;
 static int hermon_read_flash_for_nodnic ( struct hermon *hermon ) {
 	struct driver_settings *driver_settings;
 	struct hermon_port *port;
+	struct hermonprm_query_port_cap query_port;
 	int rc;
 	unsigned int i;
 
@@ -5353,6 +5356,15 @@ static int hermon_read_flash_for_nodnic ( struct hermon *hermon ) {
 		driver_settings->priv_data					= & ( port->port_nv_conf );
 		driver_settings->defaults					= & ( port->defaults );
 		driver_settings_get_port_nvdata ( driver_settings, i + 1 );
+
+		if ( ( rc = hermon_cmd_query_port ( hermon, i + 1, &query_port ) ) != 0 ) {
+			printf ( "%s: port %d could not query port: %s\n", __FUNCTION__,
+			       i + 1, strerror ( rc ) );
+		} else {
+			flexboot_nodnic_copy_mac ( port->port_nv_conf.phys_mac,
+					MLX_GET ( &query_port, fac_mac_31_0 ),
+					MLX_GET ( &query_port, fac_mac_47_32 ) );
+		}
 	}
 
 	DBGC ( hermon, "NODNIC settings read from flash\n" );
@@ -5531,8 +5543,10 @@ static mlx_size hermon_nodnic_get_cqe_size ( void ) {
 static void hermon_nodnic_get_settings ( struct flexboot_nodnic *priv, void *drv_data ) {
 	struct hermon *hermon = ( struct hermon * ) drv_data;
 	int i = 0;
+
 	if ( ! priv || ! hermon ) {
 		printf ( "%s: Bad parameter\n", __FUNCTION__ );
+		return;
 	}
 
 	memcpy ( & priv->nodnic_nv_conf, & hermon->hermon_nv_conf,

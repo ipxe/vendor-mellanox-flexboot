@@ -56,13 +56,6 @@ static int hermon_blink_leds_applies ( struct settings *settings ) {
 	return hermon->cap.port_beacon;
 }
 
-static int hermon_vm_applies ( struct settings *settings ) {
-	struct driver_settings* driver_settings = get_driver_settings_from_settings ( settings );
-	struct hermon *hermon = ( struct hermon * ) driver_settings->drv_priv;
-
-	return hermon->cap.nv_config_flags.nv_config_sriov_en;
-}
-
 static int hermon_virt_nv_store ( struct driver_settings *driver_settings ) {
 	struct hermon *hermon = ( struct hermon * ) driver_settings->drv_priv;
 	union hermon_nv_virt_conf nv_virt_conf;
@@ -103,15 +96,16 @@ static int hermon_virt_read ( struct driver_settings *settings ) {
 	tlv_hdr.length = sizeof ( nv_virt_conf );
 	tlv_hdr.data = &nv_virt_conf;
 
-	if ( ( rc = settings->callbacks.tlv_read ( hermon,
-			& tlv_hdr ) != 0 ) ) {
+	if ( ( rc = settings->callbacks.tlv_read ( hermon, &tlv_hdr ) ) ) {
 		nv_virt_conf.num_of_vfs = defaults->total_vfs;
 		nv_virt_conf.virt_mode = defaults->sriov_en;
 	}
 
 	conf->virt_conf.sriov_valid = 1;
+	conf->virt_conf.sriov_support = hermon->cap.nv_config_flags.nv_config_sriov_en;
 	conf->virt_conf.virt_mode = nv_virt_conf.virt_mode;
 	conf->virt_conf.num_of_vfs = nv_virt_conf.num_of_vfs;
+	conf->max_num_of_vfs_supported = hermon->defaults.max_vfs;
 
 	return rc;
 }
@@ -175,8 +169,8 @@ static int blink_leds_store ( struct settings *settings, const void *data,
 }
 
 static struct driver_setting_operation hermon_setting_ops[] = {
-	{ &virt_mode_setting, &hermon_vm_applies, NULL, &hermon_virt_nv_store, &hermon_virt_read },
-	{ &virt_num_setting, NULL, NULL, &hermon_virt_nv_store, &hermon_virt_read },
+	{ &virt_mode_setting, 	NULL, NULL, &hermon_virt_nv_store, &hermon_virt_read },
+	{ &virt_num_setting, 	NULL, NULL, &hermon_virt_nv_store, &hermon_virt_read },
 	{ &blink_leds_setting,	&hermon_blink_leds_applies, &blink_leds_store, NULL, NULL },
 	{ &wol_setting,			&hermon_wol_applies, NULL, NULL, NULL },
 };
@@ -197,7 +191,6 @@ static void hermon_close_wrapper ( void *priv ) {
 int hermon_init_port_settings ( struct hermon *hermon, struct hermon_port *port ) {
 	struct driver_settings *driver_settings = & ( port->driver_settings );
 
-	/* TODO: Need to update also after NODNIC IS STARTED */
 	driver_settings->callbacks.open_dev			= hermon_open_wrapper;
 	driver_settings->callbacks.close_dev		= hermon_close_wrapper;
 	driver_settings->callbacks.set_default		= NULL;

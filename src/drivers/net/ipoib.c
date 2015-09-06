@@ -957,9 +957,12 @@ static void ipoib_close ( struct net_device *netdev ) {
 
 	/* Tear down the queues */
 	ib_destroy_qp ( ibdev, ipoib->qp );
+	ipoib->qp = NULL;
 
 	ib_destroy_cq ( ibdev, ipoib->rx_cq );
+	ipoib->rx_cq = NULL;
 	ib_destroy_cq ( ibdev, ipoib->tx_cq );
+	ipoib->tx_cq = NULL;
 
 	/* Close IB device */
 	ib_close ( ibdev );

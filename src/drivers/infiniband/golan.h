@@ -116,9 +116,9 @@ struct golan_uar {
 
 /* Queue Pair */
 #define GOLAN_SEND_WQE_BB_SIZE		64
-#define GOALN_SEND_WQE_SIZE			sizeof(struct golan_send_wqe_ud)
-#define GOALN_RECV_WQE_SIZE			sizeof(struct golan_recv_wqe_ud)
-#define GOLAN_WQEBBS_PER_SEND_WQE	DIV_ROUND_UP(GOALN_SEND_WQE_SIZE, GOLAN_SEND_WQE_BB_SIZE)
+#define GOLAN_SEND_WQE_SIZE			sizeof(struct golan_send_wqe_ud)
+#define GOLAN_RECV_WQE_SIZE			sizeof(struct golan_recv_wqe_ud)
+#define GOLAN_WQEBBS_PER_SEND_WQE	DIV_ROUND_UP(GOLAN_SEND_WQE_SIZE, GOLAN_SEND_WQE_BB_SIZE)
 #define GOLAN_SEND_OPCODE			0x0a
 #define GOLAN_WQE_CTRL_WQE_IDX_BIT	8
 
@@ -311,14 +311,14 @@ struct golan_mboxes {
 union golan_nv_virt_conf {
 	struct {
 		uint32_t reserved0				:24;
-		uint32_t sriov_valid			:1;
-		uint32_t full_vf_qos_valid		:1;
-		uint32_t fpp_valid				:1;
-		uint32_t num_pfs_valid			:1;
-		uint32_t num_vf_msix_valid		:1;
-		uint32_t num_pf_msix_valid		:1;
-		uint32_t vf_bar_size_valid		:1;
 		uint32_t pf_bar_size_valid		:1;
+		uint32_t vf_bar_size_valid		:1;
+		uint32_t num_pf_msix_valid		:1;
+		uint32_t num_vf_msix_valid		:1;
+		uint32_t num_pfs_valid			:1;
+		uint32_t fpp_valid				:1;
+		uint32_t full_vf_qos_valid		:1;
+		uint32_t sriov_valid			:1;
 		/*-------------------*/
 		uint32_t num_of_vfs				:16;
 		uint32_t num_of_pfs				:4;
@@ -335,6 +335,37 @@ union golan_nv_virt_conf {
 	uint32_t dword[3];
 };
 
+union golan_nv_virt_caps {
+	struct {
+		uint32_t reserved0				:24;
+		uint32_t max_vfs_per_pf_valid	:1;
+		uint32_t max_total_msix_valid	:1;
+		uint32_t max_total_bar_valid	:1;
+		uint32_t num_pfs_supported		:1;
+		uint32_t num_vf_msix_supported	:1;
+		uint32_t num_pf_msix_supported	:1;
+		uint32_t vf_bar_size_supported	:1;
+		uint32_t pf_bar_size_supported	:1;
+		/*-------------------*/
+		uint32_t max_vfs_per_pf			:16;
+		uint32_t max_num_pfs			:4;
+		uint32_t reserved1				:9;
+		uint32_t fpp_support			:1;
+		uint32_t vf_qos_control_support	:1;
+		uint32_t sriov_support			:1;
+		/*-------------------*/
+		uint32_t max_log_pf_uar_bar_size	:6;
+		uint32_t max_log_vf_uar_bar_size	:6;
+		uint32_t max_num_pf_msix			:10;
+		uint32_t max_num_vf_msix			:10;
+		/*-------------------*/
+		uint32_t max_total_msix;
+		/*-------------------*/
+		uint32_t max_total_bar;
+	};
+	uint32_t dword[5];
+};
+
 #define GOLAN_OPEN	0x1
 
 struct golan {
@@ -343,6 +374,7 @@ struct golan {
 	struct golan_cmdq_md		cmd;
 	struct golan_hca_cap		caps; /* stored as big indian*/
 	struct golan_mboxes		mboxes;
+	struct list_head		pages;
 	uint32_t			cmd_bm;
 	uint32_t			total_dma_pages;
 	struct golan_uar		uar;

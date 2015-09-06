@@ -194,7 +194,9 @@ struct setting phy_mac_setting __setting ( SETTING_FLEXBOOT, phy_mac ) = {
 	.description = "Physical MAC Address",
 	.type = &setting_type_string,
 	.scope = &port_scope,
-	.hidden = 0,
+#ifdef DEVICE_CX4
+	.hidden = 1,
+#endif
 };
 
 struct extended_setting ext_physical_mac __table_entry ( NV_CONFIG, 01 ) = {
@@ -375,6 +377,7 @@ struct setting iscsi_boot_to_target_setting __setting( SETTING_FLEXBOOT, iscsi_b
 	.description = "Boot to target",
 	.type = &setting_type_string,
 	.scope = &iscsi_general_scope,
+	.hidden = 1,
 };
 
 struct extended_setting ext_iscsi_boot_to_target __table_entry ( NV_CONFIG, 01 ) = {
@@ -1754,6 +1757,25 @@ int flexboot_menu_to_restore ( struct settings *settings, const void *data,
 	return SUCCESS;
 }
 
+static int driver_settings_vlan_applies ( struct settings *settings ) {
+	struct driver_settings* driver_settings = get_driver_settings_from_settings ( settings );
+	struct net_device *netdev = ( struct net_device * ) driver_settings->netdev;
+
+	if ( netdev->ll_protocol->name[0] == 'I' )
+		return DOES_NOT_APPLY;
+
+	return APPLIES;
+}
+
+static int driver_settings_pkey_applies ( struct settings *settings ) {
+	return ( ! driver_settings_vlan_applies ( settings ) );
+}
+
+static int driver_settings_sriov_applies ( struct settings *settings ) {
+	struct driver_settings* driver_settings = get_driver_settings_from_settings ( settings );
+	return ( ( struct nv_conf * )( driver_settings->priv_data ) )->virt_conf.sriov_support;
+}
+
 /*
  * driver_setting_operation structure layout:
  * setting		- the actual setting
@@ -1765,8 +1787,8 @@ int flexboot_menu_to_restore ( struct settings *settings, const void *data,
  *
  */
 static struct driver_setting_operation driver_setting_operations[] = {
-	{ &virt_mode_setting,			NULL, &virt_mode_restore, NULL, NULL },
-	{ &virt_num_setting,			NULL, &virt_num_check_or_restore, NULL, NULL },
+	{ &virt_mode_setting,			&driver_settings_sriov_applies, &virt_mode_restore, NULL, NULL },
+	{ &virt_num_setting,			&driver_settings_sriov_applies, &virt_num_check_or_restore, NULL, NULL },
 	{ &virt_num_max_setting,		NULL, NULL, NULL, NULL },
 	{ &blink_leds_setting,			NULL, NULL, NULL, NULL },
 	{ &device_name_setting, 		NULL, NULL, NULL, NULL },
@@ -1779,12 +1801,12 @@ static struct driver_setting_operation driver_setting_operations[] = {
 	{ &flex_version_setting,		NULL, NULL, NULL, NULL },
 	{ &fw_version_setting,			NULL, NULL, NULL, NULL },
 	{ &boot_protocol_setting, 		NULL, &boot_protocol_restore, &nic_boot_nv_store, NULL },
-	{ &virt_lan_setting,			NULL, &virt_lan_restore, &nic_boot_nv_store, NULL },
-	{ &virt_id_setting,				NULL, &virt_id_check_or_restore, &nic_boot_nv_store, NULL },
+	{ &virt_lan_setting,			&driver_settings_vlan_applies, &virt_lan_restore, &nic_boot_nv_store, NULL },
+	{ &virt_id_setting,				&driver_settings_vlan_applies, &virt_id_check_or_restore, &nic_boot_nv_store, NULL },
 	{ &opt_rom_setting,				NULL, &opt_rom_restore, &nic_boot_nv_store, NULL },
 	{ &boot_retries_setting,		NULL, &boot_retries_restore, &nic_boot_nv_store, NULL },
 	{ &wol_setting,					NULL, NULL, &wol_nv_store, NULL },
-	{ &boot_pkey_setting,			NULL, &boot_pkey_restore, &nic_ib_boot_nv_store, NULL },
+	{ &boot_pkey_setting,			&driver_settings_pkey_applies, &boot_pkey_restore, &nic_ib_boot_nv_store, NULL },
 	{ &dhcp_ip_setting,				NULL, &dhcp_ip_restore, &dhcp_flags_nv_store, NULL },
 	{ &dhcp_iscsi_setting,			NULL, &dhcp_iscsi_restore, &dhcp_flags_nv_store, NULL },
 	{ &iscsi_chap_setting,			NULL, &iscsi_chap_restore, &iscsi_gen_flags_nv_store, NULL },
@@ -1843,14 +1865,16 @@ struct driver_setting_operation * find_setting_ops ( const struct setting *setti
 /******************************************************************************/
 /******************************************************************************/
 
-void copy_netdev_settings_to_netdev ( struct net_device *src, struct net_device *dest ) {
+void move_trunk_settings_to_vlan ( struct net_device *src, struct net_device *dest ) {
 	char buf[MAX_STR_SETTING_BUF_SIZE];
 	int i = 0;
 
 	for ( i = 0; ipxe_iscsi_settings[i] != NULL; i++ ) {
 		memset ( buf, 0, sizeof ( buf ) );
-		if ( fetchf_setting ( netdev_settings ( src ), ipxe_iscsi_settings[i], NULL, NULL, buf, sizeof ( buf ) ) > 0 )
+		if ( fetchf_setting ( netdev_settings ( src ), ipxe_iscsi_settings[i], NULL, NULL, buf, sizeof ( buf ) ) > 0 ) {
 			storef_setting( netdev_settings ( dest ), ipxe_iscsi_settings[i], buf );
+			storef_setting( netdev_settings ( src ), ipxe_iscsi_settings[i], NULL );
+		}
 	}
 }
 
@@ -2586,7 +2610,9 @@ static void driver_flash_read_iscsi_general ( struct driver_settings *driver_set
 			( struct nv_port_conf_defaults * ) & ( driver_settings->defaults );
 	int rc = 0;
 	uint32_t version = 0;
+#if 0
 	union nv_iscsi_general swapped;
+#endif
 
 	rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_GENERAL_SETTINGS_TYPE, port_num, sizeof ( *gen_conf ), &version , gen_conf );
@@ -2611,6 +2637,11 @@ static void driver_flash_read_iscsi_general ( struct driver_settings *driver_set
 		gen_conf->boot_to_target		= defaults->iscsi_boot_to_target;
 	}
 
+	/*
+	 * This feature is disabled for now - Use default behavior (enabled always)
+	 */
+	gen_conf->boot_to_target = ISCSI_BOOT_TO_TARGET_ENABLE;
+#if 0
 	if ( ! boot_post_shell &&
 		 ( gen_conf->boot_to_target == ISCSI_BOOT_TO_TARGET_ONE_TIME_DISABLE ) ) {
 		gen_conf->boot_to_target = ISCSI_BOOT_TO_TARGET_ENABLE;
@@ -2627,6 +2658,7 @@ static void driver_flash_read_iscsi_general ( struct driver_settings *driver_set
 			return;
 		}
 	}
+#endif
 }
 
 static int driver_flash_read_iscsi_config( struct driver_settings *driver_settings,
