@@ -453,6 +453,15 @@ static int ncm_open ( struct net_device *netdev ) {
 		goto err_set_ntb_input_size;
 	}
 
+	/* Set MAC address */
+	if ( ( rc = usb_control ( usb, NCM_SET_NET_ADDRESS, 0,
+				  ncm->usbnet.comms, netdev->ll_addr,
+				  netdev->ll_protocol->ll_addr_len ) ) != 0 ) {
+		DBGC ( ncm, "NCM %p could not set MAC address: %s\n",
+		       ncm, strerror ( rc ) );
+		/* Ignore error and continue */
+	}
+
 	/* Open USB network device */
 	if ( ( rc = usbnet_open ( &ncm->usbnet ) ) != 0 ) {
 		DBGC ( ncm, "NCM %p could not open: %s\n",
@@ -655,11 +664,6 @@ static struct usb_device_id ncm_ids[] = {
 		.name = "cdc-ncm",
 		.vendor = USB_ANY_ID,
 		.product = USB_ANY_ID,
-		.class = {
-			.class = USB_CLASS_CDC,
-			.subclass = USB_SUBCLASS_CDC_NCM,
-			.protocol = 0,
-		},
 	},
 };
 
@@ -667,6 +671,8 @@ static struct usb_device_id ncm_ids[] = {
 struct usb_driver ncm_driver __usb_driver = {
 	.ids = ncm_ids,
 	.id_count = ( sizeof ( ncm_ids ) / sizeof ( ncm_ids[0] ) ),
+	.class = USB_CLASS_ID ( USB_CLASS_CDC, USB_SUBCLASS_CDC_NCM, 0 ),
+	.score = USB_SCORE_NORMAL,
 	.probe = ncm_probe,
 	.remove = ncm_remove,
 };

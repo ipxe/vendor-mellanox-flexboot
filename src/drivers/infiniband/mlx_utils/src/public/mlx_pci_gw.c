@@ -25,7 +25,8 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_pci.h"
 #include "mlx_logging.h"
 
-
+/* Lock/unlock GW on each VSEC access */
+#undef VSEC_DEBUG
 
 static
 mlx_status
@@ -233,7 +234,7 @@ mlx_pci_gw_init(
 	MLX_CHECK_STATUS(utils, status, cap_err,
 					"mlx_pci_gw_search_capability failed");
 
-#if defined ( DEVICE_CX3 )
+#if ! defined ( VSEC_DEBUG )
 	status = mlx_pci_gw_get_ownership(utils);
 	MLX_CHECK_STATUS(utils, status, ownership_err,"failed to get ownership");
 ownership_err:
@@ -248,7 +249,7 @@ mlx_pci_gw_teardown(
 		IN mlx_utils *utils __attribute__ ((unused))
 		)
 {
-#if defined ( DEVICE_CX3 )
+#if ! defined ( VSEC_DEBUG )
 	mlx_pci_gw_free_ownership(utils);
 #endif
 	return MLX_SUCCESS;
@@ -266,15 +267,17 @@ mlx_pci_gw_read(
 	mlx_pci_gw 		*pci_gw = NULL;
 	mlx_uint32		cap_offset = 0;
 
-	if( utils == NULL || buffer == NULL || utils->pci_gw.pci_cmd_offset == 0){
+	if (utils == NULL || buffer == NULL || utils->pci_gw.pci_cmd_offset == 0) {
 		status = MLX_INVALID_PARAMETER;
 		goto bad_param;
 	}
 
+	mlx_utils_acquire_lock(utils);
+
 	pci_gw = &utils->pci_gw;
 	cap_offset = pci_gw->pci_cmd_offset;
 
-#if defined ( DEVICE_CX3 )
+#if ! defined ( VSEC_DEBUG )
 	if (pci_gw->space != space) {
 		   status = mlx_pci_gw_set_space(utils, space);
 		   MLX_CHECK_STATUS(utils, status, space_error,"failed to set space");
@@ -292,8 +295,10 @@ mlx_pci_gw_read(
 	status = mlx_pci_write(utils, MlxPciWidthUint32, cap_offset + PCI_GW_CAPABILITY_ADDRESS_OFFSET, 1, &address);
 	MLX_CHECK_STATUS(utils, status, read_error,"failed to write capability address");
 
+#if defined ( DEVICE_CX3 )
 	/* WA for PCI issue (race) */
 	mlx_utils_delay_in_us ( 10 );
+#endif
 
 	status = mlx_pci_gw_wait_for_flag_value(utils, TRUE);
 	MLX_CHECK_STATUS(utils, status, read_error, "flag failed to change");
@@ -301,19 +306,21 @@ mlx_pci_gw_read(
 	status = mlx_pci_read(utils, MlxPciWidthUint32, cap_offset + PCI_GW_CAPABILITY_DATA_OFFSET, 1, buffer);
 	MLX_CHECK_STATUS(utils, status, read_error,"failed to read capability data");
 
-#if ! defined ( DEVICE_CX3 )
+#if defined ( VSEC_DEBUG )
 	status = mlx_pci_gw_free_ownership(utils);
 	MLX_CHECK_STATUS(utils, status, free_err,
 						"mlx_pci_gw_free_ownership failed");
 free_err:
+	mlx_utils_release_lock(utils);
 	return status;
 #endif
 read_error:
 space_error:
-#if ! defined ( DEVICE_CX3 )
+#if defined ( VSEC_DEBUG )
 	mlx_pci_gw_free_ownership(utils);
 ownership_err:
 #endif
+mlx_utils_release_lock(utils);
 bad_param:
 	return status;
 }
@@ -331,15 +338,17 @@ mlx_pci_gw_write(
 	mlx_uint32		cap_offset = 0;
 	mlx_uint32		fixed_address = address | PCI_GW_WRITE_FLAG;
 
-	if( utils == NULL || utils->pci_gw.pci_cmd_offset == 0){
+	if (utils == NULL || utils->pci_gw.pci_cmd_offset == 0) {
 		status = MLX_INVALID_PARAMETER;
 		goto bad_param;
 	}
 
+	mlx_utils_acquire_lock(utils);
+
 	pci_gw = &utils->pci_gw;
 	cap_offset = pci_gw->pci_cmd_offset;
 
-#if defined ( DEVICE_CX3 )
+#if ! defined ( VSEC_DEBUG )
 	if (pci_gw->space != space) {
 		   status = mlx_pci_gw_set_space(utils, space);
 		   MLX_CHECK_STATUS(utils, status, space_error,"failed to set space");
@@ -361,19 +370,21 @@ mlx_pci_gw_write(
 
 	status = mlx_pci_gw_wait_for_flag_value(utils, FALSE);
 	MLX_CHECK_STATUS(utils, status, read_error, "flag failed to change");
-#if ! defined ( DEVICE_CX3 )
+#if defined ( VSEC_DEBUG )
 	status = mlx_pci_gw_free_ownership(utils);
 	MLX_CHECK_STATUS(utils, status, free_err,
 						"mlx_pci_gw_free_ownership failed");
 free_err:
+mlx_utils_release_lock(utils);
 	return status;
 #endif
 read_error:
 space_error:
-#if ! defined ( DEVICE_CX3 )
+#if defined ( VSEC_DEBUG )
 	mlx_pci_gw_free_ownership(utils);
 ownership_err:
 #endif
+mlx_utils_release_lock(utils);
 bad_param:
 	return status;
 }

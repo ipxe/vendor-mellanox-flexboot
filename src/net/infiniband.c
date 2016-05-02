@@ -724,6 +724,7 @@ int ib_mcast_attach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
 	struct ib_multicast_gid *mgid;
 	int rc;
 
+	/* Sanity check */
 	if ( qp == NULL ) {
 		DBGC ( ibdev, "Invalid pointer, could not attach QPN to MCG\n" );
 		return -EFAULT;
@@ -761,6 +762,9 @@ int ib_mcast_attach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
 void ib_mcast_detach ( struct ib_device *ibdev, struct ib_queue_pair *qp,
 		       union ib_gid *gid ) {
 	struct ib_multicast_gid *mgid, *tmp;
+
+	/* Sanity check */
+	assert ( qp != NULL );
 
 	/* Remove from hardware multicast GID list */
 	ibdev->op->mcast_detach ( ibdev, qp, gid );

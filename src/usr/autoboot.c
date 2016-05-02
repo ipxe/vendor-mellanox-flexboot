@@ -98,52 +98,6 @@ __weak int pxe_menu_boot ( struct net_device *netdev __unused ) {
 	return -ENOTSUP;
 }
 
-/**
- * Parse next-server and filename into a URI
- *
- * @v next_server	Next-server address
- * @v filename		Filename
- * @ret uri		URI, or NULL on failure
- */
-static struct uri * parse_next_server_and_filename ( struct in_addr next_server,
-						     const char *filename ) {
-#ifndef NET_PROTO_IPV6
-	char buf[ 23 /* "tftp://xxx.xxx.xxx.xxx/" */ + strlen ( filename ) + 1 /* NUL */ ];
-#endif
-	struct uri *uri;
-
-	/* Parse filename */
-	uri = parse_uri ( filename );
-	if ( ! uri )
-		return NULL;
-
-    /*#ifndef NET_PROTO_IPV6
-     *      Construct a tftp:// URI for the filename, if applicable.
-     *      We can't just rely on the current working URI, because the
-     *      relative URI resolution will remove the distinction between
-     *      filenames with and without initial slashes, which is
-     *      significant for TFTP.
-     *#else
-     *      Construct a TFTP URI for the filename, if applicable
-     *#endif
-     */
-
-	if ( next_server.s_addr && filename[0] && ! uri_is_absolute ( uri ) ) {
-		uri_put ( uri );
-#ifndef NET_PROTO_IPV6
-               snprintf ( buf, sizeof ( buf ), "tftp://%s/%s",
-                               inet_ntoa ( next_server ), filename );
-               uri = parse_uri ( buf );
-#else
-		uri = tftp_uri ( next_server, 0, filename );
-#endif
-		if ( ! uri )
-			return NULL;
-	}
-
-	return uri;
-}
-
 /** The "keep-san" setting */
 const struct setting keep_san_setting __setting ( SETTING_SANBOOT_EXTRA,
 						  keep-san ) = {
@@ -218,7 +172,9 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
  pxe_label:
 	/* Attempt filename boot if applicable */
 	if ( filename ) {
+		status_update ( STATUS_UPDATE_PXE_BOOT_START );
 		if ( ( rc = imgdownload ( filename, 0, &image ) ) == 0 ) {
+			imgstat ( image );
 			image->flags |= IMAGE_AUTO_UNREGISTER;
 			if ( ( rc = image_exec ( image ) ) != 0 ) {
 				printf ( "Could not boot image: %s\n",
@@ -234,9 +190,12 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
 				 */
 				printf ( "\n" );
 			}
-			if ( ! ipxe_is_started () )
+			if ( ! ipxe_is_started () ) {
+				status_update ( STATUS_UPDATE_PXE_BOOT_END );
 				goto uriboot_done;
+			}
 		}
+		status_update ( STATUS_UPDATE_PXE_BOOT_END );
 	}
 
 	if ( flags & URIBOOT_SAN_BOOT_PRIO )
@@ -287,10 +246,16 @@ int uriboot ( struct uri *filename, struct uri *root_path, int drive,
  * @ret uri		URI, or NULL on failure
  */
 struct uri * fetch_next_server_and_filename ( struct settings *settings ) {
-	struct in_addr next_server = { 0 };
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sin;
+	} next_server;
 	char *raw_filename = NULL;
 	struct uri *uri = NULL;
 	char *filename;
+
+	/* Initialise server address */
+	memset ( &next_server, 0, sizeof ( next_server ) );
 
 	/* If we have a filename, fetch it along with the next-server
 	 * setting from the same settings block.
@@ -300,20 +265,27 @@ struct uri * fetch_next_server_and_filename ( struct settings *settings ) {
 		fetch_string_setting_copy ( settings, &filename_setting,
 					    &raw_filename );
 		fetch_ipv4_setting ( settings, &next_server_setting,
-				     &next_server );
+				     &next_server.sin.sin_addr );
+	}
+	if ( ! raw_filename )
+		goto err_fetch;
+
+	/* Populate server address */
+	if ( next_server.sin.sin_addr.s_addr ) {
+		next_server.sin.sin_family = AF_INET;
+		printf ( "Next server: %s\n",
+			 inet_ntoa ( next_server.sin.sin_addr ) );
 	}
 
 	/* Expand filename setting */
-	filename = expand_settings ( raw_filename ? raw_filename : "" );
+	filename = expand_settings ( raw_filename );
 	if ( ! filename )
 		goto err_expand;
-
-	/* Parse next server and filename */
-	if ( next_server.s_addr )
-		printf ( "Next server: %s\n", inet_ntoa ( next_server ) );
 	if ( filename[0] )
 		printf ( "Filename: %s\n", filename );
-	uri = parse_next_server_and_filename ( next_server, filename );
+
+	/* Construct URI */
+	uri = pxe_uri ( &next_server.sa, filename );
 	if ( ! uri )
 		goto err_parse;
 
@@ -321,6 +293,7 @@ struct uri * fetch_next_server_and_filename ( struct settings *settings ) {
 	free ( filename );
  err_expand:
 	free ( raw_filename );
+ err_fetch:
 	return uri;
 }
 
@@ -338,9 +311,11 @@ static struct uri * fetch_root_path ( struct settings *settings ) {
 	/* Fetch root-path setting */
 	fetch_string_setting_copy ( settings, &root_path_setting,
 				    &raw_root_path );
+	if ( ! raw_root_path )
+		goto err_fetch;
 
 	/* Expand filename setting */
-	root_path = expand_settings ( raw_root_path ? raw_root_path : "" );
+	root_path = expand_settings ( raw_root_path );
 	if ( ! root_path )
 		goto err_expand;
 
@@ -355,6 +330,7 @@ static struct uri * fetch_root_path ( struct settings *settings ) {
 	free ( root_path );
  err_expand:
 	free ( raw_root_path );
+ err_fetch:
 	return uri;
 }
 
@@ -505,32 +481,20 @@ int netboot ( struct net_device *netdev ) {
 		goto err_pxe_menu_boot;
 	}
 
-	/* Fetch next server and filename */
+	/* Fetch next server and filename (if any) */
 	filename = fetch_next_server_and_filename ( netdevice_settings );
-	if ( ! filename )
-		goto err_filename;
-	if ( ! uri_has_path ( filename ) ) {
-		/* Ignore empty filename */
-		uri_put ( filename );
-		filename = NULL;
-	}
 
-	/* Fetch root path */
+
+	/* Fetch root path (if any) */
 	root_path = fetch_root_path ( netdevice_settings );
-	if ( ! root_path )
-		goto err_root_path;
-	if ( ! uri_is_absolute ( root_path ) ) {
-		/* Ignore empty root path */
-		uri_put ( root_path );
-		root_path = NULL;
-	}
 
 	/* If we have both a filename and a root path, ignore an
-	 * unsupported URI scheme in the root path, since it may
-	 * represent an NFS root.
+	 * unsupported or missing URI scheme in the root path, since
+	 * it may represent an NFS root.
 	 */
 	if ( filename && root_path &&
-	     ( xfer_uri_opener ( root_path->scheme ) == NULL ) ) {
+	     ( ( ! uri_is_absolute ( root_path ) ) ||
+	       ( xfer_uri_opener ( root_path->scheme ) == NULL ) ) ) {
 		printf ( "Ignoring unsupported root path\n" );
 		uri_put ( root_path );
 		root_path = NULL;
@@ -567,9 +531,7 @@ int netboot ( struct net_device *netdev ) {
  err_uriboot:
  err_no_boot:
 	uri_put ( root_path );
- err_root_path:
 	uri_put ( filename );
- err_filename:
  err_pxe_menu_boot:
  err_link_up_and_config:
  err_ifopen:
@@ -714,12 +676,14 @@ static int show_banner_and_get_key ( void ) {
  * Main iPXE flow of execution
  *
  * @v netdev		Network device, or NULL
+ * @ret rc			Return status code
  */
-void ipxe ( struct net_device *netdev ) {
+int ipxe ( struct net_device *netdev ) {
 	struct feature *feature;
 	struct image *image;
 	char *scriptlet;
 	int key_pressed;
+	int rc;
 
 	/*
 	 * Print welcome banner
@@ -742,32 +706,37 @@ void ipxe ( struct net_device *netdev ) {
 	/* Boot system */
 	if ( ( image = first_image() ) != NULL ) {
 		/* We have an embedded image; execute it */
-		image_exec ( image );
+		rc = image_exec ( image );
 	} else if ( ( key_pressed = show_banner_and_get_key () ) == CTRL_B ) {
 		/* User wants shell; just give them a shell */
 #ifdef FLASH_CONFIGURATION
-		boot_menu_ui ();
+		rc = boot_menu_ui ();
 #else
-		shell ();
+		rc = shell ();
 #endif
 	} else if ( key_pressed != ESC ) {
 		fetch_string_setting_copy ( NULL, &scriptlet_setting,
 					    &scriptlet );
 		if ( scriptlet ) {
 			/* User has defined a scriptlet; execute it */
-			system ( scriptlet );
+			rc = system ( scriptlet );
 			free ( scriptlet );
+			return rc;
 		} else {
 			/* Try booting.  If booting fails, offer the
 			 * user another chance to enter the shell.
 			 */
 			if ( netdev ) {
-				netboot ( netdev );
+				rc = netboot ( netdev );
+				DBG ( "iPXE netboot status: %d\n", rc );
 			} else {
-				autoboot();
+				rc = autoboot();
+				DBG ( "iPXE autoboot status: %d\n", rc );
 			}
 			if ( show_banner_and_get_key () == CTRL_B )
-				shell();
+				rc = shell();
 		}
 	}
+
+	return rc;
 }

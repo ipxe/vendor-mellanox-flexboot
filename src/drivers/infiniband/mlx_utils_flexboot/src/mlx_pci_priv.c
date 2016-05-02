@@ -114,6 +114,10 @@ mlx_pci_init_priv(
 {
 	mlx_status status = MLX_SUCCESS;
 	adjust_pci_device ( utils->pci );
+#ifdef DEVICE_CX3
+	utils->config = ioremap ( pci_bar_start ( utils->pci, PCI_BASE_ADDRESS_0),
+			0x100000 );
+#endif
 	return status;
 }
 
@@ -150,13 +154,15 @@ mlx_pci_mem_read_priv(
 				IN mlx_utils *utils  __attribute__ ((unused)),
 				IN mlx_pci_width width  __attribute__ ((unused)),
 				IN mlx_uint8 bar_index  __attribute__ ((unused)),
-				IN mlx_uint64 offset  __attribute__ ((unused)),
+				IN mlx_uint64 offset,
 				IN mlx_uintn count  __attribute__ ((unused)),
-				OUT mlx_void *buffer  __attribute__ ((unused))
+				OUT mlx_void *buffer
 				)
 {
-	//TODO: add implementation
-	return MLX_UNSUPPORTED;
+	if (buffer == NULL || width != MlxPciWidthUint32)
+		return MLX_INVALID_PARAMETER;
+	*((mlx_uint32 *)buffer) = readl((mlx_uint32)offset);
+	return MLX_SUCCESS;
 }
 
 mlx_status
@@ -164,11 +170,14 @@ mlx_pci_mem_write_priv(
 				IN mlx_utils *utils  __attribute__ ((unused)),
 				IN mlx_pci_width width  __attribute__ ((unused)),
 				IN mlx_uint8 bar_index  __attribute__ ((unused)),
-				IN mlx_uint64 offset  __attribute__ ((unused)),
+				IN mlx_uint64 offset,
 				IN mlx_uintn count  __attribute__ ((unused)),
-				IN mlx_void *buffer  __attribute__ ((unused))
+				IN mlx_void *buffer
 				)
 {
-	//TODO: add implementation
-	return MLX_UNSUPPORTED;
+	if (buffer == NULL || width != MlxPciWidthUint32)
+		return MLX_INVALID_PARAMETER;
+	barrier();
+	writel(*((mlx_uint32 *)buffer), (mlx_uint32)offset);
+	return MLX_SUCCESS;
 }

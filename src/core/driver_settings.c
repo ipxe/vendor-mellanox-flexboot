@@ -194,9 +194,7 @@ struct setting phy_mac_setting __setting ( SETTING_FLEXBOOT, phy_mac ) = {
 	.description = "Physical MAC Address",
 	.type = &setting_type_string,
 	.scope = &port_scope,
-#ifdef DEVICE_CX4
-	.hidden = 1,
-#endif
+	.hidden = 0,
 };
 
 struct extended_setting ext_physical_mac __table_entry ( NV_CONFIG, 01 ) = {
@@ -281,6 +279,9 @@ struct setting opt_rom_setting __setting( SETTING_FLEXBOOT, opt_rom ) = {
 	.description = "Option ROM",
 	.type = &setting_type_string,
 	.scope = &nic_scope,
+#ifdef DEVICE_CX4
+	.hidden = 1,
+#endif
 };
 
 struct extended_setting ext_opt_rom __table_entry ( NV_CONFIG, 01 ) = {
@@ -309,6 +310,18 @@ struct setting wol_setting __setting( SETTING_FLEXBOOT, wol ) = {
 
 struct extended_setting ext_wol __table_entry ( NV_CONFIG, 01 ) = {
 	.setting = &wol_setting,
+	.type = OPTION,
+};
+
+struct setting ip_support_setting __setting( SETTING_FLEXBOOT, ip_support ) = {
+	.name = "ip_support",
+	.description = "IPv4/IPv6 support",
+	.type = &setting_type_string,
+	.scope = &nic_scope,
+};
+
+struct extended_setting ext_ip_support __table_entry ( NV_CONFIG, 01 ) = {
+	.setting = &ip_support_setting,
 	.type = OPTION,
 };
 
@@ -721,6 +734,20 @@ const char * driver_settings_get_boot_ret_str ( unsigned int value ) {
 	return STR_NO_RETRIES;
 }
 
+const char * driver_settings_get_ip_support_str ( unsigned int value ) {
+	switch ( value ) {
+		case VAL_IPV6: return STR_IPV6;
+		case VAL_IPV6_IPV4:	return STR_IPV4_IPV6;
+		case VAL_IPV4_IPV6:	return STR_IPV6_IPV4;
+		case VAL_IPV4:
+			;/* Fall through */
+		default:
+			;/* Fall through */
+	}
+
+	return STR_IPV4;
+}
+
 static struct extended_options extended_options_list[] = {
 	{ &ext_virt_mode,			2, { STR_NONE, STR_SRIOV } },
 	{ &ext_boot_protocol,		3, { STR_NONE, STR_PXE, STR_ISCSI } },
@@ -732,6 +759,8 @@ static struct extended_options extended_options_list[] = {
 	{ &ext_iscsi_boot_to_target, 3, { STR_DISABLE, STR_ONE_TIME_DISABLED,
 													STR_ENABLE } },
 	{ &ext_wol,					2, { STR_DISABLE, STR_ENABLE } },
+	{ &ext_ip_support,			3, { STR_IPV4, STR_IPV6, STR_IPV4_IPV6 } },
+
 	{ &ext_connect,				2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_dhcp_ip,				2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_dhcp_iscsi,			2, { STR_DISABLE, STR_ENABLE } },
@@ -1210,8 +1239,8 @@ static int nic_boot_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
 	struct nv_nic_conf *nic_conf = & ( conf->nic );
-	union nv_nic_boot_conf *boot_conf = & ( nic_conf->boot_conf );
-	union nv_nic_boot_conf reversed_boot_conf;
+	union mlx_nvconfig_nic_boot_conf *boot_conf = & ( nic_conf->boot_conf );
+	union mlx_nvconfig_nic_boot_conf reversed_boot_conf;
 	char buf[255] = {0};
 	int rc;
 
@@ -1243,10 +1272,39 @@ static int nic_boot_nv_store ( struct driver_settings *driver_settings ) {
 	return 0;
 }
 
+static int nic_boot_ext_nv_store ( struct driver_settings *driver_settings ) {
+	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
+	struct settings *settings = & ( driver_settings->generic_settings.settings );
+	struct nv_nic_conf *nic_conf = & ( conf->nic );
+	union mlx_nvconfig_nic_boot_ext_conf *boot_ext_conf = & ( nic_conf->boot_ext_conf );
+	union mlx_nvconfig_nic_boot_ext_conf reversed_boot_ext_conf;
+	char buf[255] = {0};
+	int rc;
+
+	DRIVER_SETTINGS_FETCH_SETTING ( settings, &ip_support_setting );
+	if ( strcmp ( buf, STR_IPV6_IPV4 ) == 0 ) {
+		boot_ext_conf->ip_ver = VAL_IPV6_IPV4;
+	} else if ( strcmp ( buf, STR_IPV4_IPV6 ) == 0 ) {
+		boot_ext_conf->ip_ver = VAL_IPV4_IPV6;
+	} else if ( strcmp ( buf, STR_IPV6 ) == 0 ) {
+		boot_ext_conf->ip_ver = VAL_IPV6;
+	} else {
+		boot_ext_conf->ip_ver = VAL_IPV4;
+	}
+
+	reversed_boot_ext_conf.dword = cpu_to_be32 ( boot_ext_conf->dword );
+
+	if ( ( rc = driver_settings->callbacks.tlv_write ( driver_settings->drv_priv,
+				&reversed_boot_ext_conf, driver_settings->index,
+				BOOT_SETTINGS_EXT_TYPE, sizeof ( reversed_boot_ext_conf ) ) ) )
+		return -EACCES;
+	return 0;
+}
+
 static int wol_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
-	union nv_wol_conf *wol_conf = & ( conf->nic.wol_conf );
+	union mlx_nvconfig_wol_conf *wol_conf = & ( conf->nic.wol_conf );
 	char buf[255] = {0};
 	uint32_t swapped[2];
 	int rc;
@@ -1266,8 +1324,8 @@ static int wol_nv_store ( struct driver_settings *driver_settings ) {
 static int nic_ib_boot_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
-	union nv_nic_ib_boot_conf *ib_boot_conf = & ( conf->nic.ib_boot_conf );
-	union nv_nic_ib_boot_conf reversed_ib_boot_conf;
+	union mlx_nvconfig_nic_ib_boot_conf *ib_boot_conf = & ( conf->nic.ib_boot_conf );
+	union mlx_nvconfig_nic_ib_boot_conf reversed_ib_boot_conf;
 	char buf[255];
 	int rc;
 
@@ -1285,8 +1343,8 @@ static int nic_ib_boot_nv_store ( struct driver_settings *driver_settings ) {
 static int dhcp_flags_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
-	union nv_iscsi_init_dhcp_conf  *init_conf = & (conf->iscsi.init_dhcp_conf );
-	union nv_iscsi_init_dhcp_conf swapped;
+	union mlx_nvconfig_iscsi_init_dhcp_conf  *init_conf = & (conf->iscsi.init_dhcp_conf );
+	union mlx_nvconfig_iscsi_init_dhcp_conf swapped;
 	char buf[255] = {0};
 	int rc;
 
@@ -1307,8 +1365,8 @@ static int dhcp_flags_nv_store ( struct driver_settings *driver_settings ) {
 static int iscsi_gen_flags_nv_store ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
-	union nv_iscsi_general *gen_conf = & ( conf->iscsi.gen_conf );
-	union nv_iscsi_general swapped;
+	union mlx_nvconfig_iscsi_general *gen_conf = & ( conf->iscsi.gen_conf );
+	union mlx_nvconfig_iscsi_general swapped;
 	char buf[255] = {0};
 	int rc;
 
@@ -1673,6 +1731,22 @@ int wol_restore ( struct settings *settings, const void *data,
         RESTORE_ENABLED_DISABLED ( en_wol_magic );
 }
 
+int ip_support_restore ( struct settings *settings, const void *data,
+        size_t len, const struct setting *setting ) {
+	struct driver_settings *driver_settings = get_driver_settings_from_settings ( settings );
+	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
+	const char *ip_support;
+
+	/* If setting is deleted, set default */
+	if ( !data || !len ) {
+		ip_support = driver_settings_get_ip_support_str ( defaults->ip_ver );
+		generic_settings_store ( settings, setting, ip_support, strlen ( STR_IPV4_IPV6 ) + 1 );
+		return STORED;
+	}
+
+	return SUCCESS;
+}
+
 int dhcp_ip_restore ( struct settings *settings, const void *data,
 		size_t len, const struct setting *setting ) {
 	RESTORE_ENABLED_DISABLED( iscsi_ipv4_dhcp_en );
@@ -1806,6 +1880,7 @@ static struct driver_setting_operation driver_setting_operations[] = {
 	{ &opt_rom_setting,				NULL, &opt_rom_restore, &nic_boot_nv_store, NULL },
 	{ &boot_retries_setting,		NULL, &boot_retries_restore, &nic_boot_nv_store, NULL },
 	{ &wol_setting,					NULL, NULL, &wol_nv_store, NULL },
+	{ &ip_support_setting,			NULL, &ip_support_restore, &nic_boot_ext_nv_store, NULL },
 	{ &boot_pkey_setting,			&driver_settings_pkey_applies, &boot_pkey_restore, &nic_ib_boot_nv_store, NULL },
 	{ &dhcp_ip_setting,				NULL, &dhcp_ip_restore, &dhcp_flags_nv_store, NULL },
 	{ &dhcp_iscsi_setting,			NULL, &dhcp_iscsi_restore, &dhcp_flags_nv_store, NULL },
@@ -2232,12 +2307,8 @@ int driver_settings_init ( struct driver_settings *driver_settings ) {
 		callbacks->set_ro_device_settings( driver_settings->drv_priv );
 
 	/* Get Flexboot version */
-#ifdef __BASE_BUILD_VERSION__
-	/* If not compiled with version number - put the default verison */
-	strcpy ( conf->fw_image_props.flexboot_version, __BASE_BUILD_VERSION__ );
-#else
 	strcpy ( conf->fw_image_props.flexboot_version, __BUILD_VERSION__ );
-#endif
+
 	generic_settings_init ( gen_settings, NULL );
 
 	if ( ( rc = register_settings ( & ( gen_settings->settings ),
@@ -2297,7 +2368,8 @@ static int driver_flash_read_nic_boot_config ( struct driver_settings *driver_se
 		unsigned int port_num ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct nv_nic_conf *nic_conf = & ( port_conf->nic );
-	union nv_nic_boot_conf *nic_boot_conf = & ( nic_conf->boot_conf );
+	union mlx_nvconfig_nic_boot_conf *nic_boot_conf = & ( nic_conf->boot_conf );
+	union mlx_nvconfig_nic_boot_ext_conf *nic_boot_ext_conf = & ( nic_conf->boot_ext_conf );
 	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
 	int rc;
 
@@ -2313,6 +2385,20 @@ static int driver_flash_read_nic_boot_config ( struct driver_settings *driver_se
 		nic_boot_conf->vlan_id			= defaults->boot_vlan;
 	}
 
+	/* en_option_rom is deprecated for ConnectX-4 - enable always */
+#ifdef DEVICE_CX4
+	nic_boot_conf->en_option_rom = 1;
+#endif
+
+	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
+			BOOT_SETTINGS_EXT_TYPE, port_num, sizeof ( *nic_boot_ext_conf ),
+			NULL , nic_boot_ext_conf ) ) != 0 ) {
+		DBGC ( driver_settings, "Failed to read the boot configurations from the flash (rc = %d)\n", rc );
+
+		nic_boot_ext_conf->ip_ver			= defaults->ip_ver;
+		nic_boot_ext_conf->linkup_timeout	= defaults->linkup_timeout;
+	}
+
 	return rc;
 }
 
@@ -2320,7 +2406,7 @@ static int driver_flash_read_nic_wol_config ( struct driver_settings *driver_set
 		unsigned int port_num ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct nv_nic_conf *nic_conf = & ( port_conf->nic );
-	union nv_wol_conf *conf = & ( nic_conf->wol_conf );
+	union mlx_nvconfig_wol_conf *conf = & ( nic_conf->wol_conf );
 	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
 	int rc;
 
@@ -2336,7 +2422,7 @@ static int driver_flash_read_nic_wol_config ( struct driver_settings *driver_set
 static int driver_flash_read_nic_ib_boot_config ( struct driver_settings *driver_settings,
 		unsigned int port_num ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
-	union nv_nic_ib_boot_conf *nic_ib_boot_conf = & ( port_conf->nic.ib_boot_conf );
+	union mlx_nvconfig_nic_ib_boot_conf *nic_ib_boot_conf = & ( port_conf->nic.ib_boot_conf );
 	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
 	int rc;
 
@@ -2353,7 +2439,7 @@ static int driver_flash_read_nic_ib_boot_config ( struct driver_settings *driver
 static int driver_flash_read_nic_ib_dhcp_config (
 		struct driver_settings *driver_settings, unsigned int port_num ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
-	union nv_ib_dhcp_conf *ib_dhcp_conf = & ( port_conf->nic.ib_dhcp_conf );
+	union mlx_nvconfig_ib_dhcp_conf *ib_dhcp_conf = & ( port_conf->nic.ib_dhcp_conf );
 	struct nv_port_conf_defaults *defaults = ( struct nv_port_conf_defaults * ) driver_settings->defaults;
 	int rc;
 
@@ -2560,7 +2646,7 @@ static int driver_flash_read_iscsi_first_tgt ( struct driver_settings *driver_se
 
 
 static void driver_iscsi_init_dhcp_no_tlv ( struct driver_settings *driver_settings,
-		union nv_iscsi_init_dhcp_conf *init_dhcp_conf ) {
+		union mlx_nvconfig_iscsi_init_dhcp_conf *init_dhcp_conf ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct nv_iscsi_conf *iscsi_conf = & ( port_conf->iscsi );
 	struct nv_iscsi_initiator_params *init_params =
@@ -2587,7 +2673,7 @@ static void driver_iscsi_init_dhcp_no_tlv ( struct driver_settings *driver_setti
 }
 
 static void driver_flash_read_iscsi_init_dhcp( struct driver_settings *driver_settings,
-		unsigned int port_num, union nv_iscsi_init_dhcp_conf *init_dhcp_conf ) {
+		unsigned int port_num, union mlx_nvconfig_iscsi_init_dhcp_conf *init_dhcp_conf ) {
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_DHCP_CONF_TYPE, port_num, sizeof ( *init_dhcp_conf ), NULL , init_dhcp_conf ) ) != 0 ) {
@@ -2599,7 +2685,7 @@ static void driver_flash_read_iscsi_init_dhcp( struct driver_settings *driver_se
 }
 
 static void driver_flash_read_iscsi_general ( struct driver_settings *driver_settings,
-		unsigned int port_num,union nv_iscsi_general *gen_conf ) {
+		unsigned int port_num,union mlx_nvconfig_iscsi_general *gen_conf ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct nv_iscsi_conf *iscsi_conf = & ( port_conf->iscsi );
 	struct nv_iscsi_target_params *target =
@@ -2691,11 +2777,12 @@ static int driver_set_nic_settings ( struct driver_settings *driver_settings ) {
 	struct nv_port_conf *port_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
 	struct nv_nic_conf *nic_conf = & ( port_conf->nic );
 	struct settings *menu_settings = & ( driver_settings->generic_settings.settings );
-	union nv_nic_boot_conf *conf = & ( nic_conf->boot_conf );
-	union nv_nic_ib_boot_conf *ib_conf = & ( nic_conf->ib_boot_conf );
+	union mlx_nvconfig_nic_boot_conf *conf = & ( nic_conf->boot_conf );
+	union mlx_nvconfig_nic_ib_boot_conf *ib_conf = & ( nic_conf->ib_boot_conf );
 	struct settings *origin;
 	char buf[DRIVER_MAX_STR_LEN_SETTING];
 	int rc;
+
 	rc = fetch_setting_origin ( menu_settings, &boot_protocol_setting, &origin );
 	if ( rc || ( !rc && !origin ) ) {
 		DBGC ( driver_settings, "Failed to find NIC configuration settings block\n" );
@@ -2712,10 +2799,41 @@ static int driver_set_nic_settings ( struct driver_settings *driver_settings ) {
 		snprintf ( buf, DRIVER_MAX_STR_LEN_SETTING, "%s", STR_NONE );
 
 	DRIVER_STORE_SETTING( driver_settings, origin, boot_protocol_setting, buf );
-	DRIVER_STORE_STR_SETTING( driver_settings, origin, virt_lan_setting, ( conf->en_vlan ? STR_ENABLE : STR_DISABLE ) );
-	DRIVER_STORE_INT_SETTING( driver_settings, origin, virt_id_setting, conf->vlan_id );
-	DRIVER_STORE_STR_SETTING( driver_settings, origin, opt_rom_setting, ( conf->en_option_rom ? STR_ENABLE : STR_DISABLE ) );
-	DRIVER_STORE_INT_SETTING( driver_settings, origin, boot_pkey_setting, ib_conf->boot_pkey );
+	DRIVER_STORE_STR_SETTING( driver_settings, origin, virt_lan_setting,
+			( conf->en_vlan ? STR_ENABLE : STR_DISABLE ) );
+	DRIVER_STORE_INT_SETTING( driver_settings, origin, virt_id_setting,
+			conf->vlan_id );
+	DRIVER_STORE_STR_SETTING( driver_settings, origin, opt_rom_setting,
+			( conf->en_option_rom ? STR_ENABLE : STR_DISABLE ) );
+	DRIVER_STORE_INT_SETTING( driver_settings, origin, boot_pkey_setting,
+			ib_conf->boot_pkey );
+
+	switch ( nic_conf->boot_ext_conf.ip_ver ) {
+	case VAL_IPV4_IPV6:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin, ip_support_setting,
+			STR_IPV4_IPV6 );
+		break;
+	case VAL_IPV6_IPV4:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin, ip_support_setting,
+			STR_IPV6_IPV4 );
+		break;
+	case VAL_IPV6:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin, ip_support_setting,
+			STR_IPV6 );
+		DRIVER_STORE_INT_SETTING_EN ( driver_settings, 1,
+				netdev_settings ( driver_settings->netdev ),
+				&dhcpv4_disabled_setting );
+		break;
+	case VAL_IPV4:
+	default:
+		DRIVER_STORE_STR_SETTING( driver_settings, origin, ip_support_setting,
+			STR_IPV4 );
+		DRIVER_STORE_INT_SETTING_EN ( driver_settings, 1,
+				netdev_settings ( driver_settings->netdev ),
+				&dhcpv6_disabled_setting );
+		break;
+	}
+
 
 	/* Find boot retry string to save according to boot retry number */
 	snprintf ( buf, DRIVER_MAX_STR_LEN_SETTING, "%s",
@@ -2754,8 +2872,8 @@ static int driver_set_iscsi_settings ( struct driver_settings *driver_settings )
 	struct settings *main_settings;
 	struct nv_iscsi_initiator_params *initiator = &( iscsi_conf->initiator_params );
 	struct nv_iscsi_target_params *first_tgt = &( iscsi_conf->first_tgt_params );
-	union nv_iscsi_init_dhcp_conf *init_dhcp_conf = &( iscsi_conf->init_dhcp_conf );
-	union nv_iscsi_general *gen_conf = &( iscsi_conf->gen_conf );
+	union mlx_nvconfig_iscsi_init_dhcp_conf *init_dhcp_conf = &( iscsi_conf->init_dhcp_conf );
+	union mlx_nvconfig_iscsi_general *gen_conf = &( iscsi_conf->gen_conf );
 	char buf[DRIVER_MAX_STR_LEN_SETTING];
 	struct in_addr ip_addr;
 	int rc;
@@ -2986,7 +3104,7 @@ int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 		u8* boot_enable, tlv_read_fn read_tlv_fn,
 		struct nv_port_conf_defaults  *defaults ) {
 	struct driver_tlv_header tlv;
-	union nv_nic_boot_conf conf;
+	union mlx_nvconfig_nic_boot_conf conf;
 	int rc;
 	u8  option_rom_en;
 	u8  legacy_boot_protocol;
@@ -3008,6 +3126,11 @@ int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 		legacy_boot_protocol	= conf.legacy_boot_prot;
 	}
 
+	/* option_rom_en is deprecated in ConnecX-4 - enable always */
+#ifdef DEVICE_CX4
+	option_rom_en = 1;
+#endif
+
 	if ( ( legacy_boot_protocol != 0 ) && ( option_rom_en != 0 ) )
 		*boot_enable = 1;
 	else
@@ -3020,7 +3143,7 @@ int driver_settings_get_nv_ib_mac_admin_bit ( void *priv_data, unsigned int port
 		tlv_read_fn read_tlv_fn, struct nv_port_conf_defaults  *defaults,
 		uint8_t *mac_admin_bit ) {
 	struct driver_tlv_header tlv;
-	union nv_ib_dhcp_conf ib_dhcp_conf;
+	union mlx_nvconfig_ib_dhcp_conf ib_dhcp_conf;
 	int rc;
 
 	memset ( &ib_dhcp_conf, 0, sizeof ( ib_dhcp_conf ) );

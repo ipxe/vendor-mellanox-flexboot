@@ -14,7 +14,7 @@
 #define MLX_SUCCESS 0
 #define MLX_OUT_OF_RESOURCES (-1)
 //(-ENOMEM)
-#define MLX_INVALID_PARAMETER (2)
+#define MLX_INVALID_PARAMETER (-2)
 //(-EINVAL)
 #define MLX_UNSUPPORTED (-3)
 //(-ENOSYS)
@@ -22,7 +22,9 @@
 
 #define MLX_FAILED (-5)
 
+#undef TRUE
 #define TRUE	1
+#undef FALSE
 #define FALSE	!TRUE
 
 typedef int mlx_status;

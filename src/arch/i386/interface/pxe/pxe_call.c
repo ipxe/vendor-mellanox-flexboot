@@ -26,6 +26,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/uaccess.h>
 #include <ipxe/init.h>
 #include <ipxe/profile.h>
+#include <ipxe/netdevice.h>
 #include <setjmp.h>
 #include <registers.h>
 #include <biosint.h>
@@ -265,6 +266,9 @@ struct init_fn pxe_init_fn __init_fn ( INIT_NORMAL ) = {
  * @v netdev		Net device to use as PXE net device
  */
 void pxe_activate ( struct net_device *netdev ) {
+	uint32_t discard_a;
+	uint32_t discard_b;
+	uint32_t discard_d;
 
 	/* Ensure INT 1A is hooked */
 	if ( ! int_1a_hooked ) {
@@ -276,6 +280,15 @@ void pxe_activate ( struct net_device *netdev ) {
 
 	/* Set PXE network device */
 	pxe_set_netdev ( netdev );
+
+	/* Notify BIOS of installation */
+	__asm__ __volatile__ ( REAL_CODE ( "pushw %%cs\n\t"
+					   "popw %%es\n\t"
+					   "int $0x1a\n\t" )
+			       : "=a" ( discard_a ), "=b" ( discard_b ),
+				 "=d" ( discard_d )
+			       : "0" ( 0x564e ),
+				 "1" ( __from_text16 ( &pxenv ) ) );
 }
 
 /**
@@ -345,6 +358,31 @@ int pxe_start_nbp ( void ) {
 
 	return 0;
 }
+
+/**
+ * Notify BIOS of existence of network device
+ *
+ * @v netdev		Network device
+ * @ret rc		Return status code
+ */
+static int pxe_notify ( struct net_device *netdev ) {
+
+	/* Do nothing if we already have a network device */
+	if ( pxe_netdev )
+		return 0;
+
+	/* Activate (and deactivate) PXE stack to notify BIOS */
+	pxe_activate ( netdev );
+	pxe_deactivate();
+
+	return 0;
+}
+
+/** PXE BIOS notification driver */
+struct net_driver pxe_driver __net_driver = {
+	.name = "PXE",
+	.probe = pxe_notify,
+};
 
 REQUIRING_SYMBOL ( pxe_api_call );
 REQUIRE_OBJECT ( pxe_preboot );

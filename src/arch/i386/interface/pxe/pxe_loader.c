@@ -24,6 +24,7 @@
 FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <ipxe/init.h>
+#include <ipxe/pci.h>
 #include "pxe.h"
 #include "pxe_call.h"
 
@@ -37,6 +38,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  *
  */
 PXENV_EXIT_t undi_loader ( struct s_UNDI_LOADER *undi_loader ) {
+
+	set_boot_pci_busdevfn ( undi_loader->AX );
+	DBG ( "UNDI loader location (BDF): 0x%x\n", undi_loader->AX );
 
 	/* Perform one-time initialisation (e.g. heap) */
 	initialise();

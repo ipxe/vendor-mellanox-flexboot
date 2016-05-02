@@ -20,9 +20,10 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/ib_mad.h>
 #include <ipxe/boot_menu_ui.h>
 #include <ipxe/driver_settings.h>
-#include "mlx_nodnic/include/prm/nodnic_hermon_prm.h"
 
+#undef TRUE
 #define TRUE	1
+#undef FALSE
 #define FALSE	!TRUE
 
 /*
@@ -715,7 +716,9 @@ struct hermonprm_query_defparams_port_st {
 	pseudo_bit_t	pptx[0x00001];
 	/* -------------- */
 	pseudo_bit_t	boot_pkey[0x00010];
-	pseudo_bit_t	reserved3[0x00010];
+	pseudo_bit_t	boot_link_up_timeout[0x00008];
+	pseudo_bit_t	boot_ip_ver[0x00002];
+	pseudo_bit_t	reserved3[0x00006];
 	/* -------------- */
 	pseudo_bit_t	reserved4[0x0000e];
 	pseudo_bit_t	client_identifier[0x00004];
@@ -745,6 +748,8 @@ struct hermonprm_query_defparams_port_st {
  */
 
 struct MLX_DECLARE_STRUCT ( hermonprm_completion_queue_context );
+struct MLX_DECLARE_STRUCT ( hermonprm_completion_queue_entry );
+struct MLX_DECLARE_STRUCT ( hermonprm_completion_with_error );
 struct MLX_DECLARE_STRUCT ( hermonprm_cq_db_record );
 struct MLX_DECLARE_STRUCT ( hermonprm_eqc );
 struct MLX_DECLARE_STRUCT ( hermonprm_event_db_register );
@@ -784,6 +789,7 @@ struct MLX_DECLARE_STRUCT ( hermonprm_set_port_beacon );
 struct MLX_DECLARE_STRUCT ( hermonprm_ud_address_vector );
 struct MLX_DECLARE_STRUCT ( hermonprm_virtual_physical_mapping );
 struct MLX_DECLARE_STRUCT ( hermonprm_wqe_segment_ctrl_mlx );
+struct MLX_DECLARE_STRUCT ( hermonprm_wqe_segment_ctrl_send );
 struct MLX_DECLARE_STRUCT ( hermonprm_wqe_segment_data_ptr );
 struct MLX_DECLARE_STRUCT ( hermonprm_wqe_segment_ud );
 struct MLX_DECLARE_STRUCT ( hermonprm_get_op_req );
@@ -808,6 +814,8 @@ struct hermonprm_write_mtt {
 	struct hermonprm_scalar_parameter reserved;
 	struct hermonprm_mtt mtt;
 } __attribute__ (( packed ));
+
+#define HERMON_MAX_GATHER 2
 
 struct hermonprm_ud_send_wqe {
 	struct hermonprm_wqe_segment_ctrl_send ctrl;
@@ -835,6 +843,11 @@ struct hermonprm_eth_send_wqe {
 
 struct hermonprm_recv_wqe {
 	struct hermonprm_wqe_segment_data_ptr data[HERMON_MAX_SCATTER];
+} __attribute__ (( packed ));
+
+union hermonprm_completion_entry {
+	struct hermonprm_completion_queue_entry normal;
+	struct hermonprm_completion_with_error error;
 } __attribute__ (( packed ));
 
 union hermonprm_event_entry {

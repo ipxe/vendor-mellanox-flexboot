@@ -37,6 +37,7 @@ mlx_utils_init(
 	}
 	utils->pci = pci;
 	status = mlx_pci_init(utils);
+	status = mlx_utils_init_lock(utils);
 bail:
 	return status;
 }
@@ -47,6 +48,7 @@ mlx_utils_teardown(
 				)
 {
 	mlx_status status = MLX_SUCCESS;
+	mlx_utils_free_lock(utils);
 	return status;
 }
 
@@ -74,4 +76,46 @@ mlx_utils_ilog2(
 {
 	mlx_utils_ilog2_priv(i, log);
 	return MLX_SUCCESS;
+}
+
+mlx_status
+mlx_utils_init_lock(
+			IN OUT mlx_utils *utils
+		)
+{
+	return mlx_utils_init_lock_priv(&(utils->lock));
+
+}
+
+mlx_status
+mlx_utils_free_lock(
+			IN OUT mlx_utils *utils
+		)
+{
+	return mlx_utils_free_lock_priv(utils->lock);
+}
+
+mlx_status
+mlx_utils_acquire_lock (
+			IN OUT mlx_utils *utils
+		)
+{
+	return mlx_utils_acquire_lock_priv(utils->lock);
+}
+
+mlx_status
+mlx_utils_release_lock (
+		IN OUT mlx_utils *utils
+		)
+{
+	return mlx_utils_release_lock_priv(utils->lock);
+}
+
+mlx_status
+mlx_utils_rand (
+		IN mlx_utils *utils,
+		OUT mlx_uint32 *rand_num
+		)
+{
+	return mlx_utils_rand_priv(utils, rand_num);
 }

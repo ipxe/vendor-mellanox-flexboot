@@ -23,22 +23,11 @@
 FILE_LICENCE ( GPL2_OR_LATER );
 
 #include "mlx_nodnic_data_structures.h"
-#include "prm/nodnic_prm.h"
+#include "nodnic_prm.h"
 #include <ipxe/io.h>
 #include <ipxe/infiniband.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/driver_settings.h>
-
-/*
- * Default values
- */
-#define DEFAULT_FLEXBOOT_MENU_TO 14
-#define DEFAULT_MAX_VFS 8
-#define DEFAULT_BOOT_PROTOCOL 1
-#define DEFAULT_OPTION_ROM_EN 1
-#define DEFAULT_BOOT_VLAN 1
-#define DEFAULT_ISCSI_DHCP_PARAM_EN 1
-#define DEFAULT_ISCSI_IPV4_DHCP_EN 1
 
 /*
  * If defined, use interrupts in NODNIC driver
@@ -109,6 +98,8 @@ struct flexboot_nodnic {
 	struct nv_conf_defaults defaults;
 	struct nv_conf_ini ini_configurations;
 	struct nv_conf nodnic_nv_conf;
+	/** WOL En/Dis **/
+	mlx_uint8	wol_en;
 	/** device private data */
 	void *priv_data;
 };

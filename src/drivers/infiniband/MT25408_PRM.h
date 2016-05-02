@@ -30,8 +30,6 @@ FILE_LICENCE ( GPL2_ONLY );
 #ifndef H_prefix_hermonprm_bits_fixnames_MT25408_PRM_csp_H
 #define H_prefix_hermonprm_bits_fixnames_MT25408_PRM_csp_H
 
-#include "mlx_nodnic/include/prm/nodnic_hermon_prm.h"
-
 /* UD Address Vector */
 
 struct hermonprm_ud_address_vector_st {	/* Little Endian */
@@ -240,6 +238,30 @@ struct hermonprm_wqe_segment_rd_st {	/* Little Endian */
     pseudo_bit_t	q_key[0x00020];
 /* -------------- */
     pseudo_bit_t	reserved1[0x00040];
+/* -------------- */
+};
+
+/* Send wqe segment ctrl */
+
+struct hermonprm_wqe_segment_ctrl_send_st {	/* Little Endian */
+    pseudo_bit_t	opcode[0x00005];
+    pseudo_bit_t	reserved0[0x0001a];
+    pseudo_bit_t	owner[0x00001];
+/* -------------- */
+    pseudo_bit_t	ds[0x00006];           /* descriptor (wqe) size in 16bytes chunk */
+    pseudo_bit_t	f[0x00001];            /* fence */
+    pseudo_bit_t	reserved1[0x00019];
+/* -------------- */
+    pseudo_bit_t	fl[0x00001];           /* Force LoopBack */
+    pseudo_bit_t	s[0x00001];            /* Remote Solicited Event */
+    pseudo_bit_t	c[0x00002];            /* completion required: 0b00 - no   0b11 - yes */
+    pseudo_bit_t	ip[0x00001];           /* When set, InfiniHost III Ex will calculate the IP checksum of the IP header that is present immediately after the IPoverIB encapsulation header. In the case of multiple headers (encapsulation), InfiniHost III Ex will calculate the checksum only for the first IP header following the IPoverIB encapsulation header. Not Valid for IPv6 packets */
+    pseudo_bit_t	tcp_udp[0x00001];      /* When set, InfiniHost III Ex will calculate the TCP/UDP checksum of the packet that is present immediately after the IP header. In the case of multiple headers (encapsulation), InfiniHost III Ex will calculate the checksum only for the first TCP header following the IP header. This bit may be set only if the entire TCP/UDP segment is present in one IB packet */
+    pseudo_bit_t	reserved2[0x00001];
+    pseudo_bit_t	so[0x00001];           /* Strong Ordering - when set, the WQE will be executed only after all previous WQEs have been executed. Can be set for RC WQEs only. This bit must be set in type two BIND, Fast Registration and Local invalidate operations. */
+    pseudo_bit_t	src_remote_buf[0x00018];
+/* -------------- */
+    pseudo_bit_t	immediate[0x00020];    /* If the OpCode encodes an operation with Immediate (RDMA-write/SEND), This field will hold the Immediate data to be sent. If the OpCode encodes send and invalidate operations, this field holds the Invalidation key to be inserted into the packet; otherwise, this field is reserved. */
 /* -------------- */
 };
 
@@ -1468,7 +1490,7 @@ struct hermonprm_srq_context_st {	/* Little Endian */
     pseudo_bit_t	reserved1[0x00005];
 /* -------------- */
     pseudo_bit_t	cqn[0x00018];          /* Completion Queue to report SRC messages directed to this SRQ. */
-    pseudo_bit_t	page_offset[0x00006];  /* The offset of the first WQE from the beginning of 4Kbyte page (Figure 52,ï¿½Work Queue Buffer Structureï¿½) */
+    pseudo_bit_t	page_offset[0x00006];  /* The offset of the first WQE from the beginning of 4Kbyte page (Figure 52,“Work Queue Buffer Structure”) */
     pseudo_bit_t	reserved2[0x00002];
 /* -------------- */
     pseudo_bit_t	reserved3[0x00020];
@@ -1695,6 +1717,50 @@ struct hermonprm_hcr_completion_event_st {	/* Little Endian */
     pseudo_bit_t	out_param_l[0x00020];  /* HCR Output Parameter [31:0] */
 /* -------------- */
     pseudo_bit_t	reserved3[0x00020];
+/* -------------- */
+};
+
+/* Completion with Error CQE             #### michal - gdror fixed */
+
+struct hermonprm_completion_with_error_st {	/* Little Endian */
+    pseudo_bit_t	qpn[0x00018];          /* Indicates the QP for which completion is being reported */
+    pseudo_bit_t	reserved0[0x00008];
+/* -------------- */
+    pseudo_bit_t	reserved1[0x000a0];
+/* -------------- */
+    pseudo_bit_t	syndrome[0x00008];     /* Completion with error syndrome:
+                                                         0x01 - Local Length Error
+                                                         0x02 - Local QP Operation Error
+                                                         0x03 - Local EE Context Operation Error
+                                                         0x04 - Local Protection Error
+                                                         0x05 - Work Request Flushed Error
+                                                         0x06 - Memory Window Bind Error
+                                                         0x10 - Bad Response Error
+                                                         0x11 - Local Access Error
+                                                         0x12 - Remote Invalid Request Error
+                                                         0x13 - Remote Access Error
+                                                         0x14 - Remote Operation Error
+                                                         0x15 - Transport Retry Counter Exceeded
+                                                         0x16 - RNR Retry Counter Exceeded
+                                                         0x20 - Local RDD Violation Error
+                                                         0x21 - Remote Invalid RD Request
+                                                         0x22 - Remote Aborted Error
+                                                         0x23 - Invalid EE Context Number
+                                                         0x24 - Invalid EE Context State
+                                                         other - Reserved
+                                                 Syndrome is defined according to the IB specification volume 1. For detailed explanation of the syndromes, refer to chapters 10-11 of the IB specification rev 1.1. */
+    pseudo_bit_t	vendor_error_syndrome[0x00008];
+    pseudo_bit_t	wqe_counter[0x00010];
+/* -------------- */
+    pseudo_bit_t	opcode[0x00005];       /* The opcode of WQE completion is reported for.
+
+                                                 The following values are reported in case of completion with error:
+                                                 0xFE - For completion with error on Receive Queues
+                                                 0xFF - For completion with error on Send Queues */
+    pseudo_bit_t	reserved2[0x00001];
+    pseudo_bit_t	s_r[0x00001];          /* send 1 / receive 0 */
+    pseudo_bit_t	owner[0x00001];        /* HW Flips this bit for every CQ warp around. Initialized to Zero. */
+    pseudo_bit_t	reserved3[0x00018];
 /* -------------- */
 };
 
@@ -2942,6 +3008,72 @@ struct hermonprm_qp_ee_state_transitions_st {	/* Little Endian */
     struct hermonprm_queue_pair_ee_context_entry_st	qpc_eec_data;/* QPC/EEC data  ###michal - field has replaced with "qpc_data" (size .1948) */
 /* -------------- */
     pseudo_bit_t	reserved1[0x00800];
+/* -------------- */
+};
+
+/* Completion Queue Entry Format        #### michal - fixed by gdror */
+
+struct hermonprm_completion_queue_entry_st {	/* Little Endian */
+    pseudo_bit_t	qpn[0x00018];          /* Indicates the QP for which completion is being reported */
+    pseudo_bit_t	reserved0[0x00002];
+    pseudo_bit_t	d2s[0x00001];          /* Duplicate to Sniffer. This bit is set if both Send and Receive queues are subject for sniffer queue. The HW delivers
+                                                 packet only to send-associated sniffer receive queue. */
+    pseudo_bit_t	fcrc_sd[0x00001];      /* FCRC: If set, FC CRC is correct in FC frame encapsulated in payload. Valid for Raw Frame FC receive queue only.
+                                                 SD: CQ associated with Sniffer receive queue. If set, packets were skipped due to lack of receive buffers on the Sniffer receive queue */
+    pseudo_bit_t	fl[0x00001];           /* Force Loopback Valid for responder RawEth and UD only. */
+    pseudo_bit_t	vlan[0x00002];         /* Valid for RawEth and UD over Ethernet only. Applicable for RawEth and UD over Ethernet Receive queue
+                                                  00 - No VLAN header was present in the packet
+                                                 01 - C-VLAN (802.1q) Header was present in the frame.
+                                                 10 - S-VLAN (802.1ad) Header was present in the frame. */
+    pseudo_bit_t	dife[0x00001];         /* DIF Error */
+/* -------------- */
+    pseudo_bit_t	immediate_rssvalue_invalidatekey[0x00020];/* For a responder CQE, if completed WQE Opcode is Send With Immediate or Write With Immediate, this field contains immediate field of the received message.
+                                                 For a responder CQE, if completed WQE Opcode is Send With Invalidate, this field contains the R_key that was invalidated.
+                                                 For a responder CQE of a GSI packet this filed contains the Pkey Index of the packet.
+                                                 For IPoIB (UD) and RawEth CQEs this field contains the RSS hash function value.
+                                                 Otherwise, this field is reserved. */
+/* -------------- */
+    pseudo_bit_t	srq_rqpn[0x00018];     /* For Responder UD QPs, Remote (source) QP number.
+                                                 For Responder SRC QPs, SRQ number.
+                                                 Otherwise, this field is reserved. */
+    pseudo_bit_t	ml_path_mac_index[0x00007];/* For responder UD over IB CQE: These are the lower LMC bits of the DLID in an incoming UD packet, higher bits of this field, that are not part of the LMC bits are zeroed by HW. Invalid if incoming message DLID is the permissive LID or incoming message is multicast.
+                                                  For responder UD over Ethernet and RawEth CQEs: Index of the MAC Table entry that the packet DMAC was matched against.
+                                                  Otherwise, this field is reserved. */
+    pseudo_bit_t	g[0x00001];            /* For responder UD over IB CQE this bit indicates the presence of a GRH
+                                                 For responder UD over Ethernet CQE this bit is set if IPv6 L3 header was present in the packet, this bit is cleared if IPv4 L3 Header was present in the packet.
+                                                 Otherwise, this field is reserved. */
+/* -------------- */
+    pseudo_bit_t	slid_smac47_32[0x00010];/* For responder UD over IB CQE it is the source LID of the packet.
+                                                 For responder UD over Ethernet and RawEth CQEs it is the source-MAC[47:32] of the packet.
+                                                 Otherwise, this field is reserved. */
+    pseudo_bit_t	vid[0x0000c];          /* Frame VID, valid for Responder Raw Ethernet and UD over Ethernet QP. Otherwise, this field is reserved. */
+    pseudo_bit_t	sl[0x00004];           /* For responder UD over IB - the Service Level of the packet.
+                                                  For responder UD over Ethernet and RawEth - it is VLAN-header[15:12]
+                                                  Otherwise, this field is reserved. */
+/* -------------- */
+    pseudo_bit_t	smac31_0_rawether_ipoib_status[0x00020];/* For responder UD over Ethernet - source MAC[31:0] of the packet.
+                                                  For responder RawEth and UD over IB - RawEth-IPoIB status {3 reserved, ipok,udp,tcp,ipv4opt,ipv6,ipv4vf,ipv4,rht(6),ipv6extmask(6),reserved(2),l2am,reserved(2),bfcs,reserved(2),enc}
+                                                  Otherwise, this field is reserved. */
+/* -------------- */
+    pseudo_bit_t	byte_cnt[0x00020];     /* Byte count of data transferred. Applicable for RDMA-read, Atomic and all receive operations. completions.
+                                                 For Receive Queue that is subject for headers. separation, byte_cnt[31:24] specify number of bytes scattered to the first scatter entry (headers. length). Byte_cnt[23:0] specify total byte count received (including headers). */
+/* -------------- */
+    pseudo_bit_t	checksum[0x00010];     /* Valid for RawEth and IPoIB only. */
+    pseudo_bit_t	wqe_counter[0x00010];
+/* -------------- */
+    pseudo_bit_t	opcode[0x00005];       /* Send completions - same encoding as WQE.
+                                                  Error coding is 0x1F
+                                                  Receive:
+                                                  0x0 - RDMA-Write with Immediate
+                                                  0x1 - Send
+                                                  0x2 - Send with Immediate
+                                                  0x3 - Send & Invalidate
+                                                  */
+    pseudo_bit_t	is[0x00001];           /* inline scatter */
+    pseudo_bit_t	s_r[0x00001];          /* send 1 / receive 0 */
+    pseudo_bit_t	owner[0x00001];        /* HW Flips this bit for every CQ warp around. Initialized to Zero. */
+    pseudo_bit_t	reserved1[0x00010];
+    pseudo_bit_t	reserved2[0x00008];
 /* -------------- */
 };
 

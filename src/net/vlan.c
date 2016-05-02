@@ -261,7 +261,7 @@ static int vlan_rx ( struct io_buffer *iobuf, struct net_device *trunk,
 	uint8_t ll_source_copy[ETH_ALEN];
 	uint16_t tag;
 	int rc;
-	int promisc_vlan_enabled;
+	static int promisc_vlan_enabled = -1;
 
 	/* Sanity check */
 	if ( iob_len ( iobuf ) < sizeof ( *vlanhdr ) ) {
@@ -277,7 +277,11 @@ static int vlan_rx ( struct io_buffer *iobuf, struct net_device *trunk,
 	if ( ! netdev ) {
 		/* When promiscuos VLAN is enabled and the user did not
 		 * configured VLAN manually, then use the trunk */
-		promisc_vlan_enabled = fetch_intz_setting ( netdev_settings ( trunk ), &promisc_vlan_setting );
+		if ( promisc_vlan_enabled == -1 ) {
+			promisc_vlan_enabled = fetch_intz_setting ( netdev_settings ( trunk ),
+								&promisc_vlan_setting );
+		}
+
 		if ( promisc_vlan_enabled ) {
 			netdev = trunk;
 		} else {

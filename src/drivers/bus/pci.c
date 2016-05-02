@@ -51,6 +51,10 @@ uint16_t __data16 ( boot_pci_busdevfn );
 
 static void pcibus_remove ( struct root_device *rootdev );
 
+void set_boot_pci_busdevfn ( uint16_t busdevfn ) {
+	boot_pci_busdevfn = busdevfn;
+}
+
 /**
  * Read PCI BAR
  *

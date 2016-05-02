@@ -26,24 +26,47 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <errno.h>
 #include <ipxe/driver_settings.h>
 #include <ipxe/in.h>
+#include "mlx_utils/mlx_lib/mlx_blink_leds/mlx_blink_leds.h"
 #include "golan.h"
 #include "golan_settings.h"
 #include "flexboot_nodnic.h"
 
-
-static int golan_wol_applies ( struct settings *settings __unused ) {
-	return DOES_NOT_APPLY;
+static int shomron_wol_applies ( struct settings *settings ) {
+	struct driver_settings *drv_settings =
+			get_driver_settings_from_settings ( settings );
+	struct flexboot_nodnic *flexboot_nodnic =
+				( struct flexboot_nodnic * ) drv_settings->drv_priv;
+	return ( flexboot_nodnic->wol_en ) ? APPLIES : DOES_NOT_APPLY;
 }
 
-static int golan_blink_leds_applies ( struct settings *settings __unused ) {
-	return DOES_NOT_APPLY;
+static int shomron_blink_leds_restore ( struct settings *settings, const void *data,
+                    size_t len, const struct setting *setting ) {
+	struct driver_settings *driver_settings = get_driver_settings_from_settings ( settings );
+	struct flexboot_nodnic *flexboot_nodnic = ( struct flexboot_nodnic * ) driver_settings->drv_priv;
+	struct nv_port_conf *port_nv_conf = ( struct nv_port_conf * ) driver_settings->priv_data;
+	int32 to_val = 0;
+
+	/* If setting is deleted, set default */
+	if ( !data || !len ) {
+		/* Stored to generics to avoid saving it to flash */
+		generic_settings_store ( settings, setting,
+				&port_nv_conf->blink_leds, sizeof ( port_nv_conf->blink_leds ) );
+		return STORED;
+	}
+	to_val = be32_to_cpu ( *( ( int32* ) data) );
+	if (  to_val > MAX_BLINK_LEDS || to_val < MIN_BLINK_LEDS )
+			return INVALID_INPUT;
+
+	/* run command of blinking leds */
+	mlx_blink_leds ( flexboot_nodnic->device_priv.utils, to_val );
+	return SUCCESS;
 }
 
 static int shomron_virt_read ( struct driver_settings *settings ) {
 	struct flexboot_nodnic *flexboot_nodnic = ( struct flexboot_nodnic * ) settings->drv_priv;
 	struct nv_conf_defaults *defaults = ( struct nv_conf_defaults * ) settings->defaults;
-	union golan_nv_virt_conf nv_virt_conf;
-	union golan_nv_virt_caps nv_virt_caps;
+	union mlx_nvconfig_virt_conf nv_virt_conf;
+	union mlx_nvconfig_virt_caps nv_virt_caps;
 	struct nv_conf *conf = ( struct nv_conf * ) settings->priv_data;
 	struct driver_tlv_header tlv_hdr;
 	int rc;
@@ -77,7 +100,7 @@ static int shomron_virt_read ( struct driver_settings *settings ) {
 
 static int shomron_virt_nv_store ( struct driver_settings *driver_settings ) {
 	struct flexboot_nodnic *flexboot_nodnic = ( struct flexboot_nodnic * ) driver_settings->drv_priv;
-	union golan_nv_virt_conf nv_virt_conf;
+	union mlx_nvconfig_virt_conf nv_virt_conf;
 	struct nv_conf *conf = ( struct nv_conf * ) driver_settings->priv_data;
 	struct settings *settings = & ( driver_settings->generic_settings.settings );
 	char buf[255] = {0};
@@ -107,8 +130,8 @@ static int shomron_virt_nv_store ( struct driver_settings *driver_settings ) {
 static struct driver_setting_operation golan_setting_ops[] = {
 	{ &virt_mode_setting,	NULL, NULL, &shomron_virt_nv_store, &shomron_virt_read },
 	{ &virt_num_setting, 	NULL, NULL, &shomron_virt_nv_store, &shomron_virt_read },
-	{ &blink_leds_setting,	&golan_blink_leds_applies, NULL, NULL, NULL },
-	{ &wol_setting,			&golan_wol_applies, NULL, NULL, NULL },
+	{ &blink_leds_setting,	NULL, &shomron_blink_leds_restore, NULL, NULL },
+	{ &wol_setting,			&shomron_wol_applies, NULL, NULL, NULL },
 };
 
 void golan_update_setting_ops () {

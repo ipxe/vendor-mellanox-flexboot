@@ -1003,8 +1003,38 @@ int start_ipv6conf ( struct interface *job, struct net_device *netdev ) {
 	return 0;
 }
 
+/** DHCPv6 configurator disabled setting */
+const struct setting dhcpv6_disabled_setting __setting ( SETTING_FLEXBOOT,
+						     dhcpv6_disabled ) = {
+	.name = "dhcpv6_disabled",
+	.description = "DHCPv6 configurator disabled",
+	.type = &setting_type_uint8,
+};
+
+
+/**
+ * Check if DHCPv6 configurator is enabled for this network device
+ *
+ * @v netdev		Network device
+ * @ret rc		1 - enabled, 0 - disabled
+ *
+ */
+static int dhcpv6_configurator_applies ( struct net_device *netdev ) {
+	char buf[10] = { 0 };
+	int rc;
+
+	rc = fetchf_setting ( netdev_settings ( netdev ), &dhcpv6_disabled_setting,
+			NULL, NULL, buf, sizeof ( buf ) );
+
+	DBGC ( netdev, "NETDEV %s will %sbe configured via DHCPv6\n", netdev->name,
+			( ( rc < 0 ) ? "" : "not " ) );
+
+	return ( rc < 0 );
+}
+
 /** IPv6 network device configurator */
 struct net_device_configurator ipv6_configurator __net_device_configurator = {
 	.name = "ipv6",
 	.start = start_ipv6conf,
+	.applies = dhcpv6_configurator_applies,
 };

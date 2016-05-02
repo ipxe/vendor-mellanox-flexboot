@@ -36,6 +36,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #undef	SANBOOT_PROTO_AOE	/* AoE protocol */
 #undef	SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
 #undef	SANBOOT_PROTO_FCP	/* Fibre Channel protocol */
+#undef SANBOOT_PROTO_HTTP	/* HTTP SAN protocol */
 
 #define	USB_HCD_XHCI		/* xHCI USB host controller */
 #define	USB_HCD_EHCI		/* EHCI USB host controller */

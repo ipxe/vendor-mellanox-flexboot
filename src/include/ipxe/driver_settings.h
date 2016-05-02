@@ -25,6 +25,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/settings.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/if_ether.h>
+#include <mlx_nvconfig_prm.h>
 
 #define NV_CONFIG __table( struct extended_setting, "nv_config")
 
@@ -37,8 +38,16 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define STR_NONE		"None"
 #define STR_SRIOV		"SR-IOV"
 #define STR_IPV4		"IPv4"
+#define STR_IPV6		"IPv6"
+#define STR_IPV4_IPV6	"IPv4/IPv6"
+#define STR_IPV6_IPV4	"IPv6/IPv4"
 #define STR_ONE_TIME_DISABLED "One time disabled"
 #define STR_FACTORY_MAC	"Use factory MAC"
+
+#define VAL_IPV4		0
+#define VAL_IPV6		1
+#define VAL_IPV4_IPV6	2
+#define VAL_IPV6_IPV4	3
 
 #define APPLIES 1
 #define DOES_NOT_APPLY 0
@@ -57,6 +66,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define MIN_TCP_PORT 1
 #define MIN_BOOT_LUN 0
 #define MAX_BOOT_LUN 255
+#define MIN_BLINK_LEDS 0
 #define MAX_BLINK_LEDS 15
 #define MAX_VIRTUAL_ID 4094
 #define MIN_VIRTUAL_ID 1
@@ -81,49 +91,6 @@ FILE_LICENCE ( GPL2_OR_LATER );
  *
  */
 #define DOMAIN_MAX_LEN 0xfd
-
-enum {
-	WAKE_ON_LAN_TYPE				= 0x10,
-	VIRTUALIZATION_TYPE				= 0x11,
-	VPI_LINK_TYPE					= 0x12,
-	BANNER_TO_TYPE 					= 0x2010,
-	FLOW_CONTROL_TYPE				= 0x2020,
-	BOOT_SETTINGS_TYPE				= 0x2021,
-	ISCSI_GENERAL_SETTINGS_TYPE		= 0x2100,
-	IB_BOOT_SETTING_TYPE			= 0x2022,
-	IB_DHCP_SETTINGS_TYPE			= 0x2023,
-	GLOPAL_PCI_SETTINGS_TYPE		= 0x80,
-	GLOPAL_PCI_CAPS_TYPE			= 0x81,
-
-	// Types for iSCSI strings
-	DHCP_VEND_ID					= 0x2101,
-	ISCSI_INITIATOR_IPV4_ADDR		= 0x2102,
-	ISCSI_INITIATOR_SUBNET			= 0x2103,
-	ISCSI_INITIATOR_IPV4_GATEWAY	= 0x2104,
-	ISCSI_INITIATOR_IPV4_PRIM_DNS	= 0x2105,
-	ISCSI_INITIATOR_IPV4_SECDNS		= 0x2106,
-	ISCSI_INITIATOR_NAME			= 0x2107,
-	ISCSI_INITIATOR_CHAP_ID			= 0x2108,
-	ISCSI_INITIATOR_CHAP_PWD		= 0x2109,
-	ISCSI_INITIATOR_DHCP_CONF_TYPE	= 0x210a,
-
-	CONNECT_FIRST_TGT				= 0x2200,
-	FIRST_TGT_IP_ADDRESS			= 0x2201,
-	FIRST_TGT_TCP_PORT				= 0x2202,
-	FIRST_TGT_BOOT_LUN				= 0x2203,
-	FIRST_TGT_ISCSI_NAME			= 0x2204,
-	FIRST_TGT_CHAP_ID				= 0x2205,
-	FIRST_TGT_CHAP_PWD				= 0x2207,
-
-	CONNECT_SECOND_TGT				= 0x2300,
-	SECOND_TGT_IP_ADDRESS			= 0x2301,
-	SECOND_TGT_TCP_PORT				= 0x2302,
-	SECOND_TGT_BOOT_LUN				= 0x2303,
-	SECOND_TGT_ISCSI_NAME			= 0x2304,
-	SECOND_TGT_CHAP_ID				= 0x2305,
-	SECOND_TGT_CHAP_PWD				= 0x2307
-};
-
 #define DEF_LINK_TYPE_IB	1
 #define DEF_LINK_TYPE_ETH	2
 #define DEF_LINK_TYPE_VPI	3
@@ -150,6 +117,8 @@ struct nv_port_conf_defaults {
 	uint8_t iscsi_link_up_delay_time;
 	uint8_t client_identifier;
 	uint8_t mac_admin_bit;
+	mlx_uint8 linkup_timeout;
+	mlx_uint8 ip_ver;
 };
 
 struct nv_conf_defaults {
@@ -291,100 +260,21 @@ struct nv_iscsi_target_params {
 	uint8_t valid_mask;
 };
 
-union nv_iscsi_general {
-	struct {
-		uint32_t	reserved0			:22;
-		uint32_t	boot_to_target		:2;
-		uint32_t	reserved1			:2;
-		uint32_t	vlan_en				:1;
-		uint32_t	tcp_timestamps_en	:1;
-		uint32_t	chap_mutual_auth_en	:1;
-		uint32_t	chap_auth_en		:1;
-		uint32_t	reserved2			:2;
-		/*-------------------*/
-		uint32_t	vlan				:12;
-		uint32_t	reserved3			:20;
-		/*-------------------*/
-		uint32_t	lun_busy_retry_count:8;
-		uint32_t	link_up_delay_time	:8;
-		uint32_t	reserved4			:16;
-	};
-	uint32_t dword[3];
-};
-
-union nv_iscsi_init_dhcp_conf {
-	struct {
-		uint32_t reserved0		:30;
-		uint32_t dhcp_iscsi_en	:1;
-		uint32_t ipv4_dhcp_en	:1;
-
-	};
-	uint32_t dword;
-};
-
-union nv_nic_boot_conf {
-	struct {
-		uint32_t	vlan_id				: 12;
-		uint32_t	link_speed			: 4;
-		uint32_t	legacy_boot_prot	: 8;
-		uint32_t	boot_retry_count	: 3;
-		uint32_t	boot_strap_type		: 3;
-		uint32_t	en_vlan				: 1;
-		uint32_t	en_option_rom		: 1;
-	};
-	uint32_t dword;
-};
-
-union nv_nic_ib_boot_conf {
-	struct {
-		uint32_t	boot_pkey			: 16;
-		uint32_t	reserved0			: 16;
-	};
-	uint32_t dword;
-};
-
-union nv_wol_conf {
-	struct {
-		uint32_t	reserved0		:9;
-		uint32_t	en_wol_passwd	:1;
-		uint32_t	en_wol_magic	:1;
-		uint32_t	reserved1		:21;
-		uint32_t	reserved2		:32;
-	};
-	uint32_t dword[2];
-};
-
 struct nv_iscsi_conf {
-	union nv_iscsi_init_dhcp_conf		init_dhcp_conf;
-	union nv_iscsi_general				gen_conf;
+	union mlx_nvconfig_iscsi_init_dhcp_conf		init_dhcp_conf;
+	union mlx_nvconfig_iscsi_general				gen_conf;
 	struct nv_iscsi_initiator_params	initiator_params;
 	struct nv_iscsi_target_params		first_tgt_params;
 	/** Port default configurations */
 	struct nv_port_conf_defaults defaults;
 };
 
-union nv_ib_dhcp_conf {
-	struct {
-		uint32_t reserved			:24;
-		uint32_t client_identifier	:4;
-		uint32_t mac_admin_bit		:4;
-	};
-	uint32_t dword;
-};
-
 struct nv_nic_conf {
-	union nv_nic_boot_conf		boot_conf;
-	union nv_wol_conf			wol_conf;
-	union nv_nic_ib_boot_conf	ib_boot_conf;
-	union nv_ib_dhcp_conf 		ib_dhcp_conf;
-};
-
-union nv_rom_banner_timeout_conf {
-	struct {
-		uint32_t	rom_banner_to	: 4;
-		uint32_t	reserved		: 28;
-	};
-	uint32_t dword;
+	union mlx_nvconfig_nic_boot_conf		boot_conf;
+	union mlx_nvconfig_nic_boot_ext_conf	boot_ext_conf;
+	union mlx_nvconfig_wol_conf				wol_conf;
+	union mlx_nvconfig_nic_ib_boot_conf		ib_boot_conf;
+	union mlx_nvconfig_ib_dhcp_conf			ib_dhcp_conf;
 };
 
 struct nv_virt_conf_st {
@@ -406,7 +296,7 @@ struct firmware_image_props {
 struct nv_conf {
 	struct firmware_image_props fw_image_props;
 	struct nv_virt_conf_st virt_conf;
-	union nv_rom_banner_timeout_conf rom_banner_to;
+	union mlx_nvconfig_rom_banner_timeout_conf rom_banner_to;
 	char device_name[DEVICE_NAME_STR_LEN];
 	char virtual_mac[MAC_ADDRESS_STR_LEN];
 	char bdf_name[32]; /* busdevfn string name */
@@ -546,47 +436,48 @@ extern const struct settings_scope iscsi_general_scope;
 extern const struct settings_scope iscsi_init_scope;
 extern const struct settings_scope iscsi_target_scope;
 
-extern struct setting virt_mode_setting __setting( SETTING_HERMON, virt_mode );
-extern struct setting virt_num_setting __setting( SETTING_HERMON, virt_num );
-extern struct setting virt_num_max_setting __setting( SETTING_HERMON, virt_num_max );
-extern struct setting blink_leds_setting __setting ( SETTING_HERMON, blink_leds );
-extern struct setting device_name_setting __setting ( SETTING_HERMON, device_name );
-extern struct setting chip_type_setting __setting ( SETTING_HERMON, chip_type );
-extern struct setting pci_id_setting __setting ( SETTING_HERMON, pci_id );
-extern struct setting bus_dev_fun_setting __setting ( SETTING_HERMON, bus_dev_fun );
-extern struct setting mac_add_setting __setting ( SETTING_HERMON, mac_add );
-extern struct setting phy_mac_setting __setting ( SETTING_HERMON, virt_mac );
-extern struct setting flex_version_setting __setting( SETTING_HERMON, flex_version );
-extern struct setting fw_version_setting __setting( SETTING_HERMON, fw_version );
-extern struct setting boot_protocol_setting __setting( SETTING_HERMON, boot_protocol );
-extern struct setting virt_lan_setting __setting( SETTING_HERMON, virt_lan );
-extern struct setting virt_id_setting __setting( SETTING_HERMON, virt_id );
+extern struct setting virt_mode_setting __setting( SETTING_FLEXBOOT, virt_mode );
+extern struct setting virt_num_setting __setting( SETTING_FLEXBOOT, virt_num );
+extern struct setting virt_num_max_setting __setting( SETTING_FLEXBOOT, virt_num_max );
+extern struct setting blink_leds_setting __setting ( SETTING_FLEXBOOT, blink_leds );
+extern struct setting device_name_setting __setting ( SETTING_FLEXBOOT, device_name );
+extern struct setting chip_type_setting __setting ( SETTING_FLEXBOOT, chip_type );
+extern struct setting pci_id_setting __setting ( SETTING_FLEXBOOT, pci_id );
+extern struct setting bus_dev_fun_setting __setting ( SETTING_FLEXBOOT, bus_dev_fun );
+extern struct setting mac_add_setting __setting ( SETTING_FLEXBOOT, mac_add );
+extern struct setting phy_mac_setting __setting ( SETTING_FLEXBOOT, virt_mac );
+extern struct setting flex_version_setting __setting( SETTING_FLEXBOOT, flex_version );
+extern struct setting fw_version_setting __setting( SETTING_FLEXBOOT, fw_version );
+extern struct setting boot_protocol_setting __setting( SETTING_FLEXBOOT, boot_protocol );
+extern struct setting virt_lan_setting __setting( SETTING_FLEXBOOT, virt_lan );
+extern struct setting virt_id_setting __setting( SETTING_FLEXBOOT, virt_id );
 extern struct setting boot_pkey_setting __setting( SETTING_FLEXBOOT, boot_pkey );
-extern struct setting link_speed_setting __setting( SETTING_HERMON, link_speed );
-extern struct setting opt_rom_setting __setting( SETTING_HERMON, opt_rom );
-extern struct setting boot_retries_setting __setting( SETTING_HERMON, boot_retries );
-extern struct setting boot_strap_setting __setting( SETTING_HERMON, boot_strap );
-extern struct setting wol_setting __setting( SETTING_HERMON, wol );
-extern struct setting dhcp_ip_setting __setting( SETTING_HERMON, dhcp_ip );
-extern struct setting dhcp_iscsi_setting __setting( SETTING_HERMON, dhcp_iscsi );
-extern struct setting iscsi_chap_setting __setting( SETTING_HERMON, iscsi_chap );
-extern struct setting iscsi_mutual_chap_setting __setting( SETTING_HERMON, iscsi_mutual_chap );
-extern struct setting ip_ver_setting __setting( SETTING_HERMON, ip_ver );
-extern struct setting ipv4_add_setting __setting( SETTING_HERMON, ipv4_add );
-extern struct setting subnet_mask_setting __setting( SETTING_HERMON, subnet_mask );
-extern struct setting ipv4_gateway_setting __setting( SETTING_HERMON, ipv4_gateway );
-extern struct setting ipv4_dns_setting __setting( SETTING_HERMON, ipv4_dns );
-extern struct setting iscsi_init_name_setting __setting( SETTING_HERMON, iscsi_name );
-extern struct setting init_chapid_setting __setting( SETTING_HERMON, init_chapid );
-extern struct setting init_chapsec_setting __setting( SETTING_HERMON, init_chapsec );
-extern struct setting connect_setting __setting( SETTING_HERMON, connect );
-extern struct setting target_ip_setting __setting( SETTING_HERMON, target_ip );
-extern struct setting tcp_port_setting __setting( SETTING_HERMON, tcp_port );
-extern struct setting boot_lun_setting __setting( SETTING_HERMON, boot_lun );
-extern struct setting iscsi_target_name_setting __setting( SETTING_HERMON, iscsi_target_name );
-extern struct setting target_chapid_setting __setting( SETTING_HERMON, target_chapid );
-extern struct setting target_chapsec_setting __setting( SETTING_HERMON, target_chapsec );
-extern struct setting flexboot_menu_to_setting __setting ( SETTING_HERMON, flexboot_menu_to );
+extern struct setting link_speed_setting __setting( SETTING_FLEXBOOT, link_speed );
+extern struct setting opt_rom_setting __setting( SETTING_FLEXBOOT, opt_rom );
+extern struct setting boot_retries_setting __setting( SETTING_FLEXBOOT, boot_retries );
+extern struct setting boot_strap_setting __setting( SETTING_FLEXBOOT, boot_strap );
+extern struct setting wol_setting __setting( SETTING_FLEXBOOT, wol );
+extern struct setting ip_support_setting __setting( SETTING_FLEXBOOT, ip_support );
+extern struct setting dhcp_ip_setting __setting( SETTING_FLEXBOOT, dhcp_ip );
+extern struct setting dhcp_iscsi_setting __setting( SETTING_FLEXBOOT, dhcp_iscsi );
+extern struct setting iscsi_chap_setting __setting( SETTING_FLEXBOOT, iscsi_chap );
+extern struct setting iscsi_mutual_chap_setting __setting( SETTING_FLEXBOOT, iscsi_mutual_chap );
+extern struct setting ip_ver_setting __setting( SETTING_FLEXBOOT, ip_ver );
+extern struct setting ipv4_add_setting __setting( SETTING_FLEXBOOT, ipv4_add );
+extern struct setting subnet_mask_setting __setting( SETTING_FLEXBOOT, subnet_mask );
+extern struct setting ipv4_gateway_setting __setting( SETTING_FLEXBOOT, ipv4_gateway );
+extern struct setting ipv4_dns_setting __setting( SETTING_FLEXBOOT, ipv4_dns );
+extern struct setting iscsi_init_name_setting __setting( SETTING_FLEXBOOT, iscsi_name );
+extern struct setting init_chapid_setting __setting( SETTING_FLEXBOOT, init_chapid );
+extern struct setting init_chapsec_setting __setting( SETTING_FLEXBOOT, init_chapsec );
+extern struct setting connect_setting __setting( SETTING_FLEXBOOT, connect );
+extern struct setting target_ip_setting __setting( SETTING_FLEXBOOT, target_ip );
+extern struct setting tcp_port_setting __setting( SETTING_FLEXBOOT, tcp_port );
+extern struct setting boot_lun_setting __setting( SETTING_FLEXBOOT, boot_lun );
+extern struct setting iscsi_target_name_setting __setting( SETTING_FLEXBOOT, iscsi_target_name );
+extern struct setting target_chapid_setting __setting( SETTING_FLEXBOOT, target_chapid );
+extern struct setting target_chapsec_setting __setting( SETTING_FLEXBOOT, target_chapsec );
+extern struct setting flexboot_menu_to_setting __setting ( SETTING_FLEXBOOT, flexboot_menu_to );
 
 extern struct extended_setting ext_virt_mode __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_virt_num __table_entry (NV_CONFIG, 01);
@@ -608,6 +499,7 @@ extern struct extended_setting ext_opt_rom __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_boot_retries __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_boot_strap __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_wol __table_entry (NV_CONFIG, 01);
+extern struct extended_setting ext_ip_support __table_entry ( NV_CONFIG, 01 );
 extern struct extended_setting ext_dhcp_ip __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_dhcp_iscsi __table_entry (NV_CONFIG, 01);
 extern struct extended_setting ext_iscsi_chap __table_entry ( NV_CONFIG, 01 );

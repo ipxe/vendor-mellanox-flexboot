@@ -53,6 +53,7 @@ struct nvconfig_tlv_mapping{
 	mlx_uint16	tlv_type;
 	mlx_uint16	real_tlv_type;
 	NVRAM_CLASS_CODE class_code;
+	mlx_boolean fw_reset_needed;
 };
 
 union nvconfig_tlv_type {
@@ -77,7 +78,11 @@ struct nvconfig_header {
 	 mlx_uint32 length		:9; /*Size of configuration item data in bytes between 0..256 */
 	 mlx_uint32 reserved0	:3;
 	 mlx_uint32 version		:4; /* Configuration item version */
-	 mlx_uint32 reserved1	:8;
+	 mlx_uint32 reserved1	:7;
+
+	 mlx_uint32 def_en		:1; /*Choose whether to access the default value or the user-defined value.
+									0x0 Read or write the user-defined value.
+									0x1 Read the default value (only valid for reads).*/
 
 	 mlx_uint32 rd_en		:1; /*enables reading the TLV by lower priorities
 									0 - TLV can be read by the subsequent lifecycle priorities.
@@ -127,6 +132,7 @@ nvconfig_nvdata_access(
 		IN mlx_uint16 tlv_type,
 		IN REG_ACCESS_OPT opt,
 		IN mlx_size data_size,
+		IN NV_DEFAULT_OPT def_en,
 		IN OUT mlx_uint8 *version,
 		IN OUT mlx_void *data
 		);

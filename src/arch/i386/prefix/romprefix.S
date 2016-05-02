@@ -443,7 +443,7 @@ no_pmm:
 	/*
 	 * reading ppf to check if there is driver up
 	 * having one indicates that this prefix is running while UEFI driver is up
-	 * therefore we should not do any HCA commands, and gently continue (and posting BEV) 
+	 * therefore we should not do any HCA commands, and gently continue (and posting BEV)
 	 */
 	call	test_device_ownership
 	testl	%eax, %eax
@@ -451,11 +451,14 @@ no_pmm:
 	call 	check_nv_cfg_en
 	call	get_flexboot_menu_to
 #endif /* DEVICE_CX3 */
-#ifdef DEVICE_CX4
+#ifndef DEVICE_CX3
+	pushw	%cs
 	call 	gw_get_cap_ofst
 	cmpb	$0 ,mlx_cap_ofst
    	/* on error skip other functions */
     je		93f
+#endif
+#ifdef DEVICE_CX4
     call 	wait_fw_up
     testl	%eax, %eax
     jnz		93f
@@ -466,8 +469,8 @@ no_pmm:
 	/* push cs to make a 32 bit jump */
 	pushw	%cs
 	call	check_op_rom_en
- 93:
 #endif /* DEVICE_CX4 || DEVICE_CX3 */
+93:
    popw		%bx
 #endif /* FLASH_CONFIGURATION */
 	/* Copy self to option ROM space, if applicable.  Required for
@@ -676,7 +679,7 @@ flexboot_menu_to:
 	.word 0
 	.size flexboot_menu_to, . - flexboot_menu_to
 
-#if defined(DEVICE_CX4) || defined(DEVICE_CIB)
+#ifndef DEVICE_CX3
 mlx_cap_ofst:
 	.byte 0
 	.size mlx_cap_ofst, . - mlx_cap_ofst
@@ -831,7 +834,10 @@ exec:	/* Set %ds = %cs */
 	pushw   init_pci_busdevfn
 	popw    %es:boot_pci_busdevfn
 	pushw	init_post_shell
+	cmpw	$0x0000, init_post_shell
+	jz	skip_clear_init_post_shell
 	movw	$0x0000, init_post_shell
+skip_clear_init_post_shell:
 	popw	%es:boot_post_shell
 	popw    %es
 
@@ -1850,7 +1856,7 @@ gw_write_dword: //offset at eax (HCR)!
  	ret
  	.size	gw_write_dword, . - gw_write_dword
 
-#elif defined(DEVICE_CX4) || defined(DEVICE_CIB)
+#else
 #define TLV_ROM_BNR_TYPE 0x210
 
 /*
@@ -1930,7 +1936,6 @@ get_flexboot_menu_to:
 #define	OP_ROM_EN_TLV_OFST 0x2
 check_host_op_rom_en:
 	/* save edx/eax/ecx register to stack */
-	pushl	%edx
 	pushl	%ecx
 	/* place holder low dword of 64 bit value, set default value to 1 */
 	pushl	$0x1
@@ -1950,20 +1955,15 @@ check_host_op_rom_en:
 	je		1f
 	/* align wanted word to first word */
 	shrl	$16, %ecx
-	/* save option rom enable bit value */
-	movl	%ecx, %edx
 	/* legacy boot protocol check */
 	andl	$0xff, %ecx
 	jz		1f
-   /* check enable option rom bit (use 15 insted of 31 cause already shifted) */
-	shrl	$15, %edx
-	movl	%edx, %ecx
-	andl	$0x1, %ecx
+	/* Value of 2 is the same as 1 - enabled */
+   	movl	$1, %ecx
 1:
 	movl 	%ecx, %eax
 99:
 	popl	%ecx
-	popl	%edx
 	ret
 .size check_host_op_rom_en, . -check_host_op_rom_en
 
@@ -2059,10 +2059,10 @@ cap_loop:
 	/* Restore registers  values */
 	popl	%edi
 	popl	%ecx
-	ret
+	lret
 .size	gw_get_cap_ofst, . - gw_get_cap_ofst
 
-
+/* drek -  very dangerous loop */
 /* gw_hold_ownership
  *
  * Parameters:
@@ -2107,12 +2107,12 @@ check_gw_semaphore_val:
 	jne		1b
 	jmp 	99f
 98:
-	movl	$0xffffffff, %eax
+	movl	$0x0, %eax
 99:
 	/* Restore registers  values */
 	popw	%di
 	popl	%ecx
-	ret
+	lret
 .size	gw_hold_ownership, . - gw_hold_ownership
 
 /* gw_release_ownership
@@ -2135,7 +2135,7 @@ gw_release_ownership:
 	/* Restore registers  values */
 	popw	%di
 	popl	%ecx
-	ret
+	lret
 .size	gw_release_ownership, . - gw_release_ownership
 
 /* gw_write_to_space
@@ -2233,7 +2233,7 @@ flag_set:
 	/* Restore registers  values */
 	popl	%ecx
 	popl	%edi
-	ret
+	lret
 .size	gw_read_from_space, . - gw_read_from_space
 
 /* hold_common_semaphore
@@ -2253,16 +2253,31 @@ hold_common_semaphore:
 	/* Preserve registers values */
 	pushl	%ecx
 	pushl	%esi
+	/* set default PID in case of failure */
+	movl	$ROMPREFIX_PID,%esi
+	pushl	%edx
+	xorl	%eax,%eax
+	/* Get random PID by sampling BIOS RTC in cycles */
+	movb	$0x0,%ah
+	int	$0x1a
+	movzwl	%cx,%eax
+	shll	$16,%eax
+	movw	%dx,%ax
+	movl	%eax,%esi
+	testl	%esi,%esi
+	jnz		1f
 	movl	$ROMPREFIX_PID,%esi
 1:
+	popl	%edx
+2:
 	movl	$MAX_NUM_TRIES,%ecx
 check_common_semaphore_val:
 	/* about 0.25 sec delay */
 	call	wait_for_tick
-	// here add code for waiting 10 ms */
 	decl	%ecx
-	js		2f
+	js		3f
 	movw	$COMMON_SEMAPHORES_SPACE_ID,%ax
+	pushw	%cs
 	call	gw_read_from_space
 	/* if semaphore value is not zero retry to hold */
 	testl	%eax, %eax
@@ -2271,13 +2286,14 @@ check_common_semaphore_val:
 	/* PID value is already in %esi */
 	call	gw_write_to_space
 	/* verify that semaphore in common space semaphore is locked */
+	pushw	%cs
 	call	gw_read_from_space
-	cmpl	$ROMPREFIX_PID,%eax
-	jne		1b
-	jmp 	3f
-2:
-	movl	$0x0, %eax
+	cmpl	%esi,%eax
+	jne		2b
+	jmp 	4f
 3:
+	movl	$0x0, %eax
+4:
 	/* Restore registers  values */
 	popl	%esi
 	popl	%ecx
@@ -2333,6 +2349,7 @@ icmd_access:
 	/* read existing ICMD from space */
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	movl	$MLX_ICMD_CTRL_ADDR, %edx
+	pushw	%cs
 	call	gw_read_from_space
 	/* check if busy then return error */
 	testl	$0x1, %eax
@@ -2358,6 +2375,7 @@ icmd_busy_bit_mon:
 	call	wait_for_tick
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	/* space already set */
+	pushw	%cs
 	call	gw_read_from_space
 	testl	$ICMD_BUSY_BIT_MASK, %eax
 	jnz 	icmd_busy_bit_mon
@@ -2369,6 +2387,7 @@ icmd_busy_bit_mon:
 	/*return status at op_tlv (need to be 0 for success otherwise failure) */
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	movl	$OP_TLV_BASE_OFFSET, %edx
+	pushw	%cs
 	call 	gw_read_from_space
 	/* mask and align status to return to caller */
 	andl	$OPT_TLV_STAT_MASK, %eax
@@ -2559,6 +2578,7 @@ wait_fw_up:
 	pushl	%edx
 	pushl	%esi
 	/* hold gw ownership */
+	pushw	%cs
 	call	gw_hold_ownership
 	testl	%eax, %eax
 	jz 		99f
@@ -2568,6 +2588,7 @@ retry_check:
 	movw	$PCI_GW_SPACE_NODNIC, %ax
 	/* offset in Nodnic space */
 	movl	$PCI_GW_SPACE_NODNIC_INIT_DWORD_OFST,%edx
+	pushw	%cs
 	call	gw_read_from_space
 	andl	$INIT_BIT_MASK, %eax
 	testl	%eax, %eax
@@ -2577,6 +2598,7 @@ retry_check:
 	jns		retry_check /* jump if ZF not cleared */
 	movl	$0x1, %eax
 1:
+	pushw	%cs
 	call	gw_release_ownership
 99:
 	popl	%esi
@@ -2609,6 +2631,7 @@ get_tlv_value:
 	/* save port number in esi cause gw_hold_ownership may change %eax value*/
 	movl	%eax, %esi
 	/* hold gw ownership */
+	pushw	%cs
 	call	gw_hold_ownership
 	movl	%eax, %edx
 	movl	$0xffffffff, %eax
@@ -2671,11 +2694,13 @@ get_tlv_value:
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	movl	$TLV_ENTRIES_BASE_OFFSET, %edx
 	addl	%ss:10(%ebp), %edx
+	pushw	%cs
 	call	gw_read_from_space
 	movl	%eax, %ss:14(%ebp)
 	/* read MB (high dword) will be returned in %eax */
 	movw	$PCI_GW_SPACE_ALL_ICMD, %ax
 	addl	$0x4, %edx
+	pushw	%cs
 	call	gw_read_from_space
 	jmp		2f
 1:
@@ -2688,6 +2713,7 @@ get_tlv_value:
 	call 	release_common_semaphore
 3:
 	/* release gw ownership */
+	pushw	%cs
 	call 	gw_release_ownership
 99:
 	/* restore registers values */
@@ -2697,19 +2723,21 @@ get_tlv_value:
 	ret
 .size get_tlv_value, . -get_tlv_value
 
-#endif //DEVICE_CX4
+#endif //ifndef DEVICE_CX3
 #endif
 
+#ifdef MLX_BUILD
 driver_version:
  .align 16
  .long 0x73786c6d
  .long 0x3a6e6769
- .long 0x00100003
- .long 0x0004019c
- .long 0x10070002
+ .long __MLX_0001_MAJOR_VER_
+ .long __MLX_MIN_SUB_MIN_VER_
+ .long __MLX_DEV_ID_00ff
+#endif
 
 /* Drag in objects via _rom_start */
-1REQUIRING_SYMBOL ( _rom_start )
+REQUIRING_SYMBOL ( _rom_start )
 
 /* Drag in ROM configuration */
 REQUIRE_OBJECT ( config_romprefix )

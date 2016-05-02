@@ -34,12 +34,15 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_utils.h"
 #include "mlx_bail.h"
 #include "mlx_cmd.h"
+#include "mlx_memory.h"
+#include "mlx_pci.h"
 #include "mlx_device.h"
 #include "mlx_port.h"
 #include <byteswap.h>
 #include <ipxe/status_updater.h>
 #include <usr/ifmgmt.h>
 #include <mlx_nvconfig.h>
+#include <mlx_nvconfig_defaults.h>
 #include <mlx_pci_gw.h>
 #include <mlx_vmac.h>
 #include <ipxe/boot_menu_ui.h>
@@ -51,11 +54,35 @@ FILE_LICENCE ( GPL2_OR_LATER );
  ***************************************************************************
  */
 static int flexboot_nodnic_arm_cq ( struct flexboot_nodnic_port *port ) {
+#ifndef DEVICE_CX3
 	mlx_uint32 val = ( port->eth_cq->next_idx & 0xffff );
 	if ( nodnic_port_set ( & port->port_priv, nodnic_port_option_arm_cq, val ) ) {
 		MLX_DEBUG_ERROR( port->port_priv.device, "Failed to arm the CQ\n" );
 		return MLX_FAILED;
 	}
+#else
+	mlx_utils *utils = port->port_priv.device->utils;
+	nodnic_port_data_flow_gw *ptr = port->port_priv.data_flow_gw;
+	mlx_uint32 data = 0;
+	mlx_uint32 val = 0;
+
+	if ( port->port_priv.device->device_cap.crspace_doorbells == 0 ) {
+		val = ( port->eth_cq->next_idx & 0xffff );
+		if ( nodnic_port_set ( & port->port_priv, nodnic_port_option_arm_cq, val ) ) {
+			MLX_DEBUG_ERROR( port->port_priv.device, "Failed to arm the CQ\n" );
+			return MLX_FAILED;
+		}
+	} else {
+		/* Arming the CQ with CQ CI should be with this format -
+		 * 16 bit - CQ CI - same endianness as the FW (don't swap bytes)
+		 * 15 bit - reserved
+		 *  1 bit - arm CQ - must correct the endianness with the reserved above */
+		data = ( ( ( port->eth_cq->next_idx & 0xffff ) << 16 ) | 0x0080 );
+		/* Write the new index and update FW that new data was submitted */
+		mlx_pci_mem_write ( utils, MlxPciWidthUint32, 0,
+				( mlx_uint64 ) ( mlx_uint32 ) & ( ptr->armcq_cq_ci_dword ), 1, &data );
+	}
+#endif
 	return 0;
 }
 
@@ -426,8 +453,8 @@ static int flexboot_nodnic_post_send ( struct ib_device *ibdev,
 
 	wq->next_idx++;
 
-	status = nodnic_port_update_ring_doorbell(&port->port_priv, &send_ring->nodnic_ring,
-			(mlx_uint16)wq->next_idx);
+	status = port->port_priv.send_doorbell ( &port->port_priv,
+				&send_ring->nodnic_ring, ( mlx_uint16 ) wq->next_idx );
 	if ( status != 0 ) {
 		DBGC ( flexboot_nodnic, "flexboot_nodnic %p ring send doorbell failed\n", flexboot_nodnic );
 	}
@@ -467,7 +494,7 @@ static int flexboot_nodnic_post_recv ( struct ib_device *ibdev,
 		goto post_recv_done;
 	}
 	wq->iobufs[wq->next_idx & wqe_idx_mask] = iobuf;
-	wqe = &recv_ring->wqe_virt[wq->next_idx & wqe_idx_mask];
+	wqe = &((struct nodnic_recv_wqe*)recv_ring->wqe_virt)[wq->next_idx & wqe_idx_mask];
 
 	MLX_FILL_1 ( &wqe->data[0], 0, byte_count, iob_tailroom ( iobuf ) );
 	MLX_FILL_1 ( &wqe->data[0], 1, l_key, flexboot_nodnic->device_priv.lkey );
@@ -478,12 +505,11 @@ static int flexboot_nodnic_post_recv ( struct ib_device *ibdev,
 
 	wq->next_idx++;
 
-	status = nodnic_port_update_ring_doorbell(&port->port_priv, &recv_ring->nodnic_ring,
-				(mlx_uint16)wq->next_idx);
+	status = port->port_priv.recv_doorbell ( &port->port_priv,
+				&recv_ring->nodnic_ring, ( mlx_uint16 ) wq->next_idx );
 	if ( status != 0 ) {
 		DBGC ( flexboot_nodnic, "flexboot_nodnic %p ring receive doorbell failed\n", flexboot_nodnic );
 	}
-
 post_recv_done:
 	return status;
 }
@@ -693,10 +719,10 @@ static void flexboot_nodnic_port_disable_dma ( struct flexboot_nodnic_port *port
  */
 
 /** Number of flexboot_nodnic Ethernet send work queue entries */
-#define FLEXBOOT_NODNIC_ETH_NUM_SEND_WQES 32
+#define FLEXBOOT_NODNIC_ETH_NUM_SEND_WQES 64
 
 /** Number of flexboot_nodnic Ethernet receive work queue entries */
-#define FLEXBOOT_NODNIC_ETH_NUM_RECV_WQES 32
+#define FLEXBOOT_NODNIC_ETH_NUM_RECV_WQES 64
 /** Shomron Ethernet queue pair operations */
 static struct ib_queue_pair_operations flexboot_nodnic_eth_qp_op = {
 	.alloc_iob = alloc_iob,
@@ -955,8 +981,12 @@ static void flexboot_nodnic_eth_close ( struct net_device *netdev) {
 				flexboot_nodnic, ibdev->port, strerror ( status ) );
 		/* Nothing we can do about this */
 	}
+
 	ib_destroy_qp ( ibdev, port->eth_qp );
+	port->eth_qp = NULL;
 	ib_destroy_cq ( ibdev, port->eth_cq );
+	port->eth_cq = NULL;
+
 	nodnic_port_free_eq(&port->port_priv);
 
 	DBG( "%s: port %d closed\n", __FUNCTION__, port->ibdev->port );
@@ -1127,8 +1157,11 @@ flexboot_nodnic_thin_init_ports( struct flexboot_nodnic *flexboot_nodnic_priv ) 
 		if ( ! ( flexboot_nodnic_priv->port_mask & ( i + 1 ) ) )
 			continue;
 		port_priv = &flexboot_nodnic_priv->port[i].port_priv;
-		nodnic_port_thin_init( device_priv, port_priv, i );
+		status = nodnic_port_thin_init( device_priv, port_priv, i );
+		MLX_FATAL_CHECK_STATUS(status, thin_init_err,
+				"flexboot_nodnic_thin_init_ports failed");
 	}
+thin_init_err:
 	return status;
 }
 
@@ -1243,6 +1276,7 @@ static void flexboot_nodnic_updater ( void *priv, uint8_t status ) {
 	struct flexboot_nodnic *nodnic = ( struct flexboot_nodnic * ) priv;
 
 	switch ( status ) {
+	case STATUS_UPDATE_PXE_BOOT_START:
 	case STATUS_UPDATE_INT13_START:
 		flexboot_nodnic_enable_dma ( nodnic );
 		break;
@@ -1306,19 +1340,12 @@ void swab_settings_bits ( uint32 tlv_type, void *data, uint32_t length ) {
 	case ISCSI_INITIATOR_CHAP_ID		:
 	case ISCSI_INITIATOR_CHAP_PWD		:
 	case CONNECT_FIRST_TGT				:
-	case CONNECT_SECOND_TGT				:
 	case FIRST_TGT_IP_ADDRESS			:
 	case FIRST_TGT_TCP_PORT				:
 	case FIRST_TGT_BOOT_LUN				:
 	case FIRST_TGT_ISCSI_NAME			:
 	case FIRST_TGT_CHAP_ID				:
 	case FIRST_TGT_CHAP_PWD				:
-	case SECOND_TGT_IP_ADDRESS			:
-	case SECOND_TGT_TCP_PORT			:
-	case SECOND_TGT_BOOT_LUN			:
-	case SECOND_TGT_ISCSI_NAME			:
-	case SECOND_TGT_CHAP_ID				:
-	case SECOND_TGT_CHAP_PWD			:
 		break;
 	default:
 		for (; i * 4 < length; i++ ) {
@@ -1416,6 +1443,23 @@ static mlx_status flexboot_nodnic_get_factory_mac (
 	return status;
 }
 
+static mlx_status flexboot_nodnic_get_wol_conf (
+		struct flexboot_nodnic *flexboot_nodnic_priv)
+{
+	mlx_boolean read_en = 0;
+	mlx_boolean write_en = 0;
+	int rc;
+
+	flexboot_nodnic_priv->wol_en = 0;
+	if ( ! ( rc = nvconfig_query_capability( flexboot_nodnic_priv->device_priv.utils,
+				0, WAKE_ON_LAN_TYPE, &read_en, &write_en ) ) && read_en
+			&& write_en ) {
+			flexboot_nodnic_priv->wol_en = 1;
+	}
+
+	return rc;
+}
+
 /**
  * Set port masking
  *
@@ -1426,7 +1470,7 @@ static int flexboot_nodnic_set_port_masking ( struct flexboot_nodnic *flexboot_n
 	unsigned int i;
 	u8 boot_enable = 0;
 	nodnic_device_priv *device_priv = &flexboot_nodnic->device_priv;
-	union nv_nic_boot_conf *boot_con;
+	union mlx_nvconfig_nic_boot_conf *boot_con;
 
 	flexboot_nodnic->port_mask = 0;
 	for ( i = 0; i < device_priv->device_cap.num_ports; i++ ) {
@@ -1534,48 +1578,51 @@ static int flexboot_nodnic_init_port_settings ( struct flexboot_nodnic *flexboot
 
 
 static int flexboot_nodnic_port_get_defaults ( struct flexboot_nodnic *flexboot_nodnic, unsigned int port_num ) {
+	struct mlx_nvconfig_port_conf_defaults nv_port_conf_def;
 	struct flexboot_nodnic_port *port = & ( flexboot_nodnic->port[ port_num - 1 ] );
-	int rc;
 
-	if ( 0 ) {
-		DBGC ( flexboot_nodnic, "Failed to get port %d default values (rc = %d)\n", rc, port_num );
-		return rc;
-	} else {
-		port->defaults.boot_protocol			= DEFAULT_BOOT_PROTOCOL;
-		port->defaults.boot_option_rom_en		= DEFAULT_OPTION_ROM_EN;
-		port->defaults.boot_vlan        		= DEFAULT_BOOT_VLAN;
-		port->defaults.iscsi_dhcp_params_en		= DEFAULT_ISCSI_DHCP_PARAM_EN;
-		port->defaults.iscsi_ipv4_dhcp_en		= DEFAULT_ISCSI_IPV4_DHCP_EN;
-	}
+	memset ( &nv_port_conf_def, 0, sizeof ( nv_port_conf_def ) );
+	nvconfig_read_port_default_values ( flexboot_nodnic->device_priv.utils,
+				port_num, &nv_port_conf_def );
+	port->defaults.boot_protocol			= nv_port_conf_def.boot_protocol;
+	port->defaults.boot_option_rom_en		= nv_port_conf_def.boot_option_rom_en;
+	port->defaults.boot_vlan        		= nv_port_conf_def.boot_vlan;
+	port->defaults.iscsi_dhcp_params_en		= nv_port_conf_def.iscsi_dhcp_params_en;
+	port->defaults.iscsi_ipv4_dhcp_en		= nv_port_conf_def.iscsi_ipv4_dhcp_en;
+	port->defaults.ip_ver					= nv_port_conf_def.ip_ver;
+	port->defaults.linkup_timeout			= nv_port_conf_def.linkup_timeout;
 
 	return 0;
 }
 
 static int flexboot_nodnic_get_ini_and_defaults ( struct flexboot_nodnic *flexboot_nodnic ) {
 	nodnic_device_priv *device_priv = &flexboot_nodnic->device_priv;
+	struct mlx_nvconfig_conf_defaults conf_def;
+	struct mlx_nvcofnig_romini rom_ini;
 	int rc, i;
 
-	if ( 0 ) {
+	if ( ( rc = nvconfig_read_rom_ini_values ( flexboot_nodnic->device_priv.utils,
+				   & rom_ini ) ) ) {
 		DBGC ( flexboot_nodnic, "Failed to get ini values (rc = %d)\n", rc );
-		return rc;
 	} else {
-		;/* INI configurations  */
+		/* INI configurations  */
+		memcpy ( flexboot_nodnic->ini_configurations.dhcp_user_class,
+				& rom_ini.dhcp_user_class, sizeof ( rom_ini.dhcp_user_class ) );
+		flexboot_nodnic->ini_configurations.uri_boot_retry_delay = rom_ini.uri_boot_retry_delay;
+		flexboot_nodnic->ini_configurations.uri_boot_retry = rom_ini.uri_boot_retry;
+		flexboot_nodnic->ini_configurations.option_rom_debug = rom_ini.option_rom_debug;
+		flexboot_nodnic->ini_configurations.promiscuous_vlan = rom_ini.promiscuous_vlan;
 	}
-
+	memset ( &conf_def, 0, sizeof ( conf_def ) );
 	/* Get the global default values */
-	if ( 0 ) {
-		DBGC ( flexboot_nodnic, "Failed to get global default values (rc = %d)\n", rc );
-		return rc;
-	} else {
-		/* Defaults configurations  */
-		flexboot_nodnic->defaults.flexboot_menu_to = DEFAULT_FLEXBOOT_MENU_TO;
-	}
-
+	nvconfig_read_general_default_values ( flexboot_nodnic->device_priv.utils,
+				&conf_def );
+	/* Defaults configurations  */
+	flexboot_nodnic->defaults.flexboot_menu_to = conf_def.flexboot_menu_to;
 	/* Set max virtual functions
-	 * caps.max_funix contains 1 Pf, so the Vf number is (caps.max_funix - 1)
-	 */
-	flexboot_nodnic->defaults.max_vfs = DEFAULT_MAX_VFS;
-
+	* caps.max_funix contains 1 Pf, so the Vf number is (caps.max_funix - 1)
+	*/
+	flexboot_nodnic->defaults.max_vfs = conf_def.max_vfs;
 	/* Get the ports default values */
 	for ( i = 0 ; i < device_priv->device_cap.num_ports ; i++ ) {
 		if ( ( rc = flexboot_nodnic_port_get_defaults ( flexboot_nodnic, i + 1 ) ) )
@@ -1682,6 +1729,7 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 		if ( ! flexboot_nodnic_priv->callbacks->get_settings ) {
 			driver_settings_get_port_nvdata ( & ( port->driver_settings ), i + 1 );
 			flexboot_nodnic_get_factory_mac ( flexboot_nodnic_priv, i );
+			flexboot_nodnic_get_wol_conf ( flexboot_nodnic_priv );
 		}
 		driver_register_port_nv_settings ( & ( port->driver_settings ) );
 
@@ -1694,6 +1742,14 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 					netdev_settings ( port->netdev ), &promisc_vlan_setting );
 			DRIVER_STORE_INT_SETTING_EN (  flexboot_nodnic_priv, NETWORK_WAIT_TIMEOUT,
 					netdev_settings ( port->netdev ), &network_wait_to_setting );
+
+			/* Only IPv4 is supported in Infiniband */
+			if ( port->port_priv.port_type != NODNIC_PORT_TYPE_ETH ) {
+				DRIVER_STORE_INT_SETTING_EN ( flexboot_nodnic_priv, 1,
+						netdev_settings ( port->netdev ), &dhcpv6_disabled_setting );
+				storef_setting ( netdev_settings ( port->netdev ),
+						&dhcpv4_disabled_setting, NULL );
+			}
 		}
 	}
 

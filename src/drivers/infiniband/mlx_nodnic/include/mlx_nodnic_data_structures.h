@@ -23,7 +23,6 @@
 FILE_LICENCE ( GPL2_OR_LATER );
 
 #include "mlx_utils.h"
-#include "prm/nodnic_prm.h"
 
 /* todo: fix coding convention */
 #define NODNIC_MEMORY_ALIGN		0x1000
@@ -68,7 +67,7 @@ typedef enum {
 }nodnic_port_type;
 
 
-
+#define RECV_WQE_SIZE 16
 #define NODNIC_WQBB_SIZE 64
 /** A nodnic send wqbb */
 struct nodnic_send_wqbb {
@@ -103,7 +102,7 @@ struct nodnic_send_ring{
 
 struct nodnic_recv_ring{
 	struct nodnic_ring nodnic_ring;
-	struct nodnic_recv_wqe *wqe_virt;
+	void *wqe_virt;
 };
 struct _nodnic_qp{
 	nodnic_queue_pair_type	type;
@@ -134,7 +133,23 @@ struct _nodnic_device_capabilites{
 	mlx_uint8					log_pkey_table_size;
 	mlx_boolean					num_ports; // 0 - single port, 1 - dual port
 	mlx_uint8					log_max_ring_size;
+#ifdef DEVICE_CX3
+	mlx_uint8					crspace_doorbells;
+#endif
 };
+
+#ifdef DEVICE_CX3
+/* This is the structure of the data in the scratchpad
+ * Read/Write data from/to its field using PCI accesses only */
+typedef struct _nodnic_port_data_flow_gw nodnic_port_data_flow_gw;
+struct _nodnic_port_data_flow_gw {
+	mlx_uint32	send_doorbell;
+	mlx_uint32	recv_doorbell;
+	mlx_uint32	reserved2[2];
+	mlx_uint32	armcq_cq_ci_dword;
+	mlx_uint32	dma_en;
+} __attribute__ ((packed));
+#endif
 
 struct _nodnic_device_priv{
 	mlx_boolean					is_initiailzied;
@@ -151,6 +166,9 @@ struct _nodnic_device_priv{
 	mlx_uint32					lkey;
 	mlx_uint64					device_guid;
 	nodnic_port_priv			*ports;
+#ifdef DEVICE_CX3
+	mlx_void					*crspace_clear_int;
+#endif
 };
 
 struct _nodnic_port_priv{
@@ -163,6 +181,20 @@ struct _nodnic_port_priv{
 	mlx_uint8				port_num;
 	nodnic_eq				eq;
 	mlx_mac_address			mac_filters[5];
+	mlx_status (*send_doorbell)(
+			IN nodnic_port_priv		*port_priv,
+			IN struct nodnic_ring	*ring,
+			IN mlx_uint16 index);
+	mlx_status (*recv_doorbell)(
+			IN nodnic_port_priv		*port_priv,
+			IN struct nodnic_ring	*ring,
+			IN mlx_uint16 index);
+	mlx_status (*set_dma)(
+			IN nodnic_port_priv		*port_priv,
+			IN mlx_boolean			value);
+#ifdef DEVICE_CX3
+	nodnic_port_data_flow_gw *data_flow_gw;
+#endif
 };
 
 

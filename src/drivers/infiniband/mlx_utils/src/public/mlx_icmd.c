@@ -23,7 +23,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_bail.h"
 #include "mlx_icmd.h"
 #include "mlx_pci_gw.h"
-
+#include "mlx_utils.h"
 
 static
 mlx_status
@@ -33,37 +33,43 @@ mlx_icmd_get_semaphore(
 {
 	mlx_status status = MLX_SUCCESS;
 	mlx_uint32 retries = 0;
-	mlx_uint32 semaphore_id = MLX_ICMD_SEMAPHORE_ID;
+	mlx_uint32 semaphore_id;
 	mlx_uint32 buffer;
 	if (utils == NULL) {
 		status = MLX_INVALID_PARAMETER;
 		goto invalid_param;
 	}
 
-#define ICMD_GET_SEMAPHORE_TRIES 256
-	do {    // loop while the semaphore is taken by someone else
-		if (++retries > ICMD_GET_SEMAPHORE_TRIES) {
-			status = MLX_FAILED;
-			goto semaphore_err;
-		}
-
-		status = mlx_pci_gw_write( utils, PCI_GW_SPACE_SEMAPHORE,
-					MLX_ICMD_SEMAPHORE_ADDR, semaphore_id);
-		MLX_CHECK_STATUS(utils, status, set_err, "failed to set icmd semaphore");
-
+	status = mlx_utils_rand(utils, &semaphore_id);
+	MLX_CHECK_STATUS(utils, status, rand_err, "failed to get random number");
+#define ICMD_GET_SEMAPHORE_TRIES 2560
+	for (retries = 0 ; retries < ICMD_GET_SEMAPHORE_TRIES ; retries++) {
 		status = mlx_pci_gw_read( utils, PCI_GW_SPACE_SEMAPHORE,
 					MLX_ICMD_SEMAPHORE_ADDR, &buffer);
 		MLX_CHECK_STATUS(utils, status, read_err, "failed to read icmd semaphore");
+		if (buffer != 0) {
+			mlx_utils_delay_in_ms(10);
+			continue;
+		}
+		mlx_pci_gw_write( utils, PCI_GW_SPACE_SEMAPHORE,
+							MLX_ICMD_SEMAPHORE_ADDR, semaphore_id);
+		MLX_CHECK_STATUS(utils, status, set_err, "failed to set icmd semaphore");
+		status = mlx_pci_gw_read( utils, PCI_GW_SPACE_SEMAPHORE,
+							MLX_ICMD_SEMAPHORE_ADDR, &buffer);
+		MLX_CHECK_STATUS(utils, status, read_err, "failed to read icmd semaphore");
 		if (semaphore_id == buffer) {
+			status = MLX_SUCCESS;
+			utils->icmd.took_semaphore = TRUE;
 			break;
 		}
 		mlx_utils_delay_in_ms(10);
-	} while (TRUE);
-
-	utils->icmd.took_semaphore = TRUE;
+	}
+	if (semaphore_id != buffer) {
+		status = MLX_FAILED;
+	}
 read_err:
 set_err:
-semaphore_err:
+rand_err:
 invalid_param:
 	return status;
 }

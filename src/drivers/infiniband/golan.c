@@ -38,10 +38,11 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <mlx_pci_gw.h>
 #include <config/general.h>
 #include "mlx_port.h"
-#include "prm/nodnic_shomron_prm.h"
+#include "nodnic_shomron_prm.h"
 #include "golan.h"
 #include "golan_settings.h"
 #include "mlx_bail.h"
+#include "mlx_utils/mlx_lib/mlx_link_speed/mlx_link_speed.h"
 
 /******************************************************************************/
 /************* Very simple memory management for umalloced pages **************/
@@ -2106,6 +2107,31 @@ static inline void golan_bring_down(struct golan *golan)
 	golan->flags &= ~GOLAN_OPEN;
 }
 
+static int golan_set_link_speed ( struct golan *golan ){
+	mlx_utils utils;
+	mlx_status status;
+	int i = 0;
+
+	memset ( &utils, 0, sizeof ( utils ) );
+
+	status = mlx_utils_init ( &utils, golan->pci );
+	MLX_CHECK_STATUS ( golan->pci, status, utils_init_err, "mlx_utils_init failed" );
+
+	status = mlx_pci_gw_init ( &utils );
+	MLX_CHECK_STATUS ( golan->pci, status, pci_gw_init_err, "mlx_pci_gw_init failed" );
+
+	for ( i = 0; i < golan->caps.num_ports; ++i ) {
+		status = mlx_set_link_speed( &utils, i + 1, LINK_SPEED_IB, LINK_SPEED_SDR );
+		MLX_CHECK_STATUS ( golan->pci, status, set_link_speed_err, "mlx_set_link_speed failed" );
+	}
+
+set_link_speed_err:
+	mlx_pci_gw_teardown( &utils );
+pci_gw_init_err:
+utils_init_err:
+	return status;
+}
+
 static inline int golan_bring_up(struct golan *golan)
 {
 	int rc = 0;
@@ -2132,6 +2158,10 @@ static inline int golan_bring_up(struct golan *golan)
 
 	if (( rc = golan_handle_pages(golan, GOLAN_INIT_PAGES, GOLAN_PAGES_GIVE) ))
 		goto pages;
+
+	if (( rc = golan_set_link_speed ( golan ) ))
+		goto pages_teardown;
+
 	//Reg Init?
 	if (( rc = golan_hca_init(golan) ))
 		goto pages_2;
@@ -2161,6 +2191,7 @@ de_uar:
 teardown:
 	golan_teardown_hca(golan, GOLAN_TEARDOWN_GRACEFUL);
 pages_2:
+pages_teardown:
 	golan_handle_pages(golan, GOLAN_INIT_PAGES, GOLAN_PAGES_TAKE);
 pages:
 	golan_handle_pages(golan, GOLAN_BOOT_PAGES, GOLAN_PAGES_TAKE);
@@ -2191,7 +2222,6 @@ static int golan_ib_open ( struct ib_device *ibdev ) {
 	if ( ! ibdev )
 		return -EINVAL;
 
-	ib_smc_set_port_info (ibdev, golan_mad);
 	ib_smc_update(ibdev, golan_mad);
 
 	DBG ( "%s end\n", __FUNCTION__ );
@@ -2269,11 +2299,14 @@ static int golan_probe_normal ( struct pci_device *pci ) {
 	/* Register devices */
 	for ( i = 0; i < golan->caps.num_ports; ++i ) {
 		port = &golan->ports[i];
-		if ((rc = golan_register_ibdev ( port ) ) != 0 )
+		if ((rc = golan_register_ibdev ( port ) ) != 0 ) {
 			goto err_golan_probe_register_ibdev;
-		else
+		} else {
+			DRIVER_STORE_INT_SETTING_EN ( golan, 1,
+					netdev_settings ( port->netdev ), &dhcpv6_disabled_setting );
 			DBGC( golan , "%s port %d was registered.\n", __FUNCTION__,
 				i + GOLAN_PORT_BASE);
+		}
 	}
 
 	return 0;
@@ -2437,7 +2470,8 @@ static int shomron_flash_access_tlv ( mlx_utils *utils,
 	int rc;
 
 	rc = nvconfig_nvdata_access ( utils,  tlv_hdr->type_mod, tlv_hdr->type
-			,access_method , tlv_hdr->length, & ( version ), tlv_hdr->data );
+			,access_method , tlv_hdr->length, TLV_ACCESS_DEFAULT_DIS,
+			& ( version ), tlv_hdr->data );
 	tlv_hdr->version =  ( uint32_t ) version;
 	if ( rc ) {
 		DBG ( "Failed to %s TLV (rc = %d)\n",

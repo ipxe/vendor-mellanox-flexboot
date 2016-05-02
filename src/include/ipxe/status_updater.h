@@ -31,6 +31,8 @@ typedef void ( * status_update_fn ) ( void *priv, uint8_t status );
 #define	STATUS_UPDATE_URI_BOOT			2
 #define	STATUS_UPDATE_INT13_START		3
 #define	STATUS_UPDATE_INT13_END			4
+#define	STATUS_UPDATE_PXE_BOOT_START	5
+#define	STATUS_UPDATE_PXE_BOOT_END	6
 
 /** Send status update to who is registered in the list */
 void status_update ( uint32_t status );

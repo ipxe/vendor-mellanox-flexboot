@@ -23,41 +23,83 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_memory.h"
 #include "mlx_bail.h"
 
-#define TlvMappingEntry( _tlv_type, _real_tlv_type, _class_code) { \
+#define TlvMappingEntry( _tlv_type, _real_tlv_type, _class_code, _fw_reset_needed) { \
   .tlv_type = _tlv_type,                     \
   .real_tlv_type = _real_tlv_type,                   \
   .class_code = _class_code,                  \
+  .fw_reset_needed = _fw_reset_needed,        \
   }
 
 struct nvconfig_tlv_mapping nvconfig_tlv_mapping[] = {
-		TlvMappingEntry(0x10, 0x10, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x80, 0x80, NVRAM_TLV_CLASS_GLOBAL),
-		TlvMappingEntry(0x81, 0x81, NVRAM_TLV_CLASS_GLOBAL),
-		TlvMappingEntry(0x2010, 0x210, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2011, 0x211, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2020, 0x2020, NVRAM_TLV_CLASS_PHYSICAL_PORT),
-		TlvMappingEntry(0x2021, 0x221, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2023, 0x223, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2100, 0x230, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2101, 0x231, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2102, 0x232, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2103, 0x233, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2104, 0x234, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2105, 0x235, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2106, 0x236, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2107, 0x237, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2108, 0x238, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2109, 0x239, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x210A, 0x23A, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2200, 0x240, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2201, 0x241, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2202, 0x242, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2203, 0x243, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2204, 0x244, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2205, 0x245, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0x2207, 0x247, NVRAM_TLV_CLASS_HOST),
-		TlvMappingEntry(0, 0, 0),
+		TlvMappingEntry(0x10, 0x10, NVRAM_TLV_CLASS_HOST, TRUE),
+		TlvMappingEntry(0x12, 0x12, NVRAM_TLV_CLASS_PHYSICAL_PORT, TRUE),
+		TlvMappingEntry(0x80, 0x80, NVRAM_TLV_CLASS_GLOBAL, TRUE),
+		TlvMappingEntry(0x81, 0x81, NVRAM_TLV_CLASS_GLOBAL, TRUE),
+		TlvMappingEntry(0x100, 0x100, NVRAM_TLV_CLASS_GLOBAL, TRUE),
+		TlvMappingEntry(0x2001, 0x195, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2010, 0x210, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2011, 0x211, NVRAM_TLV_CLASS_GLOBAL, FALSE),
+		TlvMappingEntry(0x2020, 0x2020, NVRAM_TLV_CLASS_PHYSICAL_PORT, FALSE),
+		TlvMappingEntry(0x2021, 0x221, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2023, 0x223, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2100, 0x230, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2101, 0x231, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2102, 0x232, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2103, 0x233, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2104, 0x234, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2105, 0x235, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2106, 0x236, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2107, 0x237, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2108, 0x238, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2109, 0x239, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x210A, 0x23A, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2200, 0x240, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2201, 0x241, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2202, 0x242, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2203, 0x243, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2204, 0x244, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2205, 0x245, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2207, 0x247, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0, 0, 0, 0),
 };
+
+static
+mlx_status
+nvconfig_set_fw_reset_level(
+		IN mlx_utils *utils,
+		IN	mlx_uint16	tlv_type
+		)
+{
+#define WARM_REBOOT_RESET ((mlx_uint64)0x1 << 38)
+	mlx_status status = MLX_SUCCESS;
+	mlx_uint32 reg_status;
+	mlx_uint64 mfrl = WARM_REBOOT_RESET ;
+	mlx_uint8 index = 0;
+	mlx_boolean reset_needed = FALSE;
+
+	for (index = 0 ; nvconfig_tlv_mapping[index].tlv_type != 0 ; index++) {
+		if (nvconfig_tlv_mapping[index].tlv_type == tlv_type) {
+			reset_needed = nvconfig_tlv_mapping[index].fw_reset_needed;
+		}
+	}
+
+	if (reset_needed == FALSE) {
+		goto no_fw_reset_needed;
+	}
+	status = mlx_reg_access(utils, REG_ID_MFRL, REG_ACCESS_WRITE, &mfrl, sizeof(mfrl),
+				&reg_status);
+	MLX_CHECK_STATUS(utils, status, reg_err, "mlx_reg_access failed ");
+
+	if (reg_status != 0) {
+		MLX_DEBUG_ERROR(utils,"nvconfig_set_fw_reset_level failed with status = %d\n", reg_status);
+		status = MLX_FAILED;
+		goto reg_err;
+	}
+reg_err:
+no_fw_reset_needed:
+	return status;
+}
+
 
 static
 mlx_status
@@ -96,7 +138,7 @@ nvconfig_fill_tlv_type(
 		nvconfig_tlv_type->per_host.param_idx = tlv_type;
 		break;
 	case NVRAM_TLV_CLASS_PHYSICAL_PORT:
-		nvconfig_tlv_type->per_port.param_class = NVRAM_TLV_CLASS_HOST;
+		nvconfig_tlv_type->per_port.param_class = NVRAM_TLV_CLASS_PHYSICAL_PORT;
 		nvconfig_tlv_type->per_port.param_idx = tlv_type;
 		nvconfig_tlv_type->per_port.port = port;
 		break;
@@ -189,6 +231,7 @@ nvconfig_nvdata_access(
 		IN mlx_uint16 tlv_type,
 		IN REG_ACCESS_OPT opt,
 		IN mlx_size data_size,
+		IN NV_DEFAULT_OPT def_en,
 		IN OUT mlx_uint8 *version,
 		IN OUT mlx_void *data
 		)
@@ -214,6 +257,7 @@ nvconfig_nvdata_access(
 	mlx_memory_set(utils, &nvda, 0, sizeof(nvda));
 	nvda.nv_header.length = data_size_align_to_dword;
 	nvda.nv_header.rd_en = 0;
+	nvda.nv_header.def_en = def_en;
 	nvda.nv_header.over_en = 1;
 	nvda.nv_header.version = *version;
 
@@ -239,6 +283,8 @@ nvconfig_nvdata_access(
 				nvda.nv_header.length;
 		mlx_memory_cpy(utils, data, nvda.data, real_size_to_read);
 		*version = nvda.nv_header.version;
+	} else {
+		nvconfig_set_fw_reset_level(utils, tlv_type);
 	}
 reg_err:
 tlv_not_supported:

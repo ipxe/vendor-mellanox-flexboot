@@ -76,7 +76,7 @@ struct setting {
 #define SETTING_AUTH_EXTRA	12 /**< Authentication additional settings */
 #define SETTING_CRYPTO		13 /**< Cryptography settings */
 #define SETTING_MISC		14 /**< Miscellaneous settings */
-#define SETTING_FLEXBOOT	15 /**< Hermon settings */
+#define SETTING_FLEXBOOT	15 /**< FlexBoot settings */
 
 /** @} */
 
@@ -469,6 +469,10 @@ extern const struct setting
 network_wait_to_setting __setting ( SETTING_BOOT_EXTRA, network_wait_to );
 extern const struct setting
 promisc_vlan_setting __setting ( SETTING_NETDEV_EXTRA, promisc_vlan );
+extern const struct setting
+dhcpv4_disabled_setting __setting ( SETTING_FLEXBOOT, dhcpv4_disabled );
+extern const struct setting
+dhcpv6_disabled_setting __setting ( SETTING_FLEXBOOT, dhcpv6_disabled );
 
 /**
  * Initialise a settings block

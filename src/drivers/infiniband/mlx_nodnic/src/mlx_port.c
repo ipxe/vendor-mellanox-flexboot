@@ -22,6 +22,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_port.h"
 #include "mlx_cmd.h"
 #include "mlx_memory.h"
+#include "mlx_pci.h"
 #include "mlx_bail.h"
 
 #define PortDataEntry( _option, _offset, _align, _mask) { \
@@ -56,6 +57,9 @@ struct nodnic_port_data_entry nodnic_port_data_table[] = {
 		PortDataEntry(nodnic_port_option_port_promisc_en, 0x4, 29, 0x1),
 		PortDataEntry(nodnic_port_option_arm_cq, 0x78, 8, 0xffff),
 		PortDataEntry(nodnic_port_option_port_promisc_multicast_en, 0x4, 28, 0x1),
+#ifdef DEVICE_CX3
+		PortDataEntry(nodnic_port_option_crspace_en, 0x4, 27, 0x1),
+#endif
 };
 
 #define MAX_QP_DATA_ENTRIES 5
@@ -178,33 +182,6 @@ nodnic_port_set(
 			"nodnic_cmd_write failed");
 write_err:
 read_err:
-invalid_parm:
-	return status;
-}
-
-mlx_status
-nodnic_port_thin_init(
-		IN nodnic_device_priv	*device_priv,
-		IN nodnic_port_priv		*port_priv,
-		IN mlx_uint8			port_index
-		)
-{
-	mlx_status status = MLX_SUCCESS;
-	mlx_boolean	reset_needed = 0;
-	if( device_priv == NULL || port_priv == NULL || port_index > 1){
-		status = MLX_INVALID_PARAMETER;
-		goto invalid_parm;
-	}
-
-	port_priv->device = device_priv;
-
-	port_priv->port_offset = device_priv->device_offset +
-			nodnic_port_offset_table[port_index];
-
-	/* clear reset_needed */
-	nodnic_port_read_reset_needed(port_priv, &reset_needed);
-
-	port_priv->port_type = NODNIC_PORT_TYPE_UNKNOWN;
 invalid_parm:
 	return status;
 }
@@ -379,7 +356,7 @@ nodnic_port_create_qp(
 
 	status = mlx_memory_alloc_dma(device_priv->utils,
 				receive_wq_size, NODNIC_MEMORY_ALIGN,
-				(void*)&(*qp)->receive.wqe_virt);
+				&(*qp)->receive.wqe_virt);
 	MLX_FATAL_CHECK_STATUS(status, receive_alloc_err,
 				"receive wq allocation error");
 
@@ -447,7 +424,7 @@ receive_map_err:
 	mlx_memory_ummap_dma(device_priv->utils, (*qp)->send.nodnic_ring.map);
 send_map_err:
 	mlx_memory_free_dma(device_priv->utils, receive_wq_size,
-			(void **)&((*qp)->receive.wqe_virt));
+			&((*qp)->receive.wqe_virt));
 receive_alloc_err:
 	mlx_memory_free_dma(device_priv->utils, send_wq_size,
 			(void **)&((*qp)->send.wqe_virt));
@@ -531,6 +508,38 @@ bad_param:
 	return status;
 }
 
+#ifdef DEVICE_CX3
+static
+mlx_status
+nodnic_port_send_db_connectx3(
+		IN nodnic_port_priv	*port_priv,
+		IN struct nodnic_ring *ring __attribute__((unused)),
+		IN mlx_uint16 index
+		)
+{
+	nodnic_port_data_flow_gw *ptr = port_priv->data_flow_gw;
+	mlx_uint32 index32 = index;
+	mlx_pci_mem_write(port_priv->device->utils, MlxPciWidthUint32, 0,
+			(mlx_uint64)(mlx_uint32)&(ptr->send_doorbell), 1, &index32);
+	return MLX_SUCCESS;
+}
+
+static
+mlx_status
+nodnic_port_recv_db_connectx3(
+		IN nodnic_port_priv	*port_priv,
+		IN struct nodnic_ring *ring __attribute__((unused)),
+		IN mlx_uint16 index
+		)
+{
+	nodnic_port_data_flow_gw *ptr = port_priv->data_flow_gw;
+	mlx_uint32 index32 = index;
+	mlx_pci_mem_write(port_priv->device->utils, MlxPciWidthUint32, 0,
+			(mlx_uint64)(mlx_uint32)&(ptr->recv_doorbell), 1, &index32);
+	return MLX_SUCCESS;
+}
+#endif
+
 mlx_status
 nodnic_port_update_ring_doorbell(
 					IN nodnic_port_priv	*port_priv,
@@ -555,6 +564,7 @@ write_err:
 bad_param:
 	return status;
 }
+
 mlx_status
 nodnic_port_get_cq_size(
 		IN nodnic_port_priv	*port_priv,
@@ -809,6 +819,23 @@ set_err:
 	return status;
 }
 
+#ifdef DEVICE_CX3
+static
+mlx_status
+nodnic_port_set_dma_connectx3(
+		IN nodnic_port_priv		*port_priv,
+		IN mlx_boolean			value
+		)
+{
+	mlx_utils *utils = port_priv->device->utils;
+	nodnic_port_data_flow_gw *ptr = port_priv->data_flow_gw;
+	mlx_uint32 data = (value ? 0xffffffff : 0x0);
+	mlx_pci_mem_write(utils, MlxPciWidthUint32, 0,
+			(mlx_uint64)(mlx_uint32)&(ptr->dma_en), 1, &data);
+	return MLX_SUCCESS;
+}
+#endif
+
 static
 mlx_status
 nodnic_port_set_dma(
@@ -816,15 +843,26 @@ nodnic_port_set_dma(
 		IN mlx_boolean			value
 		)
 {
+	return nodnic_port_set(port_priv, nodnic_port_option_dma_en, value);
+}
+
+static
+mlx_status
+nodnic_port_check_and_set_dma(
+		IN nodnic_port_priv		*port_priv,
+		IN mlx_boolean			value
+		)
+{
 	mlx_status status = MLX_SUCCESS;
 	if ( port_priv->dma_state == value ) {
-		MLX_DEBUG_WARN(port_priv->device, "nodnic_port_set_dma: already %s\n",
-						(value ? "enabled" : "disabled"));
+		MLX_DEBUG_WARN(port_priv->device,
+				"nodnic_port_check_and_set_dma: already %s\n",
+				(value ? "enabled" : "disabled"));
 		status = MLX_SUCCESS;
 		goto set_out;
 	}
 
-	status = nodnic_port_set(port_priv, nodnic_port_option_dma_en, value);
+	status = port_priv->set_dma(port_priv, value);
 	MLX_CHECK_STATUS(port_priv->device, status, set_err,
 			"nodnic_port_set failed");
 	port_priv->dma_state = value;
@@ -916,9 +954,9 @@ nodnic_port_enable_dma(
 		goto bad_param;
 	}
 
-	status = nodnic_port_set_dma(port_priv, TRUE);
+	status = nodnic_port_check_and_set_dma(port_priv, TRUE);
 	MLX_CHECK_STATUS(port_priv->device, status, set_err,
-					"nodnic_port_set_dma failed");
+					"nodnic_port_check_and_set_dma failed");
 set_err:
 bad_param:
 	return status;
@@ -936,12 +974,64 @@ nodnic_port_disable_dma(
 		goto bad_param;
 	}
 
-	status = nodnic_port_set_dma(port_priv, FALSE);
+	status = nodnic_port_check_and_set_dma(port_priv, FALSE);
 	MLX_CHECK_STATUS(port_priv->device, status, set_err,
-					"nodnic_port_set_dma failed");
+					"nodnic_port_check_and_set_dma failed");
 set_err:
 bad_param:
 	return status;
 }
 
+mlx_status
+nodnic_port_thin_init(
+		IN nodnic_device_priv	*device_priv,
+		IN nodnic_port_priv		*port_priv,
+		IN mlx_uint8			port_index
+		)
+{
+	mlx_status status = MLX_SUCCESS;
+	mlx_boolean	reset_needed = 0;
+#ifdef DEVICE_CX3
+	mlx_uint32 offset;
+#endif
 
+	if( device_priv == NULL || port_priv == NULL || port_index > 1){
+		status = MLX_INVALID_PARAMETER;
+		goto invalid_parm;
+	}
+
+	port_priv->device = device_priv;
+
+	port_priv->port_offset = device_priv->device_offset +
+			nodnic_port_offset_table[port_index];
+
+	port_priv->port_num = port_index + 1;
+
+	port_priv->send_doorbell = nodnic_port_update_ring_doorbell;
+	port_priv->recv_doorbell = nodnic_port_update_ring_doorbell;
+	port_priv->set_dma = nodnic_port_set_dma;
+#ifdef DEVICE_CX3
+	if (device_priv->device_cap.crspace_doorbells) {
+		status = nodnic_cmd_read(device_priv, (port_priv->port_offset + 0x100),
+				&offset);
+		if (status != MLX_SUCCESS) {
+			return status;
+		} else {
+			port_priv->data_flow_gw = (nodnic_port_data_flow_gw *)
+					(device_priv->utils->config + offset);
+		}
+		if ( nodnic_port_set ( port_priv, nodnic_port_option_crspace_en, 1 ) ) {
+			return MLX_FAILED;
+		}
+		port_priv->send_doorbell = nodnic_port_send_db_connectx3;
+		port_priv->recv_doorbell = nodnic_port_recv_db_connectx3;
+		port_priv->set_dma = nodnic_port_set_dma_connectx3;
+	}
+#endif
+	/* clear reset_needed */
+	nodnic_port_read_reset_needed(port_priv, &reset_needed);
+
+	port_priv->port_type = NODNIC_PORT_TYPE_UNKNOWN;
+invalid_parm:
+	return status;
+}

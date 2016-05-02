@@ -11,10 +11,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <config/defaults.h>
 
-#define __BLD_VERSION__
 #ifndef __BUILD_VERSION__
-#define __BUILD_VERSION__	__DATE__"@"__TIME__
-#define __BASE_BUILD_VERSION__ "3.4.4xx"
+#define __BUILD_VERSION__ "3.4.700"
 #endif
 
 /*
@@ -46,7 +44,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  */
 
 #define	NET_PROTO_IPV4		/* IPv4 protocol */
-#undef	NET_PROTO_IPV6		/* IPv6 protocol */
+#define	NET_PROTO_IPV6		/* IPv6 protocol */
 #undef	NET_PROTO_FCOE		/* Fibre Channel over Ethernet protocol */
 #define	NET_PROTO_STP		/* Spanning Tree protocol */
 
@@ -78,6 +76,15 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 //#undef	SANBOOT_PROTO_AOE	/* AoE protocol */
 #undef		SANBOOT_PROTO_IB_SRP	/* Infiniband SCSI RDMA protocol */
 //#undef	SANBOOT_PROTO_FCP	/* Fibre Channel protocol */
+//#undef	SANBOOT_PROTO_HTTP	/* HTTP SAN protocol */
+
+/*
+ * HTTP extensions
+ *
+ */
+#undef HTTP_AUTH_BASIC		/* Basic authentication */
+#undef HTTP_AUTH_DIGEST	/* Digest authentication */
+//#define HTTP_ENC_PEERDIST	/* PeerDist content encoding */
 
 /*
  * 802.11 cryptosystems and handshaking protocols
@@ -118,7 +125,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  *
  */
 #define	AUTOBOOT_CMD		/* Automatic booting */
-#define	NVO_CMD			/* Non-volatile option storage commands */
+#undef	NVO_CMD			/* Non-volatile option storage commands */
 #undef	CONFIG_CMD		/* Option configuration console */
 #define	IFMGMT_CMD		/* Interface management commands */
 #undef	IWMGMT_CMD		/* Wireless interface management commands */
@@ -126,23 +133,23 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define	ROUTE_CMD		/* Routing table management commands */
 #define IMAGE_CMD		/* Image management commands */
 #define DHCP_CMD		/* DHCP management commands */
-#define SANBOOT_CMD		/* SAN boot commands */
-#define MENU_CMD		/* Menu commands */
-#define LOGIN_CMD		/* Login command */
-#define SYNC_CMD		/* Sync command */
-#define NSLOOKUP_CMD		/* DNS resolving command */
-#define TIME_CMD		/* Time commands */
-#define DIGEST_CMD		/* Image crypto digest commands */
-#define LOTEST_CMD		/* Loopback testing commands */
-#define VLAN_CMD		/* VLAN commands */
-#define PXE_CMD			/* PXE commands */
-#define REBOOT_CMD		/* Reboot command */
+#undef SANBOOT_CMD		/* SAN boot commands */
+#undef MENU_CMD		/* Menu commands */
+#undef LOGIN_CMD		/* Login command */
+#undef SYNC_CMD		/* Sync command */
+#undef NSLOOKUP_CMD		/* DNS resolving command */
+#undef TIME_CMD		/* Time commands */
+#undef DIGEST_CMD		/* Image crypto digest commands */
+#undef LOTEST_CMD		/* Loopback testing commands */
+#undef VLAN_CMD		/* VLAN commands */
+#undef PXE_CMD			/* PXE commands */
+#undef REBOOT_CMD		/* Reboot command */
 #undef POWEROFF_CMD		/* Power off command */
 //#define IMAGE_TRUST_CMD	/* Image trust management commands */
-#define PCI_CMD		/* PCI commands */
-#define PARAM_CMD		/* Form parameter commands */
+#undef PCI_CMD		/* PCI commands */
+#undef PARAM_CMD		/* Form parameter commands */
 #define NEIGHBOUR_CMD		/* Neighbour management commands */
-#define PING_CMD		/* Ping command */
+#undef PING_CMD		/* Ping command */
 //#define CONSOLE_CMD		/* Console command */
 #define IPSTAT_CMD		/* IP statistics commands */
 //#define PROFSTAT_CMD		/* Profiling commands */
@@ -167,7 +174,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  *
  */
 
-#define	NETDEV_DISCARD_RATE 0	/* Drop every N packets (0=>no drop) */
 #undef	BUILD_SERIAL		/* Include an automatic build serial
 				 * number.  Add "bs" to the list of
 				 * make targets.  For example:
@@ -178,6 +184,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #undef	GDBSERIAL		/* Remote GDB debugging over serial */
 #undef	GDBUDP			/* Remote GDB debugging over UDP
 				 * (both may be set) */
+//#define EFI_DOWNGRADE_UX	/* Downgrade UEFI user experience */
 
 #include <config/named.h>
 #include NAMED_CONFIG(general.h)

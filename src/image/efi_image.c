@@ -29,6 +29,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/efi/efi_utils.h>
 #include <ipxe/efi/efi_strings.h>
 #include <ipxe/efi/efi_wrap.h>
+#include <ipxe/efi/efi_pxe.h>
 #include <ipxe/image.h>
 #include <ipxe/init.h>
 #include <ipxe/features.h>
@@ -72,8 +73,7 @@ efi_image_path ( struct image *image, EFI_DEVICE_PATH_PROTOCOL *parent ) {
 	size_t len;
 
 	/* Calculate device path lengths */
-	end = efi_devpath_end ( parent );
-	prefix_len = ( ( void * ) end - ( void * ) parent );
+	prefix_len = efi_devpath_len ( parent );
 	name_len = strlen ( image->name );
 	filepath_len = ( SIZE_OF_FILEPATH_DEVICE_PATH +
 			 ( name_len + 1 /* NUL */ ) * sizeof ( wchar_t ) );
@@ -157,6 +157,13 @@ static int efi_image_exec ( struct image *image ) {
 		DBGC ( image, "EFIIMAGE %p could not install file protocol: "
 		       "%s\n", image, strerror ( rc ) );
 		goto err_file_install;
+	}
+
+	/* Install PXE base code protocol */
+	if ( ( rc = efi_pxe_install ( snpdev->handle, snpdev->netdev ) ) != 0 ){
+		DBGC ( image, "EFIIMAGE %p could not install PXE protocol: "
+		       "%s\n", image, strerror ( rc ) );
+		goto err_pxe_install;
 	}
 
 	/* Install iPXE download protocol */
@@ -266,6 +273,8 @@ static int efi_image_exec ( struct image *image ) {
  err_image_path:
 	efi_download_uninstall ( snpdev->handle );
  err_download_install:
+	efi_pxe_uninstall ( snpdev->handle );
+ err_pxe_install:
 	efi_file_uninstall ( snpdev->handle );
  err_file_install:
  err_no_snpdev:

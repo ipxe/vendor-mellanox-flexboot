@@ -359,6 +359,9 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 		return rc;
 	}
 
+	/* fixes FW race following unmap FW area - ask Achiad */
+	readl ( hermon->config + HERMON_HCR_REG ( 6 ) );
+
 	/* Check command status */
 	status = MLX_GET ( &hcr, status );
 	if ( status != 0 ) {
@@ -367,6 +370,10 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 			/* Could be as a result of missing TLV - print it as debug */
 			DBGC ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
 				hermon, opcode, status );
+		} else if ( opcode == HERMON_HCR_SENSE_PORT ) {
+			DBGC ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
+				hermon, opcode, status );
+			return status;
 		} else {
 			printf ( "ConnectX3 %p command 0x%x failed with status %02x:\n",
 				hermon, opcode, status );
@@ -2598,7 +2605,6 @@ static void hermon_arm_eq ( struct hermon *hermon ) {
 	writel ( cpu_to_be32 ( 0x80000000 | ( heq->next_idx & 0xffffff ) ), heq->doorbell );
 	wmb();
 }
-#endif
 
 static void hermon_clr_int ( struct hermon *hermon ) {
 	u64  intapin_val;
@@ -2614,6 +2620,7 @@ static void hermon_clr_int ( struct hermon *hermon ) {
 	writel ( cpu_to_be32 ( vl ), &addr[1] );
 	barrier();
 }
+#endif
 
 /**
  * Poll event queue
@@ -2631,7 +2638,9 @@ static void hermon_poll_eq ( struct ib_device *ibdev ) {
 	unsigned int event_type;
 	int rc = 0;
 
+#ifdef HERMON_IRQ_ENABLED
 	hermon_clr_int ( hermon );
+#endif
 
 	/* No event is generated upon reaching INIT, so we must poll
 	 * separately for link state changes while we remain DOWN.
@@ -3407,19 +3416,12 @@ static int hermon_access_tlv ( struct hermon *hermon,
 	case ISCSI_INITIATOR_CHAP_ID		:
 	case ISCSI_INITIATOR_CHAP_PWD		:
 	case CONNECT_FIRST_TGT			:
-	case CONNECT_SECOND_TGT			:
 	case FIRST_TGT_IP_ADDRESS		:
 	case FIRST_TGT_TCP_PORT			:
 	case FIRST_TGT_BOOT_LUN			:
 	case FIRST_TGT_ISCSI_NAME		:
 	case FIRST_TGT_CHAP_ID			:
 	case FIRST_TGT_CHAP_PWD			:
-	case SECOND_TGT_IP_ADDRESS		:
-	case SECOND_TGT_TCP_PORT		:
-	case SECOND_TGT_BOOT_LUN		:
-	case SECOND_TGT_ISCSI_NAME		:
-	case SECOND_TGT_CHAP_ID			:
-	case SECOND_TGT_CHAP_PWD		:
 		break;
 	default:
 		for ( i = 0; i * 4 < tlv_header->length; i++ ) {
@@ -3560,6 +3562,8 @@ static int hermon_port_get_defaults ( struct hermon *hermon, unsigned int port_n
 		port->defaults.iscsi_link_up_delay_time		= MLX_GET ( &def.port, iscsi_link_up_delay_time );
 		port->defaults.client_identifier	= MLX_GET ( &def.port, client_identifier );
 		port->defaults.mac_admin_bit	= MLX_GET ( &def.port, mac_admin_bit );
+		port->defaults.linkup_timeout			= MLX_GET ( &def.port, boot_link_up_timeout );
+		port->defaults.ip_ver	= MLX_GET ( &def.port, boot_ip_ver );
 	}
 	return 0;
 }
@@ -5093,39 +5097,13 @@ static void hermon_pci_init ( struct hermon *hermon ) {
 				( setting )->name, is_enabled );		\
 	} while ( 0 )
 
-
-
-/**
- * Probe PCI device
- *
- * @v pci		PCI device
- * @v id		PCI ID
- * @ret rc		Return status code
- */
-static int hermon_probe_normal ( struct pci_device *pci ) {
-	struct hermon *hermon;
+static int hermon_probe_no_nodnic ( struct pci_device *pci, struct hermon *hermon ) {
 	struct ib_device *ibdev;
 	struct net_device *vlan;
 	struct hermon_port *port;
 	unsigned int vep;
 	unsigned int i;
 	int rc;
-
-	/* Allocate ConnectX3 device */
-	hermon = hermon_alloc();
-	if ( ! hermon ) {
-		rc = -ENOMEM;
-		goto err_alloc;
-	}
-
-	pci_set_drvdata ( pci, hermon );
-	hermon->pci = pci;
-
-	/* Initialise PCI parameters */
-	hermon_pci_init ( hermon );
-
-	/* Reset device */
-	hermon_reset ( hermon, HERMON_RESET_START );
 
 	/* Start firmware */
 	if ( ( rc = hermon_start_firmware ( hermon ) ) != 0 )
@@ -5215,6 +5193,14 @@ static int hermon_probe_normal ( struct pci_device *pci ) {
 				netdev_settings ( port->netdev ), &promisc_vlan_setting );
 		STORE_INT_SETTING ( NETWORK_WAIT_TIMEOUT,
 				netdev_settings ( port->netdev ), &network_wait_to_setting );
+
+		/* Only IPv4 is supported in Infiniband */
+		if ( port->type == &hermon_port_type_ib ) {
+			STORE_INT_SETTING ( 1, netdev_settings ( port->netdev ),
+					&dhcpv6_disabled_setting );
+			storef_setting ( netdev_settings ( port->netdev ),
+					&dhcpv4_disabled_setting, NULL );
+		}
 	}
 
 	driver_settings_get_nvdata ( & ( hermon->hermon_settings ) );
@@ -5274,17 +5260,10 @@ static int hermon_probe_normal ( struct pci_device *pci ) {
  err_get_cap:
 	hermon_stop_firmware ( hermon );
  err_start_firmware:
-	hermon_free ( hermon );
- err_alloc:
 	return rc;
 }
 
-/**
- * Remove PCI device
- *
- * @v pci		PCI device
- */
-static void hermon_remove_normal ( struct pci_device *pci ) {
+static void hermon_remove_no_nodnic ( struct pci_device *pci ) {
 	struct hermon *hermon = pci_get_drvdata ( pci );
 	struct hermon_port *port;
 	int i;
@@ -5326,8 +5305,6 @@ static int hermon_read_flash_for_nodnic ( struct hermon *hermon ) {
 	if ( ! hermon ) {
 		return -ENODEV;
 	}
-
-	hermon_reset ( hermon, HERMON_RESET_START );
 
 	/* Start firmware */
 	if ( ( rc = hermon_start_firmware ( hermon ) ) != 0 )
@@ -5377,42 +5354,12 @@ err_start_firmware:
 	return rc;
 }
 
-static int hermon_get_pci_class_code ( struct hermon *hermon, uint32_t *class_code ) {
-	int rc;
-	uint32_t value;
+static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon *hermon ) {
+	struct hermonprm_sense_port sense_port;
+	int rc, nodnic_supported = 1, disconnected, port_type;
+	uint32_t port_index, num_try;
 
-	if ( ( rc = pci_read_config_dword ( hermon->pci, 0x8, &value ) ) == 0 ) {
-		value >>= 8;
-		DBGC ( hermon, "Class Code = 0x%x\n", value );
-		*class_code = value;
-	}
-
-	return rc;
-}
-
-#define PCI_ETHERNET_NETWORK_CLASS_CODE	0x020000
-static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon **hermon ) {
-	struct hermon *hermon_for_nodnic;
-	int rc;
-	uint32_t class_code = 0;
-
-	if ( ! hermon ) {
-		return -EINVAL;
-	}
-
-	*hermon = NULL;
-
-	hermon_for_nodnic = hermon_alloc();
-	if ( ! hermon_for_nodnic ) {
-		rc = -ENOMEM;
-		goto err_alloc;
-	}
-
-	pci_set_drvdata ( pci, hermon_for_nodnic );
-	hermon_for_nodnic->pci = pci;
-	hermon_pci_init ( hermon_for_nodnic );
-
-	if ( ( rc = hermon_get_num_ports ( hermon_for_nodnic ) ) ) {
+	if ( ( rc = hermon_get_num_ports ( hermon ) ) ) {
 		rc = -ENOTSUP;
 		goto err_get_num_ports;
 	}
@@ -5420,38 +5367,54 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon **
 	/*
 	 * NODNIC driver supports only Ethernet protocol, thus we need to know
 	 * if the ports are Ethernet ports or not.
-	 *
-	 * Use the PCI Class Code as a work around to determine if we can run
-	 * NODNIC driver or not. NODNIC driver will be activated only if the
-	 * device is Ethernet Network Controller.
-	 *
-	 * This WA should be deleted when the FW implements the sensing mechanism
-	 * in driverless mode.
 	 */
-	if ( ( rc = hermon_get_pci_class_code ( hermon_for_nodnic, &class_code ) ) == 0 ) {
-		if ( class_code != PCI_ETHERNET_NETWORK_CLASS_CODE ) {
-			rc = -ENOTSUP;
-			goto err_bad_class_code;
+#define TRIES 0x3
+#define PORT_DISCONNECTED 0x4
+#define ETH_TYPE 0x2
+	for ( port_index = 0; port_index < hermon->num_ports; port_index++ ) {
+		port_type = 0;
+		disconnected = 0;
+		for ( num_try = 0; num_try < TRIES; num_try++ ) {
+			if ( ( rc = hermon_cmd_sense_port ( hermon, port_index + 1,
+					&sense_port ) ) != 0 ) {
+					DBGC ( hermon, "Port %d sense failed: %s\n",
+							port_index + 1, strerror ( rc ) );
+					if ( rc == PORT_DISCONNECTED ) {
+						disconnected = 1;
+					}
+					break;
+			} else {
+				port_type = MLX_GET ( &sense_port, port_type );
+				if ( port_type != 0 ) {
+					break;
+				}
+			}
+			sleep(3);
 		}
+		if ( ( port_type & ETH_TYPE ) == 0 && !disconnected ) {
+				nodnic_supported = 0;
+		}
+	}
+
+	if ( !nodnic_supported ) {
+			rc = -ENOTSUP;
+			goto err_bad_type;
 	}
 
 	/* Check if NODNIC interface is supported */
 	if ( flexboot_nodnic_is_supported ( pci ) == 0 ) {
 		rc = -ENOTSUP;
 	} else {
-		DBGC ( hermon_for_nodnic, "NODNIC is supported\n" );
-		hermon_read_flash_for_nodnic ( hermon_for_nodnic );
-		*hermon = hermon_for_nodnic;
+		DBGC ( hermon, "NODNIC is supported\n" );
+		hermon_read_flash_for_nodnic ( hermon );
 		rc = 0;
 	}
 
-err_bad_class_code:
+err_bad_type:
 err_get_num_ports:
 	if ( rc ) {
-		DBGC ( hermon_for_nodnic, "NODNIC is not supported\n" );
-		hermon_free ( hermon_for_nodnic );
+		DBGC ( hermon, "NODNIC is not supported\n" );
 	}
-err_alloc:
 	return ( rc == 0 );
 }
 
@@ -5461,7 +5424,7 @@ static mlx_status hermon_nodnic_fill_eth_send_wqe ( struct ib_device *ibdev,
 			   unsigned long wqe_idx ) {
 	mlx_status status = MLX_SUCCESS;
 	struct flexboot_nodnic *flexboot_nodnic = ib_get_drvdata ( ibdev );
-	struct hermon_nodnic_eth_send_wqe *eth_wqe =  NULL;
+	struct hermonprm_eth_send_wqe *eth_wqe =  NULL;
 	struct flexboot_nodnic_port *port = &flexboot_nodnic->port[ibdev->port - 1];
 	struct flexboot_nodnic_queue_pair *flexboot_nodnic_qp =
 			ib_qp_get_drvdata ( qp );
@@ -5469,7 +5432,7 @@ static mlx_status hermon_nodnic_fill_eth_send_wqe ( struct ib_device *ibdev,
 	struct nodnic_send_ring *send_ring = &nodnic_qp->send;
 	mlx_uint32 qpn = 0;
 
-	eth_wqe = (struct hermon_nodnic_eth_send_wqe *)wqbb;
+	eth_wqe = (struct hermonprm_eth_send_wqe *)wqbb;
 	memset ( ( ( ( void * ) eth_wqe ) + 4  ), 0,
 			   ( sizeof ( *eth_wqe ) - 4 ) );
 
@@ -5577,6 +5540,13 @@ static struct flexboot_nodnic_callbacks hermon_nodnic_callbacks = {
 };
 
 /**************************************************************************/
+/**
+ * Probe PCI device
+ *
+ * @v pci		PCI device
+ * @v id		PCI ID
+ * @ret rc		Return status code
+ */
 static int hermon_probe ( struct pci_device *pci ) {
 	struct hermon *hermon = NULL;
 	int rc;
@@ -5589,14 +5559,26 @@ static int hermon_probe ( struct pci_device *pci ) {
 		goto probe_done;
 	}
 
+	hermon = hermon_alloc();
+	if ( ! hermon ) {
+		rc = -ENOMEM;
+		goto probe_done;
+	}
+
+	pci_set_drvdata ( pci, hermon );
+	hermon->pci = pci;
+	hermon_pci_init ( hermon );
+
+	hermon_reset ( hermon, HERMON_RESET_START );
+
 	/* Use the regular driver for boot menu configuration and if
 	 * NODNIC interface is not supported */
 	if ( ! boot_post_shell )
-		hermon_nodnic_supported = hermon_nodnic_is_supported ( pci, &hermon );
+		hermon_nodnic_supported = hermon_nodnic_is_supported ( pci, hermon );
 
 	if ( boot_post_shell || ( ! hermon_nodnic_supported ) ) {
-		DBG ( "%s: Using normal driver\n", __FUNCTION__ );
-		rc = hermon_probe_normal ( pci );
+		DBG ( "%s: Using no NODNIC driver\n", __FUNCTION__ );
+		rc = hermon_probe_no_nodnic ( pci, hermon );
 		goto probe_done;
 	}
 
@@ -5604,20 +5586,24 @@ static int hermon_probe ( struct pci_device *pci ) {
 
 	rc = flexboot_nodnic_probe ( pci, &hermon_nodnic_callbacks, hermon );
 
-	if ( hermon )
-		hermon_free ( hermon );
-
 probe_done:
 	DBG ( "%s: rc = %d\n", __FUNCTION__, rc );
+	if ( rc || hermon_nodnic_supported )
+		hermon_free ( hermon );
 	return rc;
 }
 
+/**
+ * Remove PCI device
+ *
+ * @v pci		PCI device
+ */
 static void hermon_remove ( struct pci_device *pci ) {
 	DBG ( "%s: start\n", __FUNCTION__ );
 
 	if ( boot_post_shell || ( ! hermon_nodnic_supported ) ) {
-		DBG ( "%s: Using normal driver remove\n", __FUNCTION__ );
-		hermon_remove_normal ( pci );
+		DBG ( "%s: Using no NODNIC driver remove\n", __FUNCTION__ );
+		hermon_remove_no_nodnic ( pci );
 		return;
 	}
 

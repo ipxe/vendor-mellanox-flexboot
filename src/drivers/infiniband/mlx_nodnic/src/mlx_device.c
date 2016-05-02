@@ -24,6 +24,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "mlx_cmd.h"
 #include "mlx_bail.h"
 #include "mlx_pci.h"
+#include "mlx_memory.h"
 #include "mlx_logging.h"
 
 #define CHECK_BIT(field, offset)	(((field) & ((mlx_uint32)1 << (offset))) != 0)
@@ -168,9 +169,25 @@ nodnic_device_clear_int (
 {
 	mlx_status 			status = MLX_SUCCESS;
 	mlx_uint32			disable = 1;
-
+#ifndef DEVICE_CX3
 	status = nodnic_cmd_write(device_priv, NODNIC_NIC_DISABLE_INT_OFFSET, disable);
 	MLX_CHECK_STATUS(device_priv, status, clear_int_done, "failed writing to disable_bit");
+#else
+	mlx_utils *utils = device_priv->utils;
+	mlx_uint64 clear_int = (mlx_uint64)(mlx_uint32)(device_priv->crspace_clear_int);
+	mlx_uint32 swapped = 0;
+
+	if (device_priv->device_cap.crspace_doorbells == 0) {
+		status = nodnic_cmd_write(device_priv, NODNIC_NIC_DISABLE_INT_OFFSET, disable);
+		MLX_CHECK_STATUS(device_priv, status, clear_int_done, "failed writing to disable_bit");
+	} else {
+		/* Write the new index and update FW that new data was submitted */
+		disable = 0x80000000;
+		mlx_memory_cpu_to_be32(utils, disable, &swapped);
+		mlx_pci_mem_write (utils, MlxPciWidthUint32, 0, clear_int, 1, &swapped);
+		mlx_pci_mem_read (utils, MlxPciWidthUint32, 0, clear_int, 1, &swapped);
+	}
+#endif
 clear_int_done:
 	return status;
 }
@@ -253,6 +270,10 @@ nodnic_device_get_cap(
 
 	device_cap->num_ports = CHECK_BIT(buffer, NODNIC_DEVICE_NUM_PORTS_OFFSET) + 1;
 
+#ifdef DEVICE_CX3
+#define NODNIC_DEVICE_CRSPACE_DB_OFFSET 12
+	device_cap->crspace_doorbells = CHECK_BIT(buffer, NODNIC_DEVICE_CRSPACE_DB_OFFSET);
+#endif
 
 	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x4, &buffer);
 	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic second dword");
@@ -265,16 +286,23 @@ nodnic_device_get_cap(
 
 	//get device magic numbers
 	device_priv->pd = buffer & NODNIC_DEVICE_PD_MASK;
+
 	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x8, &buffer);
 	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic third dword");
-
 	device_priv->lkey = buffer;
+
+#ifdef DEVICE_CX3
+	if ( device_cap->crspace_doorbells ) {
+		status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x18, &buffer);
+		MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic_crspace_clear_int address");
+		device_priv->crspace_clear_int = device_priv->utils->config + buffer;
+	}
+#endif
+
 	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x10, (mlx_uint32*)&guid_h);
 	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic guid_h");
-
 	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x14, (mlx_uint32*)&guid_l);
 	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic guid_l");
-
 	device_priv->device_guid = guid_l | (guid_h << 32);
 read_err:
 parm_err:

@@ -280,6 +280,7 @@ extern int pci_probe ( struct pci_device *pci );
 extern void pci_remove ( struct pci_device *pci );
 extern int pci_find_capability ( struct pci_device *pci, int capability );
 extern unsigned long pci_bar_size ( struct pci_device *pci, unsigned int reg );
+extern void set_boot_pci_busdevfn ( uint16_t busdevfn );
 
 /**
  * Initialise PCI device

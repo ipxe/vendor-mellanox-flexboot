@@ -28,8 +28,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <ipxe/iobuf.h>
 #include <ipxe/retry.h>
 #include <ipxe/timer.h>
@@ -53,24 +51,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** The neighbour cache */
 struct list_head neighbours = LIST_HEAD_INIT ( neighbours );
-uint32_t total_neighbours = 0;
-#define NEIGHBOUR_DROP_MIN_CACHE_ENTRY 3
 
 static void neighbour_expired ( struct retry_timer *timer, int over );
-
-static int neighbor_add_to_list ( struct neighbour *neighbour ) {
-	list_add ( &neighbour->list, &neighbours );
-	total_neighbours++;
-	return total_neighbours;
-}
-
-static int neighbor_remove_from_list ( struct neighbour *neighbour ) {
-	if ( total_neighbours > 0 ) {
-		list_del ( &neighbour->list );
-		total_neighbours--;
-	}
-	return total_neighbours;
-}
 
 /**
  * Free neighbour cache entry
@@ -119,7 +101,7 @@ static struct neighbour * neighbour_create ( struct net_device *netdev,
 	INIT_LIST_HEAD ( &neighbour->tx_queue );
 
 	/* Transfer ownership to cache */
-	neighbor_add_to_list ( neighbour );
+	list_add ( &neighbour->list, &neighbours );
 
 	DBGC ( neighbour, "NEIGHBOUR %s %s %s created\n", netdev->name,
 	       net_protocol->name, net_protocol->ntoa ( net_dest ) );
@@ -241,7 +223,7 @@ static void neighbour_destroy ( struct neighbour *neighbour, int rc ) {
 	struct io_buffer *iobuf;
 
 	/* Take ownership from cache */
-	neighbor_remove_from_list ( neighbour );
+	list_del ( &neighbour->list );
 
 	/* Stop timer */
 	stop_timer ( &neighbour->timer );
@@ -426,43 +408,19 @@ struct net_driver neighbour_net_driver __net_driver = {
  *
  * @ret discarded	Number of cached items discarded
  */
-static unsigned int neighbour_discard_last ( void ) {
+static unsigned int neighbour_discard ( void ) {
 	struct neighbour *neighbour;
-	uint8_t zeros_ll_addr[MAX_LL_ADDR_LEN] = { 0 };
-
-	/* Don't drop cache entry if there is less than NEIGHBOUR_DROP_MIN_CACHE_ENTRY */
-	if ( total_neighbours < NEIGHBOUR_DROP_MIN_CACHE_ENTRY )
-		return 0;
 
 	/* Drop oldest cache entry, if any */
 	neighbour = list_last_entry ( &neighbours, struct neighbour, list );
 	if ( neighbour ) {
-		/* Don't remove the neighbor if its not yet initialized with REMAC */
-		if ( memcmp ( neighbour->ll_dest, zeros_ll_addr, MAX_LL_ADDR_LEN ) ) {
-			neighbour_destroy ( neighbour, -ENOBUFS );
-			return 1;
-		}
+		neighbour_destroy ( neighbour, -ENOBUFS );
+		return 1;
+	} else {
+		return 0;
 	}
-
-	return 0;
 }
 
-unsigned int neighbour_discard ( void *ll_addr, size_t ll_addr_len ) {
-	struct neighbour *neighbour;
-	struct neighbour *tmp;
-
-	list_for_each_entry_safe ( neighbour, tmp, &neighbours, list ) {
-		if ( neighbour && neighbour->netdev && neighbour->netdev->ll_protocol &&
-			 neighbour->netdev->ll_protocol->ll_addr_len == ll_addr_len ) {
-			if ( memcmp ( neighbour->ll_dest, ll_addr, ll_addr_len ) == 0 ) {
-				neighbour_destroy ( neighbour, -ENOBUFS );
-				return 1;
-			}
-		}
-	}
-
-	return 0;
-}
 /**
  * Neighbour cache discarder
  *
@@ -471,5 +429,5 @@ unsigned int neighbour_discard ( void *ll_addr, size_t ll_addr_len ) {
  * transfer will cause substantial disruption.
  */
 struct cache_discarder neighbour_discarder __cache_discarder (CACHE_EXPENSIVE)={
-	.discard = neighbour_discard_last,
+	.discard = neighbour_discard,
 };

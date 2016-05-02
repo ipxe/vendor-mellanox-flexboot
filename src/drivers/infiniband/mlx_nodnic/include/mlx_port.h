@@ -44,6 +44,9 @@ typedef enum {
 	nodnic_port_option_port_promisc_en,
 	nodnic_port_option_arm_cq,
 	nodnic_port_option_port_promisc_multicast_en,
+#ifdef DEVICE_CX3
+	nodnic_port_option_crspace_en,
+#endif
 }nodnic_port_option;
 
 struct nodnic_port_data_entry{

@@ -62,6 +62,167 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL )
  */
 	.section ".text16.early", "awx", @progbits
 	.globl	open_payload
+#ifndef  DEVICE_CX3
+open_payload:
+	/* Preserve registers */
+	pushl	%eax
+	pushw	%bx
+	pushl	%edx
+	pushl	%edi
+	pushw	%bp
+	pushw	%es
+	pushw	%ds
+
+.macro	swab32eax
+	xchg  %ah, %al
+	rorl  $16, %eax
+	xchg  %ah, %al
+.endm
+.macro prefix_lcall lret_ra ,space_offst ,prefix_func
+	movw    init_pci_busdevfn, %bx
+	pushw   %ax
+	pushw   %cs
+	pushw	\lret_ra
+	pushw   %ax
+	movw	$0x5, %ax /*this is for the "gw_read_from_space" function , flash GW is space #5*/
+	movl	\space_offst, %edx /*this is for the "gw_read_from_space" function , offset within the GW*/
+	pushw	\prefix_func
+	lret
+.endm
+	/* extract CS */	
+	push 	%bp
+	movw 	%sp , %bp
+	movw    %ss:24(%bp) , %ax
+	pop 	%bp
+	
+	/* get GW offset, store in global word */
+	prefix_lcall $1f , %edx,$gw_get_cap_ofst
+
+1:
+	testw	%ax, %ax
+	popw	%ax
+	jz	98f
+
+	/* lock VSEC */
+	prefix_lcall $2f , %edx, $gw_hold_ownership
+2:
+	testl 	%eax, %eax
+	popw	%ax	
+	jz	98f
+
+	/* locate our ROM */
+	/* read ROM signature - 0xAA55 */
+	prefix_lcall $3f , $0, $gw_read_from_space
+
+3:
+	swab32eax
+	cmpw 	$0xaa55, %ax
+	popw	%ax
+	jne  	98f
+	/*PCIR signature*/
+	prefix_lcall $4f , $0x1c, $gw_read_from_space
+4:
+	swab32eax
+	movl    $PCIR_SIGNATURE, %ecx         
+	cmpl	%eax, %ecx
+	popw	%ax
+	jne     98f
+	/* iPXE build ID */
+	jmp 	this_rom /* jmp over or: 1. flash rom to flash 2. code reading from non dword aligned */
+
+	prefix_lcall $5f , $build_id, $gw_read_from_space
+5:
+	swab32eax
+	cmpl    $_build_id, %eax
+	popw	%ax
+	je 	this_rom
+
+	/*add code to loop through exproms - jmp 3b*/	
+
+	/*
+	 * As in Mellanox case iPXE is always the first ROM (currently), this code is redundent (currently)
+	 */
+
+this_rom:   
+	/* now we read exprom into esi buffer */
+
+	/* if no buffer (no PMM) - die */	
+	testl	%esi, %esi
+	jz	98f
+
+	/* fetch & calc rom size */
+	prefix_lcall $6f , $0, $gw_read_from_space
+6:
+	swab32eax
+	movl	%eax, %ecx	
+	testl	%eax, %eax
+	popw	%ax
+	jz	98f
+	shrl	$16, %ecx
+	andl	$0xff, %ecx
+	shll	$7, %ecx
+	pushl	%ecx /*store ecx value*/
+	shll	$2, %ecx
+	addl	$mpciheader_image_length, %ecx
+
+	prefix_lcall $7f , %ecx, $gw_read_from_space
+7:
+	swab32eax
+	andl	$0xff, %eax
+	shll	$7, %eax
+	movl	%eax, %edx
+	popw    %ax
+	popl	%ecx
+	addl	%edx, %ecx
+	shll	$2, %ecx /*mult in dword sizeof*/
+	/* read payload to PMM buffer (esi)*/		
+	pushw	%es	
+	pushl	%esi
+	movl	%esi, %edi
+	xorl	%esi, %esi /* start reading flash form offset "0" , knowing Mellanox iPXE ROM is at offest "0"*/
+	pushw	%si
+	popw	%es /* zero segemnet register to access %esi PA */
+read_payload:
+	prefix_lcall $8f , %esi, $gw_read_from_space
+8:
+
+	swab32eax
+	movl	%eax,%es:(%edi)
+	popw	%ax
+	addl	$4, %edi
+	addl	$4, %esi
+	subl	$4, %ecx
+	jnz	read_payload
+	
+	popl	%esi
+
+	/* release GW */
+	prefix_lcall $9f , %esi, $gw_release_ownership
+9:
+	popw    %ax
+	/* Locate first payload block (after the dummy ROM header) */
+        addr32 es movzbl 2(%esi), %ecx
+        shll    $9, %ecx
+        addl    $_pprefix_skip, %ecx
+        clc
+	popw	%es /* restore segment register */ 
+	jmp 	99f
+ 	/* Restore registers and return */
+
+98:
+	stc /*fail with payload inaccessible print*/
+
+99:
+	popw    %ds
+        popw    %es
+        popw    %bp
+        popl    %edi
+        popl    %edx
+        popw    %bx
+        popl    %eax
+        lret
+	.size	open_payload, . - open_payload
+#else
 open_payload:
 	/* Preserve registers */
 	pushl	%eax
@@ -214,7 +375,6 @@ find_mem_bar:
 	addr32 es movzbl 2(%esi), %ecx
 	shll	$9, %ecx
 	addl	$_pprefix_skip, %ecx
-
 	clc
 	/* Restore registers and return */
 99:	popw	%ds
@@ -226,7 +386,7 @@ find_mem_bar:
 	popl	%eax
 	lret
 	.size	open_payload, . - open_payload
-
+#endif
 	.section ".text16.early.data", "aw", @progbits
 payload_pci_busdevfn:
 	.word	0

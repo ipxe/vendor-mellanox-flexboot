@@ -14,7 +14,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 #include <config/defaults.h>
 
-#define	CONSOLE_SERIAL		/* Serial port */
+#define CONSOLE_SERIAL ( CONSOLE_USAGE_ALL & ~CONSOLE_USAGE_TUI )
 //#define	CONSOLE_DIRECT_VGA	/* Direct access to VGA card */
 //#define	CONSOLE_PC_KBD		/* Direct access to PC keyboard */
 //#define	CONSOLE_SYSLOG		/* Syslog console */

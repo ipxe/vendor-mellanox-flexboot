@@ -64,8 +64,8 @@ mlx_vmac_set_virt_mac (
 			utils,
 			SET_VIRTUAL_MAC,
 			virt_mac,
-			0,
-			sizeof(*virt_mac)
+			sizeof(*virt_mac),
+			0
 			);
 	MLX_CHECK_STATUS(utils, status, icmd_err, "mlx_icmd_send_command failed");
 icmd_err:

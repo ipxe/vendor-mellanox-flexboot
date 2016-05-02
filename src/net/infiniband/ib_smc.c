@@ -169,47 +169,6 @@ static int ib_smc_get_pkey_table ( struct ib_device *ibdev,
 }
 
 /**
- * Set Infiniband port speed using SMC
- *
- * @v ibdev		Infiniband device
- * @v local_mad		Method for issuing local MADs
- * @ret rc		Return status code
- */
-int ib_smc_set_port_info ( struct ib_device *ibdev,
-			  ib_local_mad_t local_mad)
-{
-	union ib_mad mad;
-	struct ib_port_info *port_info	= &mad.smp.smp_data.port_info;
-	int rc;
-
-	/* Get current port info */
-	if ( ( rc = ib_smc_get_port_info ( ibdev, local_mad, &mad ) ) != 0 ) {
-		return rc;
-	}
-
-	port_info->link_speed_active__link_speed_enabled &= ~0xf; //zero out enabled speed
-	port_info->link_speed_active__link_speed_enabled |= 0x1; // set link speed to 2.5Gbps
-	port_info->port_phys_state__link_down_def_state	&= 0xf;
-	port_info->port_phys_state__link_down_def_state	|= 0x2 << 4;
-	port_info->link_speed_ext_ena			= 0x1e;
-#define IB_MAD_PORT_INFO_DISABLE_FDR 0x1e
-	port_info->ext_val &= ~(cpu_to_be32(0xf));
-	port_info->ext_val |= cpu_to_be32(IB_MAD_PORT_INFO_DISABLE_FDR);
-
-	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PORT_INFO ),
-				 htonl ( ibdev->port ), local_mad, &mad,
-				 IB_MGMT_METHOD_SET )) != 0 )
-	{
-		printf("IBDEV %p could not set port info: %s\n",
-		       ibdev, strerror ( rc ) );
-		return rc;
-	}
-
-	DBGC ( ibdev, "IBDEV %p set port info link speed to 2.5Gbps\n", ibdev);
-	return 0;
-}
-
-/**
  * Get Infiniband parameters using SMC
  *
  * @v ibdev		Infiniband device

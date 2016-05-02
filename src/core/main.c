@@ -19,9 +19,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/init.h>
 #include <ipxe/version.h>
 #include <usr/autoboot.h>
-#ifdef MLX_BULLSEYE
-#include "mlx_bullseye.h"
-#endif
 
 /**
  * Main entry point
@@ -29,14 +26,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  * @ret rc		Return status code
  */
 __asmcall int main ( void ) {
+	int rc;
+
 	DBG ( "FlexBoot main() started...\n" );
-	/*
-	 * The below is effective only
-	 * if MLX_BULLSEYE is defined
-	 */
-#ifdef MLX_BULLSEYE
-	MlxBullseyeInit();
-#endif
 
 	/* Perform one-time-only initialisation (e.g. heap) */
 	initialise();
@@ -46,11 +38,14 @@ __asmcall int main ( void ) {
 	startup();
 	printf ( "Initialising completed.\n" );
 
-	ipxe ( NULL );
+	/* Attempt to boot */
+	if ( ( rc = ipxe ( NULL ) ) != 0 )
+		goto err_ipxe;
 
+err_ipxe:
 	shutdown_exit();
 
-	DBG ( "FlexBoot shutdown completed... returning to real mode\n" );
+	DBG ( "FlexBoot shutdown completed (%d)... returning to real mode\n", rc );
 
-	return 0;
+	return rc;
 }
