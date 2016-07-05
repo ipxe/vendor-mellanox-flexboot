@@ -456,7 +456,9 @@ int netboot ( struct net_device *netdev ) {
 		if ( ( rc = iflinkwait ( netdev, LINK_WAIT_TIMEOUT ) ) == 0 ) {
 			/* Give some time to the network to settle.
 			 * Switches may be still building their routing tables */
-			ifnetwork_wait ( netdev, LINK_WAIT_TIMEOUT, NETWORK_WAIT_TIMEOUT );
+			rc = ifnetwork_wait ( netdev, LINK_WAIT_TIMEOUT, NETWORK_WAIT_TIMEOUT );
+			if ( errno_cmp ( rc, -ECANCELED ) )
+				printf ( "Operation canceled!\n" );
 		}
 	} else {
 		rc = ifconf ( netdev, NULL );
@@ -475,7 +477,7 @@ int netboot ( struct net_device *netdev ) {
 	route();
 
 	/* Try PXE menu boot, if applicable */
-	if ( have_pxe_menu() ) {
+	if ( have_pxe_menu() && ( boot_prot == BOOT_PROTOCOL_PXE ) ) {
 		printf ( "Booting from PXE menu...\n" );
 		rc = pxe_menu_boot ( netdev );
 		goto err_pxe_menu_boot;
@@ -697,8 +699,7 @@ int ipxe ( struct net_device *netdev ) {
 	 * do so.
 	 *
 	 */
-	printf ( NORMAL "\n\n" PRODUCT_NAME "\n" BOLD PRODUCT_SHORT_NAME " "
-		 CYAN PRODUCT_URI NORMAL "\nFeatures:" );
+	printf ( NORMAL "\n\n" PRODUCT_NAME "\nFeatures:" );
 	for_each_table_entry ( feature, FEATURES )
 		printf ( " %s", feature->name );
 	printf ( "\n" );

@@ -40,6 +40,21 @@ bail:
 }
 
 mlx_status
+mlx_pci_teardown(
+			IN mlx_utils *utils
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+	if( utils == NULL){
+		status = MLX_INVALID_PARAMETER;
+		goto bail;
+	}
+	status = mlx_pci_teardown_priv(utils);
+bail:
+	return status;
+}
+
+mlx_status
 mlx_pci_read(
 			IN mlx_utils *utils,
 			IN mlx_pci_width width,

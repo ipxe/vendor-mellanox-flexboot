@@ -122,6 +122,18 @@ mlx_pci_init_priv(
 }
 
 mlx_status
+mlx_pci_teardown_priv(
+			IN mlx_utils *utils __attribute__ ((unused))
+			)
+{
+	mlx_status status = MLX_SUCCESS;
+#ifdef DEVICE_CX3
+	iounmap( utils->config );
+#endif
+	return status;
+}
+
+mlx_status
 mlx_pci_read_priv(
 			IN mlx_utils *utils,
 			IN mlx_pci_width width,
@@ -161,7 +173,7 @@ mlx_pci_mem_read_priv(
 {
 	if (buffer == NULL || width != MlxPciWidthUint32)
 		return MLX_INVALID_PARAMETER;
-	*((mlx_uint32 *)buffer) = readl((mlx_uint32)offset);
+	*((mlx_uint32 *)buffer) = readl(offset);
 	return MLX_SUCCESS;
 }
 
@@ -178,6 +190,6 @@ mlx_pci_mem_write_priv(
 	if (buffer == NULL || width != MlxPciWidthUint32)
 		return MLX_INVALID_PARAMETER;
 	barrier();
-	writel(*((mlx_uint32 *)buffer), (mlx_uint32)offset);
+	writel(*((mlx_uint32 *)buffer), offset);
 	return MLX_SUCCESS;
 }

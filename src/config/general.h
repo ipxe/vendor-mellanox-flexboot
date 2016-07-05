@@ -125,31 +125,32 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  *
  */
 #define	AUTOBOOT_CMD		/* Automatic booting */
-#undef	NVO_CMD			/* Non-volatile option storage commands */
+#define	NVO_CMD			/* Non-volatile option storage commands */
 #undef	CONFIG_CMD		/* Option configuration console */
 #define	IFMGMT_CMD		/* Interface management commands */
 #undef	IWMGMT_CMD		/* Wireless interface management commands */
-#undef FCMGMT_CMD		/* Fibre Channel management commands */
+#undef	IBMGMT_CMD		/* Infiniband management commands */
+#undef	FCMGMT_CMD		/* Fibre Channel management commands */
 #define	ROUTE_CMD		/* Routing table management commands */
 #define IMAGE_CMD		/* Image management commands */
 #define DHCP_CMD		/* DHCP management commands */
-#undef SANBOOT_CMD		/* SAN boot commands */
-#undef MENU_CMD		/* Menu commands */
-#undef LOGIN_CMD		/* Login command */
-#undef SYNC_CMD		/* Sync command */
-#undef NSLOOKUP_CMD		/* DNS resolving command */
-#undef TIME_CMD		/* Time commands */
-#undef DIGEST_CMD		/* Image crypto digest commands */
-#undef LOTEST_CMD		/* Loopback testing commands */
-#undef VLAN_CMD		/* VLAN commands */
-#undef PXE_CMD			/* PXE commands */
-#undef REBOOT_CMD		/* Reboot command */
+#define SANBOOT_CMD		/* SAN boot commands */
+#define MENU_CMD		/* Menu commands */
+#define LOGIN_CMD		/* Login command */
+#define SYNC_CMD		/* Sync command */
+#define NSLOOKUP_CMD		/* DNS resolving command */
+#define TIME_CMD		/* Time commands */
+#define DIGEST_CMD		/* Image crypto digest commands */
+#define LOTEST_CMD		/* Loopback testing commands */
+#define VLAN_CMD		/* VLAN commands */
+#define PXE_CMD			/* PXE commands */
+#define REBOOT_CMD		/* Reboot command */
 #undef POWEROFF_CMD		/* Power off command */
 //#define IMAGE_TRUST_CMD	/* Image trust management commands */
-#undef PCI_CMD		/* PCI commands */
-#undef PARAM_CMD		/* Form parameter commands */
+#define PCI_CMD		/* PCI commands */
+#define PARAM_CMD		/* Form parameter commands */
 #define NEIGHBOUR_CMD		/* Neighbour management commands */
-#undef PING_CMD		/* Ping command */
+#define PING_CMD		/* Ping command */
 //#define CONSOLE_CMD		/* Console command */
 #define IPSTAT_CMD		/* IP statistics commands */
 //#define PROFSTAT_CMD		/* Profiling commands */
@@ -160,6 +161,13 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  */
 #undef	NONPNP_HOOK_INT19	/* Hook INT19 on non-PnP BIOSes */
 #define	AUTOBOOT_ROM_FILTER	/* Autoboot only devices matching our ROM */
+
+/*
+ * Virtual network devices
+ *
+ */
+#define VNIC_IPOIB		/* Infiniband IPoIB virtual NICs */
+//#define VNIC_XSIGO		/* Infiniband Xsigo virtual NICs */
 
 /*
  * Error message tables to include

@@ -59,6 +59,7 @@ enum {
 	FIRST_TGT_ISCSI_NAME			= 0x2204,
 	FIRST_TGT_CHAP_ID				= 0x2205,
 	FIRST_TGT_CHAP_PWD				= 0x2207,
+	NV_ROM_DEBUG_LEVEL				= 0x2002,
 };
 
 union mlx_nvconfig_nic_boot_conf {
@@ -230,14 +231,15 @@ struct  mlx_nvcofnig_romini {
 	mlx_uint32 shared_memory_en     :1;
 	mlx_uint32 hii_vpi_en   :1;
 	mlx_uint32 tech_enum    :1;
-	mlx_uint32 reserved1    :4;
+	mlx_uint32 hii_type    :4;
 	mlx_uint32 static_component_name_string :1;
 	mlx_uint32 hii_iscsi_configuration      :1;
 	mlx_uint32 hii_ibm_aim  :1;
 	mlx_uint32 hii_platform_setup   :1;
 	mlx_uint32 hii_bdf_decimal      :1;
 	mlx_uint32 hii_read_only        :1;
-	mlx_uint32 reserved2    :10;
+	mlx_uint32 hii_mriname2			:1;
+	mlx_uint32 reserved2    :9;
 	mlx_uint32 mac_enum             :1;
 	mlx_uint32 port_enum    :1;
 	mlx_uint32 flash_en             :1;
@@ -254,6 +256,39 @@ struct  mlx_nvcofnig_romini {
 	mlx_uint32 uri_boot_retry       :4;
 	mlx_uint32 option_rom_debug     :1;
 	mlx_uint32 promiscuous_vlan     :1;
+};
+
+union mlx_nvconfig_debug_conf {
+	struct {
+	mlx_uint32	dbg_log_en				:1;
+	mlx_uint32	reserved1				:31;
+		/***************************************************/
+	mlx_uint32	stp_dbg_lvl				:2;
+	mlx_uint32	romprefix_dbg_lvl		:2;
+	mlx_uint32	dhcp_dbg_lvl			:2;
+	mlx_uint32	dhcpv6_dbg_lvl			:2;
+	mlx_uint32	arp_dbg_lvl				:2;
+	mlx_uint32	neighbor_dbg_lvl		:2;
+	mlx_uint32	ndp_dbg_lvl				:2;
+	mlx_uint32	uri_dbg_lvl				:2;
+	mlx_uint32	driver_dbg_lvl			:2;
+	mlx_uint32	nodnic_dbg_lvl			:2;
+	mlx_uint32	nodnic_cmd_dbg_lvl		:2;
+	mlx_uint32	nodnic_device_dbg_lvl	:2;
+	mlx_uint32	nodnic_port_dbg_lvl		:2;
+	mlx_uint32	netdevice_dbg_lvl		:2;
+	mlx_uint32	tftp_dbg_lvl			:2;
+	mlx_uint32	udp_dbg_lvl				:2;
+		/***************************************************/
+	mlx_uint32	tcp_dbg_lvl				:2;
+	mlx_uint32	tcpip_dbg_lvl			:2;
+	mlx_uint32	ipv4_dbg_lvl			:2;
+	mlx_uint32	ipv6_dbg_lvl			:2;
+	mlx_uint32	drv_set_dbg_lvl			:2;
+	mlx_uint32	stat_update_dbg_lvl		:2;
+	mlx_uint32	reserved2				:20;
+	};
+	mlx_uint32 dword[3];
 };
 
 #endif /* MLX_NVCONFIG_PRM_H_ */

@@ -91,8 +91,8 @@ static int ib_smc_get_node_info ( struct ib_device *ibdev,
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_NODE_INFO ), 0,
 				 local_mad, mad,  IB_MGMT_METHOD_GET) ) != 0 ) {
-		DBGC ( ibdev, "IBDEV %p could not get node info: %s\n",
-		       ibdev, strerror ( rc ) );
+		DBGC ( ibdev, "IBDEV %s could not get node info: %s\n",
+				ibdev->name, strerror ( rc ) );
 		return rc;
 	}
 	return 0;
@@ -115,8 +115,8 @@ static int ib_smc_get_port_info ( struct ib_device *ibdev,
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PORT_INFO ),
 				 htonl ( ibdev->port ), local_mad, mad,
 				 IB_MGMT_METHOD_GET )) != 0 ) {
-		DBGC ( ibdev, "IBDEV %p could not get port info: %s\n",
-		       ibdev, strerror ( rc ) );
+		DBGC ( ibdev, "IBDEV %s could not get port info: %s\n",
+		       ibdev->name, strerror ( rc ) );
 		return rc;
 	}
 	return 0;
@@ -138,8 +138,8 @@ static int ib_smc_get_guid_info ( struct ib_device *ibdev,
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_GUID_INFO ), 0,
 				 local_mad, mad, IB_MGMT_METHOD_GET) ) != 0 ) {
-		DBGC ( ibdev, "IBDEV %p could not get GUID info: %s\n",
-		       ibdev, strerror ( rc ) );
+		DBGC ( ibdev, "IBDEV %s could not get GUID info: %s\n",
+		       ibdev->name, strerror ( rc ) );
 		return rc;
 	}
 	return 0;
@@ -161,8 +161,8 @@ static int ib_smc_get_pkey_table ( struct ib_device *ibdev,
 	/* Issue MAD */
 	if ( ( rc = ib_smc_mad ( ibdev, htons ( IB_SMP_ATTR_PKEY_TABLE ), 0,
 				 local_mad, mad, IB_MGMT_METHOD_GET) ) != 0 ) {
-		DBGC ( ibdev, "IBDEV %p could not get pkey table: %s\n",
-		       ibdev, strerror ( rc ) );
+		DBGC ( ibdev, "IBDEV %s could not get pkey table: %s\n",
+		       ibdev->name, strerror ( rc ) );
 		return rc;
 	}
 	return 0;
@@ -232,8 +232,8 @@ static int ib_smc_get ( struct ib_device *ibdev, ib_local_mad_t local_mad ) {
 		}
 	}
 
-	DBGC ( ibdev, "IBDEV %p port GID is " IB_GID_FMT "\n",
-	       ibdev, IB_GID_ARGS ( &ibdev->gid ) );
+	DBGC ( ibdev, "IBDEV %s port GID is " IB_GID_FMT "\n",
+	       ibdev->name, IB_GID_ARGS ( &ibdev->gid ) );
 
 	return 0;
 }

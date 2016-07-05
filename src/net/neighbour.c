@@ -33,6 +33,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/timer.h>
 #include <ipxe/malloc.h>
 #include <ipxe/neighbour.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -103,7 +104,7 @@ static struct neighbour * neighbour_create ( struct net_device *netdev,
 	/* Transfer ownership to cache */
 	list_add ( &neighbour->list, &neighbours );
 
-	DBGC ( neighbour, "NEIGHBOUR %s %s %s created\n", netdev->name,
+	DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s created\n", netdev->name,
 	       net_protocol->name, net_protocol->ntoa ( net_dest ) );
 	return neighbour;
 }
@@ -158,7 +159,7 @@ static void neighbour_discover ( struct neighbour *neighbour,
 	/* Start timer to trigger neighbour discovery */
 	start_timer_nodelay ( &neighbour->timer );
 
-	DBGC ( neighbour, "NEIGHBOUR %s %s %s discovering via %s\n",
+	DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s discovering via %s\n",
 	       netdev->name, net_protocol->name,
 	       net_protocol->ntoa ( neighbour->net_dest ),
 	       neighbour->discovery->name );
@@ -180,7 +181,7 @@ static void neighbour_discovered ( struct neighbour *neighbour,
 
 	/* Fill in link-layer address */
 	memcpy ( neighbour->ll_dest, ll_dest, ll_protocol->ll_addr_len );
-	DBGC ( neighbour, "NEIGHBOUR %s %s %s is %s %s\n", netdev->name,
+	DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s is %s %s\n", netdev->name,
 	       net_protocol->name, net_protocol->ntoa ( neighbour->net_dest ),
 	       ll_protocol->name, ll_protocol->ntoa ( neighbour->ll_dest ) );
 
@@ -194,13 +195,13 @@ static void neighbour_discovered ( struct neighbour *neighbour,
 	ref_get ( &neighbour->refcnt );
 	while ( ( iobuf = list_first_entry ( &neighbour->tx_queue,
 					     struct io_buffer, list )) != NULL){
-		DBGC2 ( neighbour, "NEIGHBOUR %s %s %s transmitting deferred "
+		DBGC2_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s transmitting deferred "
 			"packet\n", netdev->name, net_protocol->name,
 			net_protocol->ntoa ( neighbour->net_dest ) );
 		list_del ( &iobuf->list );
 		if ( ( rc = net_tx ( iobuf, netdev, net_protocol, ll_dest,
 				     netdev->ll_addr ) ) != 0 ) {
-			DBGC ( neighbour, "NEIGHBOUR %s %s %s could not "
+			DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s could not "
 			       "transmit deferred packet: %s\n",
 			       netdev->name, net_protocol->name,
 			       net_protocol->ntoa ( neighbour->net_dest ),
@@ -231,7 +232,7 @@ static void neighbour_destroy ( struct neighbour *neighbour, int rc ) {
 	/* Discard any outstanding I/O buffers */
 	while ( ( iobuf = list_first_entry ( &neighbour->tx_queue,
 					     struct io_buffer, list )) != NULL){
-		DBGC2 ( neighbour, "NEIGHBOUR %s %s %s discarding deferred "
+		DBGC2_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s discarding deferred "
 			"packet: %s\n", netdev->name, net_protocol->name,
 			net_protocol->ntoa ( neighbour->net_dest ),
 			strerror ( rc ) );
@@ -239,7 +240,7 @@ static void neighbour_destroy ( struct neighbour *neighbour, int rc ) {
 		netdev_tx_err ( neighbour->netdev, iobuf, rc );
 	}
 
-	DBGC ( neighbour, "NEIGHBOUR %s %s %s destroyed: %s\n", netdev->name,
+	DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s destroyed: %s\n", netdev->name,
 	       net_protocol->name, net_protocol->ntoa ( neighbour->net_dest ),
 	       strerror ( rc ) );
 
@@ -276,7 +277,7 @@ static void neighbour_expired ( struct retry_timer *timer, int fail ) {
 	/* Transmit neighbour request */
 	if ( ( rc = discovery->tx_request ( netdev, net_protocol, net_dest,
 					    net_source ) ) != 0 ) {
-		DBGC ( neighbour, "NEIGHBOUR %s %s %s could not transmit %s "
+		DBGC_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s could not transmit %s "
 		       "request: %s\n", netdev->name, net_protocol->name,
 		       net_protocol->ntoa ( neighbour->net_dest ),
 		       neighbour->discovery->name, strerror ( rc ) );
@@ -319,7 +320,7 @@ int neighbour_tx ( struct io_buffer *iobuf, struct net_device *netdev,
 		return net_tx ( iobuf, netdev, net_protocol, neighbour->ll_dest,
 				ll_source );
 	} else {
-		DBGC2 ( neighbour, "NEIGHBOUR %s %s %s deferring packet\n",
+		DBGC2_NEIGHBOUR ( neighbour, "NEIGHBOUR %s %s %s deferring packet\n",
 			netdev->name, net_protocol->name,
 			net_protocol->ntoa ( net_dest ) );
 		list_add_tail ( &iobuf->list, &neighbour->tx_queue );

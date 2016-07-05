@@ -19,7 +19,6 @@
 
 FILE_LICENCE ( GPL2_OR_LATER );
 
-#include "flexboot_nodnic.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
@@ -30,6 +29,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/ethernet.h>
 #include <ipxe/vlan.h>
 #include <ipxe/io.h>
+#include "flexboot_nodnic.h"
 #include "mlx_types.h"
 #include "mlx_utils.h"
 #include "mlx_bail.h"
@@ -46,6 +46,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <mlx_pci_gw.h>
 #include <mlx_vmac.h>
 #include <ipxe/boot_menu_ui.h>
+#include "flex_debug_log.h"
 
 /***************************************************************************
  *
@@ -55,7 +56,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
  */
 static int flexboot_nodnic_arm_cq ( struct flexboot_nodnic_port *port ) {
 #ifndef DEVICE_CX3
-	mlx_uint32 val = ( port->eth_cq->next_idx & 0xffff );
+	mlx_uint32 val = ( port->eth_cq->next_idx & 0xffffff );
 	if ( nodnic_port_set ( & port->port_priv, nodnic_port_option_arm_cq, val ) ) {
 		MLX_DEBUG_ERROR( port->port_priv.device, "Failed to arm the CQ\n" );
 		return MLX_FAILED;
@@ -80,7 +81,7 @@ static int flexboot_nodnic_arm_cq ( struct flexboot_nodnic_port *port ) {
 		data = ( ( ( port->eth_cq->next_idx & 0xffff ) << 16 ) | 0x0080 );
 		/* Write the new index and update FW that new data was submitted */
 		mlx_pci_mem_write ( utils, MlxPciWidthUint32, 0,
-				( mlx_uint64 ) ( mlx_uint32 ) & ( ptr->armcq_cq_ci_dword ), 1, &data );
+				( mlx_uint64 ) & ( ptr->armcq_cq_ci_dword ), 1, &data );
 	}
 #endif
 	return 0;
@@ -198,7 +199,7 @@ static int flexboot_nodnic_complete ( struct ib_device *ibdev,
 	qpn = cqe_data->qpn;
 
 	if ( cqe_data->is_error == TRUE ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic %p CQN %#lx syndrome %x vendor %x\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p CQN %#lx syndrome %x vendor %x\n",
 				flexboot_nodnic, cq->cqn, cqe_data->syndrome,
 				cqe_data->vendor_err_syndrome );
 		rc = -EIO;
@@ -208,7 +209,7 @@ static int flexboot_nodnic_complete ( struct ib_device *ibdev,
 	/* Identify work queue */
 	wq = flexboot_nodnic_find_wq( ibdev, cq, qpn, cqe_data->is_send );
 	if ( wq == NULL ) {
-		DBGC ( flexboot_nodnic,
+		DBGC_NODNIC ( flexboot_nodnic,
 				"flexboot_nodnic %p CQN %#lx unknown %s QPN %#lx\n",
 				flexboot_nodnic, cq->cqn,
 				( cqe_data->is_send ? "send" : "recv" ), qpn );
@@ -219,8 +220,8 @@ static int flexboot_nodnic_complete ( struct ib_device *ibdev,
 	/* Identify work queue entry */
 	wqe_idx = cqe_data->wqe_counter;
 	wqe_idx_mask = ( wq->num_wqes - 1 );
-	DBGCP ( flexboot_nodnic,
-			"ConnectX3 %p CQN %#lx QPN %#lx %s WQE %#lx completed:\n",
+	DBGCP_NODNIC ( flexboot_nodnic,
+			"NODNIC %p CQN %#lx QPN %#lx %s WQE %#lx completed:\n",
 			flexboot_nodnic, cq->cqn, qp->qpn,
 			( cqe_data->is_send ? "send" : "recv" ),
 		wqe_idx );
@@ -228,8 +229,8 @@ static int flexboot_nodnic_complete ( struct ib_device *ibdev,
 	/* Identify I/O buffer */
 	iobuf = wq->iobufs[wqe_idx & wqe_idx_mask];
 	if ( iobuf == NULL ) {
-		DBGC ( flexboot_nodnic,
-				"ConnectX3 %p CQN %#lx QPN %#lx empty %s WQE %#lx\n",
+		DBGC_NODNIC ( flexboot_nodnic,
+				"NODNIC %p CQN %#lx QPN %#lx empty %s WQE %#lx\n",
 				flexboot_nodnic, cq->cqn, qp->qpn,
 		       ( cqe_data->is_send ? "send" : "recv" ), wqe_idx );
 		return -EIO;
@@ -243,7 +244,6 @@ static int flexboot_nodnic_complete ( struct ib_device *ibdev,
 		/* Propagate error to receive completion handler */
 		ib_complete_recv ( ibdev, qp, NULL, NULL, iobuf, rc );
 	} else {
-		//printf("recv complete wqe_idx = 0x%lx\n",wqe_idx);
 		/* Set received length */
 		len = cqe_data->byte_cnt;
 		assert ( len <= iob_tailroom ( iobuf ) );
@@ -303,10 +303,9 @@ static void flexboot_nodnic_poll_cq ( struct ib_device *ibdev,
 		/* Handle completion */
 		rc = flexboot_nodnic_complete ( ibdev, cq, &cqe_data );
 		if ( rc != 0 ) {
-			printf (
-					"flexboot_nodnic %p CQN %#lx failed to complete: %s\n",
+			DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p CQN %#lx failed to complete: %s\n",
 					flexboot_nodnic, cq->cqn, strerror ( rc ) );
-			DBGC_HDA ( flexboot_nodnic, virt_to_phys ( cqe ),
+			DBGC_HDA_NODNIC ( flexboot_nodnic, virt_to_phys ( cqe ),
 				   cqe, sizeof ( *cqe ) );
 		}
 
@@ -423,7 +422,7 @@ static int flexboot_nodnic_post_send ( struct ib_device *ibdev,
 
 	if ( ( port->port_priv.dma_state == FALSE ) ||
 		 ( port->port_priv.port_state & NODNIC_PORT_DISABLING_DMA ) ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic DMA disabled\n");
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic DMA disabled\n");
 		status = -ENETDOWN;
 		goto post_send_done;
 	}
@@ -432,7 +431,7 @@ static int flexboot_nodnic_post_send ( struct ib_device *ibdev,
 	wqe_idx = wq->next_idx;
 	wqe_idx_mask = ( wq->num_wqes - 1 );
 	if ( wq->iobufs[wqe_idx & wqe_idx_mask] ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic %p QPN %#lx send queue full\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p QPN %#lx send queue full\n",
 				flexboot_nodnic, qp->qpn );
 		status = -ENOBUFS;
 		goto post_send_done;
@@ -446,7 +445,7 @@ static int flexboot_nodnic_post_send ( struct ib_device *ibdev,
 			fill_send_wqe[qp->type] ( ibdev, qp, av, iobuf,
 					wqbb, wqe_idx );
 	if ( status != 0 ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic %p QPN %#lx fill send wqe failed\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p QPN %#lx fill send wqe failed\n",
 				flexboot_nodnic, qp->qpn );
 		goto post_send_done;
 	}
@@ -456,7 +455,7 @@ static int flexboot_nodnic_post_send ( struct ib_device *ibdev,
 	status = port->port_priv.send_doorbell ( &port->port_priv,
 				&send_ring->nodnic_ring, ( mlx_uint16 ) wq->next_idx );
 	if ( status != 0 ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic %p ring send doorbell failed\n", flexboot_nodnic );
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p ring send doorbell failed\n", flexboot_nodnic );
 	}
 
 post_send_done:
@@ -487,7 +486,7 @@ static int flexboot_nodnic_post_recv ( struct ib_device *ibdev,
 	/* Allocate work queue entry */
 	wqe_idx_mask = ( wq->num_wqes - 1 );
 	if ( wq->iobufs[wq->next_idx & wqe_idx_mask] ) {
-		DBGC ( flexboot_nodnic,
+		DBGC_NODNIC ( flexboot_nodnic,
 				"flexboot_nodnic %p QPN %#lx receive queue full\n",
 				flexboot_nodnic, qp->qpn );
 		status = -ENOBUFS;
@@ -508,7 +507,7 @@ static int flexboot_nodnic_post_recv ( struct ib_device *ibdev,
 	status = port->port_priv.recv_doorbell ( &port->port_priv,
 				&recv_ring->nodnic_ring, ( mlx_uint16 ) wq->next_idx );
 	if ( status != 0 ) {
-		DBGC ( flexboot_nodnic, "flexboot_nodnic %p ring receive doorbell failed\n", flexboot_nodnic );
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p ring receive doorbell failed\n", flexboot_nodnic );
 	}
 post_recv_done:
 	return status;
@@ -529,7 +528,7 @@ static void flexboot_nodnic_poll_eq ( struct ib_device *ibdev ) {
 	mlx_status status;
 
 	if ( ! ibdev ) {
-		printf( "%s: ibdev = NULL!!!\n", __FUNCTION__ );
+		DBG_NODNIC ( "%s: ibdev = NULL!!!\n", __FUNCTION__ );
 		return;
 	}
 
@@ -538,7 +537,7 @@ static void flexboot_nodnic_poll_eq ( struct ib_device *ibdev ) {
 	netdev = port->netdev;
 
 	if ( ! netdev_is_open ( netdev ) ) {
-		DBG2( "%s: port %d is closed\n", __FUNCTION__, port->ibdev->port );
+		DBG2_NODNIC ( "%s: port %d is closed\n", __FUNCTION__, port->ibdev->port );
 		return;
 	}
 
@@ -548,7 +547,7 @@ static void flexboot_nodnic_poll_eq ( struct ib_device *ibdev ) {
 		MLX_FATAL_CHECK_STATUS(status, state_err, "nodnic_port_get_state failed");
 
 		if ( state == nodnic_port_state_active ) {
-			DBG( "%s: port %d physical link is up\n", __FUNCTION__,
+			DBG_NODNIC ( "%s: port %d physical link is up\n", __FUNCTION__,
 					port->ibdev->port );
 			port->type->state_change ( flexboot_nodnic, port, 1 );
 		}
@@ -568,7 +567,7 @@ static int flexboot_nodnic_mcast_attach ( struct ib_device *ibdev,
 				 union ib_gid *gid) {
 	struct flexboot_nodnic *flexboot_nodnic = ib_get_drvdata ( ibdev );
 	struct flexboot_nodnic_port *port = &flexboot_nodnic->port[ibdev->port - 1];
-	mlx_mac_address mac = { {0, 0, 0, 0, 0, 0} };
+	mlx_mac_address mac;
 	mlx_status status = MLX_SUCCESS;
 
 	switch (qp->type) {
@@ -589,7 +588,7 @@ static void flexboot_nodnic_mcast_detach ( struct ib_device *ibdev,
 				  union ib_gid *gid ) {
 	struct flexboot_nodnic *flexboot_nodnic = ib_get_drvdata ( ibdev );
 	struct flexboot_nodnic_port *port = &flexboot_nodnic->port[ibdev->port - 1];
-	mlx_mac_address mac = { {0, 0, 0, 0, 0, 0} };
+	mlx_mac_address mac;
 	mlx_status status = MLX_SUCCESS;
 
 	switch (qp->type) {
@@ -723,7 +722,7 @@ static void flexboot_nodnic_port_disable_dma ( struct flexboot_nodnic_port *port
 
 /** Number of flexboot_nodnic Ethernet receive work queue entries */
 #define FLEXBOOT_NODNIC_ETH_NUM_RECV_WQES 64
-/** Shomron Ethernet queue pair operations */
+/** flexboot nodnic Ethernet queue pair operations */
 static struct ib_queue_pair_operations flexboot_nodnic_eth_qp_op = {
 	.alloc_iob = alloc_iob,
 };
@@ -745,7 +744,7 @@ static int flexboot_nodnic_eth_transmit ( struct net_device *netdev,
 	rc = ib_post_send ( ibdev, port->eth_qp, NULL, iobuf);
 	/* Transmit packet */
 	if ( rc != 0) {
-		DBGC ( flexboot_nodnic, "Shomron %p port %d could not transmit: %s\n",
+		DBGC_NODNIC ( flexboot_nodnic, "NODNIC %p port %d could not transmit: %s\n",
 				flexboot_nodnic, ibdev->port, strerror ( rc ) );
 		return rc;
 	}
@@ -788,13 +787,13 @@ static void flexboot_nodnic_eth_complete_recv ( struct ib_device *ibdev __unused
 	struct net_device *netdev = ib_qp_get_ownerdata ( qp );
 
 	if ( rc != 0 ) {
-		DBG ( "Received packet with error\n" );
+		DBG_NODNIC ( "Received packet with error\n" );
 		netdev_rx_err ( netdev, iobuf, rc );
 		return;
 	}
 
 	if ( source == NULL ) {
-		DBG ( "Received packet without address vector\n" );
+		DBG_NODNIC ( "Received packet without address vector\n" );
 		netdev_rx_err ( netdev, iobuf, -ENOTTY );
 		return;
 	}
@@ -825,7 +824,7 @@ static void flexboot_nodnic_eth_poll ( struct net_device *netdev) {
  * @v netdev		Network device
  * @ret rc		Return status code
  */
-static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
+static int flexboot_nodnic_eth_open ( struct net_device *netdev ) {
 	struct flexboot_nodnic_port *port = netdev->priv;
 	struct ib_device *ibdev = port->ibdev;
 	struct flexboot_nodnic *flexboot_nodnic = ib_get_drvdata ( ibdev );
@@ -837,7 +836,8 @@ static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
 	nodnic_port_state state = nodnic_port_state_down;
 
 	if ( port->port_priv.port_state & NODNIC_PORT_OPENED ) {
-		DBG( "%s: port %d is already opened\n", __FUNCTION__, port->ibdev->port );
+		DBGC_NODNIC ( flexboot_nodnic, "%s: port %d is already opened\n",
+				__FUNCTION__, port->ibdev->port );
 		return 0;
 	}
 
@@ -845,7 +845,7 @@ static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
 
 	dummy_cq = zalloc ( sizeof ( struct ib_completion_queue ) );
 	if ( dummy_cq == NULL ) {
-		printf ( "%s: Failed to allocate dummy CQ\n", __FUNCTION__ );
+		DBGC_NODNIC ( flexboot_nodnic, "%s: Failed to allocate dummy CQ\n", __FUNCTION__ );
 		status = MLX_OUT_OF_RESOURCES;
 		goto err_create_dummy_cq;
 	}
@@ -854,9 +854,9 @@ static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
 	port->eth_qp = ib_create_qp ( ibdev, IB_QPT_ETH,
 					FLEXBOOT_NODNIC_ETH_NUM_SEND_WQES, dummy_cq,
 					FLEXBOOT_NODNIC_ETH_NUM_RECV_WQES, dummy_cq,
-					&flexboot_nodnic_eth_qp_op );
+					&flexboot_nodnic_eth_qp_op, netdev->name );
 	if ( !port->eth_qp ) {
-		printf ( "flexboot_nodnic %p port %d could not create queue pair\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p port %d could not create queue pair\n",
 				 flexboot_nodnic, ibdev->port );
 		status = MLX_OUT_OF_RESOURCES;
 		goto err_create_qp;
@@ -871,7 +871,7 @@ static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
 	port->eth_cq = ib_create_cq ( ibdev, cq_size,
 			&flexboot_nodnic_eth_cq_op );
 	if ( !port->eth_cq ) {
-		printf (
+		DBGC_NODNIC ( flexboot_nodnic,
 			"flexboot_nodnic %p port %d could not create completion queue\n",
 			flexboot_nodnic, ibdev->port );
 		status = MLX_OUT_OF_RESOURCES;
@@ -922,7 +922,8 @@ static int flexboot_nodnic_eth_open ( struct net_device *netdev) {
 	port->type->state_change (
 			flexboot_nodnic, port, state == nodnic_port_state_active );
 
-	DBG( "%s: port %d opened (link is %s)\n", __FUNCTION__, port->ibdev->port,
+	DBGC_NODNIC ( flexboot_nodnic, "%s: port %d opened (link is %s)\n",
+			__FUNCTION__, port->ibdev->port,
 			( ( state == nodnic_port_state_active ) ? "Up" : "Down" ) );
 
 	free(dummy_cq);
@@ -957,13 +958,14 @@ static void flexboot_nodnic_eth_close ( struct net_device *netdev) {
 	mlx_status status = MLX_SUCCESS;
 
 	if ( ! ( port->port_priv.port_state & NODNIC_PORT_OPENED ) ) {
-		DBG( "%s: port %d is already closed\n", __FUNCTION__, port->ibdev->port );
+		DBGC_NODNIC ( flexboot_nodnic, "%s: port %d is already closed\n",
+				__FUNCTION__, port->ibdev->port );
 		return;
 	}
 
 	if (flexboot_nodnic->device_priv.device_cap.support_promisc_filter) {
 		if ( ( status = nodnic_port_set_promisc( &port->port_priv, FALSE ) ) ) {
-			DBGC ( flexboot_nodnic->device_priv,
+			DBGC_NODNIC ( flexboot_nodnic,
 					"nodnic_port_set_promisc failed (status = %d)\n", status );
 		}
 	}
@@ -977,7 +979,7 @@ static void flexboot_nodnic_eth_close ( struct net_device *netdev) {
 	/* Close port */
 	status = nodnic_port_close(&port->port_priv);
 	if ( status != MLX_SUCCESS ) {
-		printf ( "flexboot_nodnic %p port %d could not close port: %s\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p port %d could not close port: %s\n",
 				flexboot_nodnic, ibdev->port, strerror ( status ) );
 		/* Nothing we can do about this */
 	}
@@ -989,7 +991,7 @@ static void flexboot_nodnic_eth_close ( struct net_device *netdev) {
 
 	nodnic_port_free_eq(&port->port_priv);
 
-	DBG( "%s: port %d closed\n", __FUNCTION__, port->ibdev->port );
+	DBGC_NODNIC ( flexboot_nodnic, "%s: port %d closed\n", __FUNCTION__, port->ibdev->port );
 }
 
 void flexboot_nodnic_eth_irq ( struct net_device *netdev, int enable ) {
@@ -1034,7 +1036,7 @@ static int flexboot_nodnic_register_netdev ( struct flexboot_nodnic *flexboot_no
 	/* Allocate network devices */
 	netdev = alloc_etherdev ( 0 );
 	if ( netdev == NULL ) {
-		printf ( "flexboot_nodnic %p port %d could not allocate net device\n",
+		DBGC_NODNIC ( flexboot_nodnic, "flexboot_nodnic %p port %d could not allocate net device\n",
 				flexboot_nodnic, ibdev->port );
 		status = MLX_OUT_OF_RESOURCES;
 		goto alloc_err;
@@ -1043,7 +1045,6 @@ static int flexboot_nodnic_register_netdev ( struct flexboot_nodnic *flexboot_no
 	netdev_init ( netdev, &flexboot_nodnic_eth_operations );
 	netdev->dev = ibdev->dev;
 	netdev->priv = port;
-	ib_set_ownerdata ( ibdev, netdev );
 
 	status = nodnic_port_query(&port->port_priv,
 			nodnic_port_option_mac_high,
@@ -1062,7 +1063,7 @@ static int flexboot_nodnic_register_netdev ( struct flexboot_nodnic *flexboot_no
 	/* Register network device */
 	status = register_netdev ( netdev );
 	if ( status != MLX_SUCCESS ) {
-		printf (
+		DBGC_NODNIC ( flexboot_nodnic,
 			"flexboot_nodnic %p port %d could not register network device: %s\n",
 			flexboot_nodnic, ibdev->port, strerror ( status ) );
 		goto reg_err;
@@ -1184,15 +1185,15 @@ flexboot_nodnic_set_ports_type ( struct flexboot_nodnic *flexboot_nodnic_priv ) 
 				"nodnic_port_get_type failed");
 		switch ( type ) {
 		case NODNIC_PORT_TYPE_ETH:
-			DBGC ( flexboot_nodnic_priv, "Port %d type is Ethernet\n", i );
+			DBGC_NODNIC ( flexboot_nodnic_priv, "Port %d type is Ethernet\n", i );
 			flexboot_nodnic_priv->port[i].type = &flexboot_nodnic_port_type_eth;
 			break;
 		case NODNIC_PORT_TYPE_IB:
-			DBGC ( flexboot_nodnic_priv, "Port %d type is Infiniband\n", i );
+			DBGC_NODNIC ( flexboot_nodnic_priv, "Port %d type is Infiniband\n", i );
 			status = MLX_UNSUPPORTED;
 			goto type_err;
 		default:
-			DBGC ( flexboot_nodnic_priv, "Port %d type is unknown\n", i );
+			DBGC_NODNIC ( flexboot_nodnic_priv, "Port %d type is unknown\n", i );
 			status = MLX_UNSUPPORTED;
 			goto type_err;
 		}
@@ -1284,7 +1285,7 @@ static void flexboot_nodnic_updater ( void *priv, uint8_t status ) {
 		flexboot_nodnic_disable_dma ( nodnic );
 		break;
 	default:
-		DBGC ( nodnic, "%s: Unknown status %d\n", __FUNCTION__, status );
+		DBGC_NODNIC ( nodnic, "%s: Unknown status %d\n", __FUNCTION__, status );
 	}
 }
 
@@ -1294,7 +1295,7 @@ int flexboot_nodnic_is_supported ( struct pci_device *pci ) {
 	mlx_status status;
 	int is_supported = 0;
 
-	DBG ( "%s: start\n", __FUNCTION__ );
+	DBG_NODNIC ( "%s: start\n", __FUNCTION__ );
 
 	memset ( &utils, 0, sizeof ( utils ) );
 
@@ -1315,8 +1316,9 @@ int flexboot_nodnic_is_supported ( struct pci_device *pci ) {
 	mlx_pci_gw_teardown( &utils );
 
 pci_gw_init_err:
+	mlx_utils_teardown(&utils);
 utils_init_err:
-	DBG ( "%s: NODNIC is %s supported (status = %d)\n",
+	DBG_NODNIC ( "%s: NODNIC is %s supported (status = %d)\n",
 			__FUNCTION__, ( is_supported ? "": "not" ), status );
 	return is_supported;
 }
@@ -1432,6 +1434,7 @@ static mlx_status flexboot_nodnic_get_factory_mac (
 	struct mlx_vmac_query_virt_mac virt_mac;
 	mlx_status status;
 
+	memset ( & virt_mac, 0, sizeof ( virt_mac ) );
 	status = mlx_vmac_query_virt_mac ( flexboot_nodnic_priv->device_priv.utils,
 			&virt_mac );
 	if ( ! status ) {
@@ -1492,12 +1495,12 @@ static int flexboot_nodnic_set_port_masking ( struct flexboot_nodnic *flexboot_n
 		}
 
 		if ( boot_enable )
-			flexboot_nodnic->port_mask |= (i + 1);
+		flexboot_nodnic->port_mask |= (i + 1);
 	}
 
 	if ( ! flexboot_nodnic->port_mask ) {
 		/* No port was enabled */
-		DBGC ( flexboot_nodnic, "ConnectX3 %p No port was enabled for "
+		DBGC_NODNIC ( flexboot_nodnic, "NODNIC %p No port was enabled for "
 				"booting\n", flexboot_nodnic );
 		return -ENETUNREACH;
 	}
@@ -1513,7 +1516,7 @@ static void flexboot_nodnic_get_ro_pci_settings ( void *drv_priv ) {
 
 	if ( nodnic_device_get_fw_version ( & flexboot_nodnic->device_priv,
 		&fw_ver_minor, &fw_ver_sub_minor, &fw_ver_major ) ) {
-		DBGC ( flexboot_nodnic, "%s: Failed to query firmware version\n", __FUNCTION__ );
+		DBGC_NODNIC ( flexboot_nodnic, "%s: Failed to query firmware version\n", __FUNCTION__ );
 	} else {
 		fw_image_props = & ( flexboot_nodnic->nodnic_nv_conf.fw_image_props );
 		snprintf ( fw_image_props->family_fw_version,
@@ -1603,7 +1606,7 @@ static int flexboot_nodnic_get_ini_and_defaults ( struct flexboot_nodnic *flexbo
 
 	if ( ( rc = nvconfig_read_rom_ini_values ( flexboot_nodnic->device_priv.utils,
 				   & rom_ini ) ) ) {
-		DBGC ( flexboot_nodnic, "Failed to get ini values (rc = %d)\n", rc );
+		DBGC_NODNIC ( flexboot_nodnic, "Failed to get ini values (rc = %d)\n", rc );
 	} else {
 		/* INI configurations  */
 		memcpy ( flexboot_nodnic->ini_configurations.dhcp_user_class,
@@ -1644,13 +1647,13 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 	int rc = 0;
 
 	if ( ( pci == NULL ) || ( callbacks == NULL ) ) {
-		printf ( "%s: Bad Parameter\n", __FUNCTION__ );
+		DBGC_NODNIC ( flexboot_nodnic_priv, "%s: Bad Parameter\n", __FUNCTION__ );
 		return -EINVAL;
 	}
 
 	flexboot_nodnic_priv = zalloc( sizeof ( *flexboot_nodnic_priv ) );
 	if ( flexboot_nodnic_priv == NULL ) {
-		printf ( "%s: Failed to allocate priv data\n", __FUNCTION__ );
+		DBGC_NODNIC ( flexboot_nodnic_priv, "%s: Failed to allocate priv data\n", __FUNCTION__ );
 		status = MLX_OUT_OF_RESOURCES;
 		goto device_err_alloc;
 	}
@@ -1666,7 +1669,7 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 	device_priv = &flexboot_nodnic_priv->device_priv;
 	device_priv->utils = (mlx_utils *)zalloc( sizeof ( mlx_utils ) );
 	if ( device_priv->utils == NULL ) {
-		printf ( "%s: Failed to allocate utils\n", __FUNCTION__ );
+		DBGC_NODNIC ( flexboot_nodnic_priv, "%s: Failed to allocate utils\n", __FUNCTION__ );
 		status = MLX_OUT_OF_RESOURCES;
 		goto utils_err_alloc;
 	}
@@ -1680,7 +1683,7 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 	MLX_FATAL_CHECK_STATUS(status, cmd_init_err,
 			"mlx_pci_gw_init failed");
 
-	/*init device*/
+	/* init device */
 	status = nodnic_device_init( device_priv );
 	MLX_FATAL_CHECK_STATUS(status, device_init_err,
 				"nodnic_device_init failed");
@@ -1707,12 +1710,12 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 	MLX_FATAL_CHECK_STATUS(status, err_alloc_ibdev,
 					"flexboot_nodnic_allocate_infiniband_devices failed");
 
-	/* port init*/
+	/* port init */
 	status = flexboot_nodnic_thin_init_ports( flexboot_nodnic_priv );
 	MLX_FATAL_CHECK_STATUS(status, err_thin_init_ports,
 						"flexboot_nodnic_thin_init_ports failed");
 
-	/* device reg*/
+	/* device reg */
 	status = flexboot_nodnic_set_ports_type( flexboot_nodnic_priv );
 	MLX_CHECK_STATUS( flexboot_nodnic_priv, status, err_set_ports_types,
 						"flexboot_nodnic_set_ports_type failed");
@@ -1764,24 +1767,24 @@ int flexboot_nodnic_probe ( struct pci_device *pci,
 				continue;
 			port = & ( flexboot_nodnic_priv->port[i] );
 
-			if ( ! port->port_nv_conf.nic.boot_conf.en_vlan )
+			if ( ( ! port->port_nv_conf.nic.boot_conf.en_vlan ) || ( port->port_priv.port_type != NODNIC_PORT_TYPE_ETH ) )
 				continue;
 			if ( ( rc = vlan_create ( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id, 1 ) ) )
-				DBGC ( flexboot_nodnic_priv, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
+				DBGC_NODNIC ( flexboot_nodnic_priv, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
 			else if ( ( vlan = vlan_find( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id ) ) )
 				move_trunk_settings_to_vlan ( port->netdev, vlan );
 			else
-				DBGC ( flexboot_nodnic_priv, "Failed to find the VLAN device (rc = %d)\n", rc );
+				DBGC_NODNIC ( flexboot_nodnic_priv, "Failed to find the VLAN device (rc = %d)\n", rc );
 		}
 
 		/* Register flexboot nodnic to the status update list */
 		if ( ( rc = status_update_register_device ( flexboot_nodnic_priv, flexboot_nodnic_updater ) ) ) {
-			DBGC ( flexboot_nodnic_priv, "Failed to register to the status updaters list (rc = %d)\n", rc );
+			DBGC_NODNIC ( flexboot_nodnic_priv, "Failed to register to the status updaters list (rc = %d)\n", rc );
 		}
 	}
 
 	/* Update ETH operations with IRQ function if supported */
-	DBGC ( flexboot_nodnic_priv, "%s: %s IRQ function\n",
+	DBGC_NODNIC ( flexboot_nodnic_priv, "%s: %s IRQ function\n",
 			__FUNCTION__, ( callbacks->irq ? "Valid" : "No" ) );
 	flexboot_nodnic_eth_operations.irq = callbacks->irq;
 	return 0;
@@ -1800,6 +1803,7 @@ get_cap_err:
 device_init_err:
 	mlx_pci_gw_teardown ( device_priv->utils );
 cmd_init_err:
+	mlx_utils_teardown(device_priv->utils);
 utils_init_err:
 	free ( device_priv->utils );
 utils_err_alloc:
@@ -1818,6 +1822,7 @@ void flexboot_nodnic_remove ( struct pci_device *pci )
 	flexboot_nodnic_ports_unregister_dev ( flexboot_nodnic_priv );
 	nodnic_device_teardown( device_priv );
 	mlx_pci_gw_teardown( device_priv->utils );
+	mlx_utils_teardown(device_priv->utils);
 	free( device_priv->utils );
 	free( flexboot_nodnic_priv );
 }

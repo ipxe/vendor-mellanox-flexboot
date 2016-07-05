@@ -19,6 +19,7 @@
 #include <ipxe/process.h>
 #include <ipxe/tcpip.h>
 #include <ipxe/tcp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -214,7 +215,7 @@ static inline __attribute__ (( always_inline )) void
 tcp_dump_state ( struct tcp_connection *tcp ) {
 
 	if ( tcp->tcp_state != tcp->prev_tcp_state ) {
-		DBGC ( tcp, "TCP %p transitioned from %s to %s\n", tcp,
+		DBGC_TCP ( tcp, "TCP %p transitioned from %s to %s\n", tcp,
 		       tcp_state ( tcp->prev_tcp_state ),
 		       tcp_state ( tcp->tcp_state ) );
 	}
@@ -229,15 +230,15 @@ tcp_dump_state ( struct tcp_connection *tcp ) {
 static inline __attribute__ (( always_inline )) void
 tcp_dump_flags ( struct tcp_connection *tcp, unsigned int flags ) {
 	if ( flags & TCP_RST )
-		DBGC2 ( tcp, " RST" );
+		DBGC2_TCP ( tcp, " RST" );
 	if ( flags & TCP_SYN )
-		DBGC2 ( tcp, " SYN" );
+		DBGC2_TCP ( tcp, " SYN" );
 	if ( flags & TCP_PSH )
-		DBGC2 ( tcp, " PSH" );
+		DBGC2_TCP ( tcp, " PSH" );
 	if ( flags & TCP_FIN )
-		DBGC2 ( tcp, " FIN" );
+		DBGC2_TCP ( tcp, " FIN" );
 	if ( flags & TCP_ACK )
-		DBGC2 ( tcp, " ACK" );
+		DBGC2_TCP ( tcp, " ACK" );
 }
 
 /***************************************************************************
@@ -279,7 +280,7 @@ static int tcp_open ( struct interface *xfer, struct sockaddr *peer,
 	tcp = zalloc ( sizeof ( *tcp ) );
 	if ( ! tcp )
 		return -ENOMEM;
-	DBGC ( tcp, "TCP %p allocated\n", tcp );
+	DBGC_TCP ( tcp, "TCP %p allocated\n", tcp );
 	ref_init ( &tcp->refcnt, NULL );
 	intf_init ( &tcp->xfer, &tcp_xfer_desc, &tcp->refcnt );
 	process_init_stopped ( &tcp->process, &tcp_process_desc, &tcp->refcnt );
@@ -296,7 +297,7 @@ static int tcp_open ( struct interface *xfer, struct sockaddr *peer,
 	/* Calculate MSS */
 	mtu = tcpip_mtu ( &tcp->peer );
 	if ( ! mtu ) {
-		DBGC ( tcp, "TCP %p has no route to %s\n",
+		DBGC_TCP ( tcp, "TCP %p has no route to %s\n",
 		       tcp, sock_ntoa ( peer ) );
 		rc = -ENETUNREACH;
 		goto err;
@@ -307,12 +308,12 @@ static int tcp_open ( struct interface *xfer, struct sockaddr *peer,
 	port = tcpip_bind ( st_local, tcp_port_available );
 	if ( port < 0 ) {
 		rc = port;
-		DBGC ( tcp, "TCP %p could not bind: %s\n",
+		DBGC_TCP ( tcp, "TCP %p could not bind: %s\n",
 		       tcp, strerror ( rc ) );
 		goto err;
 	}
 	tcp->local_port = port;
-	DBGC ( tcp, "TCP %p bound to port %d\n", tcp, tcp->local_port );
+	DBGC_TCP ( tcp, "TCP %p bound to port %d\n", tcp, tcp->local_port );
 
 	/* Start timer to initiate SYN */
 	start_timer_nodelay ( &tcp->timer );
@@ -383,7 +384,7 @@ static void tcp_close ( struct tcp_connection *tcp, int rc ) {
 		stop_timer ( &tcp->wait );
 		list_del ( &tcp->list );
 		ref_put ( &tcp->refcnt );
-		DBGC ( tcp, "TCP %p connection deleted\n", tcp );
+		DBGC_TCP ( tcp, "TCP %p connection deleted\n", tcp );
 		return;
 	}
 
@@ -655,7 +656,7 @@ static void tcp_xmit_sack ( struct tcp_connection *tcp, uint32_t sack_seq ) {
 	/* Allocate I/O buffer */
 	iobuf = alloc_iob ( len + TCP_MAX_HEADER_LEN );
 	if ( ! iobuf ) {
-		DBGC ( tcp, "TCP %p could not allocate iobuf for %08x..%08x "
+		DBGC_TCP ( tcp, "TCP %p could not allocate iobuf for %08x..%08x "
 		       "%08x\n", tcp, tcp->snd_seq, ( tcp->snd_seq + seq_len ),
 		       tcp->rcv_ack );
 		return;
@@ -730,17 +731,17 @@ static void tcp_xmit_sack ( struct tcp_connection *tcp, uint32_t sack_seq ) {
 	tcphdr->csum = tcpip_chksum ( iobuf->data, iob_len ( iobuf ) );
 
 	/* Dump header */
-	DBGC2 ( tcp, "TCP %p TX %d->%d %08x..%08x           %08x %4zd",
+	DBGC2_TCP ( tcp, "TCP %p TX %d->%d %08x..%08x           %08x %4zd",
 		tcp, ntohs ( tcphdr->src ), ntohs ( tcphdr->dest ),
 		ntohl ( tcphdr->seq ), ( ntohl ( tcphdr->seq ) + seq_len ),
 		ntohl ( tcphdr->ack ), len );
 	tcp_dump_flags ( tcp, tcphdr->flags );
-	DBGC2 ( tcp, "\n" );
+	DBGC2_TCP ( tcp, "\n" );
 
 	/* Transmit packet */
 	if ( ( rc = tcpip_tx ( iobuf, &tcp_protocol, NULL, &tcp->peer, NULL,
 			       &tcphdr->csum ) ) != 0 ) {
-		DBGC ( tcp, "TCP %p could not transmit %08x..%08x %08x: %s\n",
+		DBGC_TCP ( tcp, "TCP %p could not transmit %08x..%08x %08x: %s\n",
 		       tcp, tcp->snd_seq, ( tcp->snd_seq + tcp->snd_sent ),
 		       tcp->rcv_ack, strerror ( rc ) );
 		return;
@@ -777,7 +778,7 @@ static void tcp_expired ( struct retry_timer *timer, int over ) {
 	struct tcp_connection *tcp =
 		container_of ( timer, struct tcp_connection, timer );
 
-	DBGC ( tcp, "TCP %p timer %s in %s for %08x..%08x %08x\n", tcp,
+	DBGC_TCP ( tcp, "TCP %p timer %s in %s for %08x..%08x %08x\n", tcp,
 	       ( over ? "expired" : "fired" ), tcp_state ( tcp->tcp_state ),
 	       tcp->snd_seq, ( tcp->snd_seq + tcp->snd_sent ), tcp->rcv_ack );
 
@@ -813,7 +814,7 @@ static void tcp_wait_expired ( struct retry_timer *timer, int over __unused ) {
 
 	assert ( tcp->tcp_state == TCP_TIME_WAIT );
 
-	DBGC ( tcp, "TCP %p wait complete in %s for %08x..%08x %08x\n", tcp,
+	DBGC_TCP ( tcp, "TCP %p wait complete in %s for %08x..%08x %08x\n", tcp,
 	       tcp_state ( tcp->tcp_state ), tcp->snd_seq,
 	       ( tcp->snd_seq + tcp->snd_sent ), tcp->rcv_ack );
 
@@ -838,7 +839,7 @@ static int tcp_xmit_reset ( struct tcp_connection *tcp,
 	/* Allocate space for dataless TX buffer */
 	iobuf = alloc_iob ( TCP_MAX_HEADER_LEN );
 	if ( ! iobuf ) {
-		DBGC ( tcp, "TCP %p could not allocate iobuf for RST "
+		DBGC_TCP ( tcp, "TCP %p could not allocate iobuf for RST "
 		       "%08x..%08x %08x\n", tcp, ntohl ( in_tcphdr->ack ),
 		       ntohl ( in_tcphdr->ack ), ntohl ( in_tcphdr->seq ) );
 		return -ENOMEM;
@@ -858,17 +859,17 @@ static int tcp_xmit_reset ( struct tcp_connection *tcp,
 	tcphdr->csum = tcpip_chksum ( iobuf->data, iob_len ( iobuf ) );
 
 	/* Dump header */
-	DBGC2 ( tcp, "TCP %p TX %d->%d %08x..%08x           %08x %4d",
+	DBGC2_TCP ( tcp, "TCP %p TX %d->%d %08x..%08x           %08x %4d",
 		tcp, ntohs ( tcphdr->src ), ntohs ( tcphdr->dest ),
 		ntohl ( tcphdr->seq ), ( ntohl ( tcphdr->seq ) ),
 		ntohl ( tcphdr->ack ), 0 );
 	tcp_dump_flags ( tcp, tcphdr->flags );
-	DBGC2 ( tcp, "\n" );
+	DBGC2_TCP ( tcp, "\n" );
 
 	/* Transmit packet */
 	if ( ( rc = tcpip_tx ( iobuf, &tcp_protocol, NULL, st_dest,
 			       NULL, &tcphdr->csum ) ) != 0 ) {
-		DBGC ( tcp, "TCP %p could not transmit RST %08x..%08x %08x: "
+		DBGC_TCP ( tcp, "TCP %p could not transmit RST %08x..%08x %08x: "
 		       "%s\n", tcp, ntohl ( in_tcphdr->ack ),
 		       ntohl ( in_tcphdr->ack ), ntohl ( in_tcphdr->seq ),
 		       strerror ( rc ) );
@@ -904,50 +905,86 @@ static struct tcp_connection * tcp_demux ( unsigned int local_port ) {
 /**
  * Parse TCP received options
  *
- * @v tcp		TCP connection
- * @v data		Raw options data
- * @v len		Raw options length
+ * @v tcp		TCP connection (may be NULL)
+ * @v tcphdr		TCP header
+ * @v hlen		TCP header length
  * @v options		Options structure to fill in
+ * @ret rc		Return status code
  */
-static void tcp_rx_opts ( struct tcp_connection *tcp, const void *data,
-			  size_t len, struct tcp_options *options ) {
-	const void *end = ( data + len );
+static int tcp_rx_opts ( struct tcp_connection *tcp,
+			 const struct tcp_header *tcphdr, size_t hlen,
+			 struct tcp_options *options ) {
+	const void *data = ( ( ( void * ) tcphdr ) + sizeof ( *tcphdr ) );
+	const void *end = ( ( ( void * ) tcphdr ) + hlen );
 	const struct tcp_option *option;
 	unsigned int kind;
+	size_t remaining;
+	size_t min;
 
+	/* Sanity check */
+	assert ( hlen >= sizeof ( *tcphdr ) );
+
+	/* Parse options */
 	memset ( options, 0, sizeof ( *options ) );
-	while ( data < end ) {
+	while ( ( remaining = ( end - data ) ) ) {
+
+		/* Extract option code */
 		option = data;
 		kind = option->kind;
+
+		/* Handle single-byte options */
 		if ( kind == TCP_OPTION_END )
-			return;
+			break;
 		if ( kind == TCP_OPTION_NOP ) {
 			data++;
 			continue;
 		}
+
+		/* Handle multi-byte options */
+		min = sizeof ( *option );
 		switch ( kind ) {
 		case TCP_OPTION_MSS:
-			options->mssopt = data;
+			/* Ignore received MSS */
 			break;
 		case TCP_OPTION_WS:
 			options->wsopt = data;
+			min = sizeof ( *options->wsopt );
 			break;
 		case TCP_OPTION_SACK_PERMITTED:
 			options->spopt = data;
+			min = sizeof ( *options->spopt );
 			break;
 		case TCP_OPTION_SACK:
 			/* Ignore received SACKs */
 			break;
 		case TCP_OPTION_TS:
 			options->tsopt = data;
+			min = sizeof ( *options->tsopt );
 			break;
 		default:
-			DBGC ( tcp, "TCP %p received unknown option %d\n",
+			DBGC_TCP ( tcp, "TCP %p received unknown option %d\n",
 			       tcp, kind );
 			break;
 		}
+		if ( remaining < min ) {
+			DBGC_TCP ( tcp, "TCP %p received truncated option %d\n",
+			       tcp, kind );
+			return -EINVAL;
+		}
+		if ( option->length < min ) {
+			DBGC_TCP ( tcp, "TCP %p received underlength option %d\n",
+			       tcp, kind );
+			return -EINVAL;
+		}
+		if ( option->length > remaining ) {
+			DBGC_TCP ( tcp, "TCP %p received overlength option %d\n",
+			       tcp, kind );
+			return -EINVAL;
+		}
 		data += option->length;
 	}
+
+	return 0;
 }
 
 /**
@@ -1011,6 +1048,12 @@ static int tcp_rx_syn ( struct tcp_connection *tcp, uint32_t seq,
 			tcp->snd_win_scale = options->wsopt->scale;
 			tcp->rcv_win_scale = TCP_RX_WINDOW_SCALE;
 		}
+		DBGC_TCP ( tcp, "TCP %p using %stimestamps, %sSACK, TX window "
+		       "x%d, RX window x%d\n", tcp,
+		       ( ( tcp->flags & TCP_TS_ENABLED ) ? "" : "no " ),
+		       ( ( tcp->flags & TCP_SACK_ENABLED ) ? "" : "no " ),
+		       ( 1 << tcp->snd_win_scale ),
+		       ( 1 << tcp->rcv_win_scale ) );
 	}
 
 	/* Ignore duplicate SYN */
@@ -1043,7 +1086,7 @@ static int tcp_rx_ack ( struct tcp_connection *tcp, uint32_t ack,
 
 	/* Check for out-of-range or old duplicate ACKs */
 	if ( ack_len > tcp->snd_sent ) {
-		DBGC ( tcp, "TCP %p received ACK for %08x..%08x, "
+		DBGC_TCP ( tcp, "TCP %p received ACK for %08x..%08x, "
 		       "sent only %08x..%08x\n", tcp, tcp->snd_seq,
 		       ( tcp->snd_seq + ack_len ), tcp->snd_seq,
 		       ( tcp->snd_seq + tcp->snd_sent ) );
@@ -1138,7 +1181,7 @@ static int tcp_rx_data ( struct tcp_connection *tcp, uint32_t seq,
 	/* Deliver data to application */
 	profile_start ( &tcp_xfer_profiler );
 	if ( ( rc = xfer_deliver_iob ( &tcp->xfer, iobuf ) ) != 0 ) {
-		DBGC ( tcp, "TCP %p could not deliver %08x..%08x: %s\n",
+		DBGC_TCP ( tcp, "TCP %p could not deliver %08x..%08x: %s\n",
 		       tcp, seq, ( seq + len ), strerror ( rc ) );
 		return rc;
 	}
@@ -1199,7 +1242,7 @@ static int tcp_rx_rst ( struct tcp_connection *tcp, uint32_t seq ) {
 	tcp_dump_state ( tcp );
 	tcp_close ( tcp, -ECONNRESET );
 
-	DBGC ( tcp, "TCP %p connection reset by peer\n", tcp );
+	DBGC_TCP ( tcp, "TCP %p connection reset by peer\n", tcp );
 	return -ECONNRESET;
 }
 
@@ -1336,20 +1379,20 @@ static int tcp_rx ( struct io_buffer *iobuf,
 
 	/* Sanity check packet */
 	if ( iob_len ( iobuf ) < sizeof ( *tcphdr ) ) {
-		DBG ( "TCP packet too short at %zd bytes (min %zd bytes)\n",
+		DBG_TCP ( "TCP packet too short at %zd bytes (min %zd bytes)\n",
 		      iob_len ( iobuf ), sizeof ( *tcphdr ) );
 		rc = -EINVAL;
 		goto discard;
 	}
 	hlen = ( ( tcphdr->hlen & TCP_MASK_HLEN ) / 16 ) * 4;
 	if ( hlen < sizeof ( *tcphdr ) ) {
-		DBG ( "TCP header too short at %zd bytes (min %zd bytes)\n",
+		DBG_TCP ( "TCP header too short at %zd bytes (min %zd bytes)\n",
 		      hlen, sizeof ( *tcphdr ) );
 		rc = -EINVAL;
 		goto discard;
 	}
 	if ( hlen > iob_len ( iobuf ) ) {
-		DBG ( "TCP header too long at %zd bytes (max %zd bytes)\n",
+		DBG_TCP ( "TCP header too long at %zd bytes (max %zd bytes)\n",
 		      hlen, iob_len ( iobuf ) );
 		rc = -EINVAL;
 		goto discard;
@@ -1357,20 +1400,20 @@ static int tcp_rx ( struct io_buffer *iobuf,
 	csum = tcpip_continue_chksum ( pshdr_csum, iobuf->data,
 				       iob_len ( iobuf ) );
 	if ( csum != 0 ) {
-		DBG ( "TCP checksum incorrect (is %04x including checksum "
+		DBG_TCP ( "TCP checksum incorrect (is %04x including checksum "
 		      "field, should be 0000)\n", csum );
 		rc = -EINVAL;
 		goto discard;
 	}
-	
+
 	/* Parse parameters from header and strip header */
 	tcp = tcp_demux ( ntohs ( tcphdr->dest ) );
 	seq = ntohl ( tcphdr->seq );
 	ack = ntohl ( tcphdr->ack );
 	raw_win = ntohs ( tcphdr->win );
 	flags = tcphdr->flags;
-	tcp_rx_opts ( tcp, ( ( ( void * ) tcphdr ) + sizeof ( *tcphdr ) ),
-		      ( hlen - sizeof ( *tcphdr ) ), &options );
+	if ( ( rc = tcp_rx_opts ( tcp, tcphdr, hlen, &options ) ) != 0 )
+		goto discard;
 	if ( tcp && options.tsopt )
 		tcp->ts_val = ntohl ( options.tsopt->tsval );
 	iob_pull ( iobuf, hlen );
@@ -1379,12 +1422,12 @@ static int tcp_rx ( struct io_buffer *iobuf,
 		    ( ( flags & TCP_FIN ) ? 1 : 0 ) );
 
 	/* Dump header */
-	DBGC2 ( tcp, "TCP %p RX %d<-%d           %08x %08x..%08x %4zd",
+	DBGC2_TCP ( tcp, "TCP %p RX %d<-%d           %08x %08x..%08x %4zd",
 		tcp, ntohs ( tcphdr->dest ), ntohs ( tcphdr->src ),
 		ntohl ( tcphdr->ack ), ntohl ( tcphdr->seq ),
 		( ntohl ( tcphdr->seq ) + seq_len ), len );
 	tcp_dump_flags ( tcp, tcphdr->flags );
-	DBGC2 ( tcp, "\n" );
+	DBGC2_TCP ( tcp, "\n" );
 
 	/* If no connection was found, silently drop packet */
 	if ( ! tcp ) {
@@ -1552,7 +1595,7 @@ static void tcp_shutdown ( int booting __unused ) {
 	 * the fact that the connection list may change as we do so.
 	 */
 	while ( ( tcp = tcp_first_unclosed() ) ) {
-		DBGC ( tcp, "TCP %p closing for shutdown\n", tcp );
+		DBGC_TCP ( tcp, "TCP %p closing for shutdown\n", tcp );
 		tcp_close ( tcp, -ECANCELED );
 	}
 

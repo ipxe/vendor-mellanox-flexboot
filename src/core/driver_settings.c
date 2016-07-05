@@ -30,6 +30,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/in.h>
 #include <errno.h>
 #include <config/general.h>
+#include "flex_debug_log.h"
 
 struct settings_page {
 	struct generic_settings **new_settings;
@@ -624,11 +625,12 @@ struct driver_settings* get_driver_settings_from_settings ( struct settings *set
 	struct driver_settings *driver_settings;
 
 	/* If these are not device settings, needs to get to main settings */
-	if ( ( settings->default_scope != &main_scope ) && ( settings->default_scope != &fw_scope ) ) {
+	if ( ( settings->default_scope != &main_scope ) && ( settings->default_scope != &fw_scope )
+			&& ( settings->default_scope != &debug_scope ) ) {
 		while ( main_settings->default_scope != &port_scope )
 			main_settings = main_settings->parent;
 	} else {
-		if ( settings->default_scope == &fw_scope )
+		if ( settings->default_scope == &fw_scope || settings->default_scope == &debug_scope )
 			main_settings = main_settings->parent;
 	}
 
@@ -767,6 +769,29 @@ static struct extended_options extended_options_list[] = {
 	{ &ext_iscsi_chap,			2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_iscsi_mutual_chap,	2, { STR_DISABLE, STR_ENABLE } },
 	{ &ext_ib_mac_admin,	4,	{ STR_NONE, STR_DISABLE, STR_ENABLE, STR_FACTORY_MAC  } },
+	{ &ext_debug_en,		2,	{ STR_DISABLE, STR_ENABLE } },
+	{ &ext_stp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_romprefix_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_dhcp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_dhcpv6_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_arp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_neighbor_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_ndp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_uri_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_driver_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_nodnic_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_nodnic_cmd_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_nodnic_device_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_nodnic_port_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_netdevice_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_tftp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_udp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_tcp_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_tcpip_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_ipv4_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_ipv6_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_drv_set_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
+	{ &ext_stat_update_dbg, 4,	{ STR_DISABLE, STR_BASIC, STR_ADVANCED, STR_ALL } },
 };
 
 static struct extended_description extended_description_list[] = {
@@ -1567,7 +1592,6 @@ static int flexboot_menu_to_nv_store ( struct driver_settings *driver_settings )
 	return 0;
 }
 
-#define MAX_SETTING_STR 128
 int virt_mode_restore ( struct settings *settings, const void *data,
 		size_t len, const struct setting *setting ) {
 	struct driver_settings *driver_settings = get_driver_settings_from_settings ( settings );
@@ -1903,6 +1927,29 @@ static struct driver_setting_operation driver_setting_operations[] = {
 	{ &target_chapid_setting,		NULL, &iscsi_target_chapid_store, &iscsi_target_chapid_nv_store, NULL },
 	{ &target_chapsec_setting,		NULL, &iscsi_target_chapsec_store, &iscsi_target_chapsec_nv_store, NULL },
 	{ &ib_mac_admin_setting,		NULL, NULL, NULL, NULL },
+	{ &debug_en_setting,			NULL, &debug_setting_restore, &debug_en_setting_nv_store, NULL },
+	{ &stp_dbg_setting,				NULL, &debug_setting_restore, &stp_debug_setting_nv_store, NULL },
+	{ &romprefix_dbg_setting,		NULL, &debug_setting_restore, &romprefix_debug_setting_nv_store, NULL },
+	{ &dhcp_dbg_setting,			NULL, &debug_setting_restore, &dhcp_debug_setting_nv_store, NULL },
+	{ &dhcpv6_dbg_setting,			NULL, &debug_setting_restore, &dhcpv6_debug_setting_nv_store, NULL },
+	{ &arp_dbg_setting,				NULL, &debug_setting_restore, &arp_debug_setting_nv_store, NULL },
+	{ &neighbor_dbg_setting,		NULL, &debug_setting_restore, &neighbor_debug_setting_nv_store, NULL },
+	{ &ndp_dbg_setting,				NULL, &debug_setting_restore, &ndp_debug_setting_nv_store, NULL },
+	{ &uri_dbg_setting,				NULL, &debug_setting_restore, &uri_debug_setting_nv_store, NULL },
+	{ &driver_dbg_setting,			NULL, &debug_setting_restore, &driver_debug_setting_nv_store, NULL },
+	{ &nodnic_dbg_setting,			NULL, &debug_setting_restore, &nodnic_debug_setting_nv_store, NULL },
+	{ &nodnic_cmd_dbg_setting,		NULL, &debug_setting_restore, &nodnic_cmd_debug_setting_nv_store, NULL },
+	{ &nodnic_device_dbg_setting,	NULL, &debug_setting_restore, &nodnic_device_debug_setting_nv_store, NULL },
+	{ &nodnic_port_dbg_setting,		NULL, &debug_setting_restore, &nodnic_port_debug_setting_nv_store, NULL },
+	{ &netdevice_dbg_setting,		NULL, &debug_setting_restore, &netdevice_debug_setting_nv_store, NULL },
+	{ &tftp_dbg_setting,			NULL, &debug_setting_restore, &tftp_debug_setting_nv_store, NULL },
+	{ &udp_dbg_setting,				NULL, &debug_setting_restore, &udp_debug_setting_nv_store, NULL },
+	{ &tcp_dbg_setting,				NULL, &debug_setting_restore, &tcp_debug_setting_nv_store, NULL },
+	{ &tcpip_dbg_setting,			NULL, &debug_setting_restore, &tcpip_debug_setting_nv_store, NULL },
+	{ &ipv4_dbg_setting,			NULL, &debug_setting_restore, &ipv4_debug_setting_nv_store, NULL },
+	{ &ipv6_dbg_setting,			NULL, &debug_setting_restore, &ipv6_debug_setting_nv_store, NULL },
+	{ &drv_set_dbg_setting,			NULL, &debug_setting_restore, &drv_set_debug_setting_nv_store, NULL },
+	{ &stat_update_dbg_setting,		NULL, &debug_setting_restore, &stat_update_debug_setting_nv_store, NULL },
 };
 
 const struct setting * ipxe_iscsi_settings[] = {
@@ -2105,7 +2152,7 @@ static void driver_setting_port_defaults ( struct driver_settings *driver_settin
 		ext = find_extended ( op->setting );
 		if ( settings && ext->type != LABEL ) {
 			if ( ( rc = driver_settings_store ( settings, op->setting, NULL, 0 ) ) )
-				DBG ( "Failed to store the default value of %s (rc = %d)\n",
+				DBG_DRV_SET ( "Failed to store the default value of %s (rc = %d)\n",
 						op->setting->name, rc );
 		}
 	}
@@ -2133,7 +2180,7 @@ static void driver_settings_defaults () {
 		ext = find_extended ( op->setting );
 		if ( ext->type != LABEL ) {
 			if ( ( rc = driver_settings_store ( settings, op->setting, NULL, 0 ) ) )
-				DBG ( "Failed to store the default value of %s (rc = %d)\n",
+				DBG_DRV_SET ( "Failed to store the default value of %s (rc = %d)\n",
 						op->setting->name, rc );
 		}
 	}
@@ -2326,7 +2373,9 @@ int driver_settings_init ( struct driver_settings *driver_settings ) {
 	list_add ( &driver_settings->list, &driver_settings_list );
 
 	init_firmware_settings ( &driver_settings_operations );
+	init_debug_settings ( & driver_settings_operations );
 	init_extended_nv_store ();
+	set_debug_settings_ext_type ( );
 
 	return 0;
 }
@@ -2350,7 +2399,7 @@ int driver_set_device_settings ( struct driver_settings *driver_settings ) {
 	return 0;
 }
 
-static int driver_settings_read_nv_settings ( struct driver_settings *driver_settings,
+int driver_settings_read_nv_settings ( struct driver_settings *driver_settings,
 		uint32_t type, uint32_t type_mod, uint32_t length,
 		uint32_t *version, void *data ) {
 	struct driver_tlv_header tlv_hdr = { type, type_mod, length, ( version == NULL ) ? 0 : *version, data };
@@ -2362,7 +2411,6 @@ static int driver_settings_read_nv_settings ( struct driver_settings *driver_set
 
 	return rc;
 }
-
 
 static int driver_flash_read_nic_boot_config ( struct driver_settings *driver_settings,
 		unsigned int port_num ) {
@@ -2376,7 +2424,7 @@ static int driver_flash_read_nic_boot_config ( struct driver_settings *driver_se
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			BOOT_SETTINGS_TYPE, port_num, sizeof ( *nic_boot_conf ),
 			NULL , nic_boot_conf ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read the boot configurations from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read the boot configurations from the flash (rc = %d)\n", rc );
 
 		nic_boot_conf->en_option_rom	= defaults->boot_option_rom_en;
 		nic_boot_conf->en_vlan			= defaults->boot_vlan_en;
@@ -2393,7 +2441,7 @@ static int driver_flash_read_nic_boot_config ( struct driver_settings *driver_se
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			BOOT_SETTINGS_EXT_TYPE, port_num, sizeof ( *nic_boot_ext_conf ),
 			NULL , nic_boot_ext_conf ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read the boot configurations from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read the boot configurations from the flash (rc = %d)\n", rc );
 
 		nic_boot_ext_conf->ip_ver			= defaults->ip_ver;
 		nic_boot_ext_conf->linkup_timeout	= defaults->linkup_timeout;
@@ -2414,7 +2462,7 @@ static int driver_flash_read_nic_wol_config ( struct driver_settings *driver_set
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			WAKE_ON_LAN_TYPE, port_num, sizeof ( *conf ), NULL , conf ) ) != 0 ) {
 		conf->en_wol_magic = defaults->en_wol_magic;
-		DBGC ( driver_settings, "Failed to read the WOL configuration from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read the WOL configuration from the flash (rc = %d)\n", rc );
 	}
 	return rc;
 }
@@ -2429,7 +2477,7 @@ static int driver_flash_read_nic_ib_boot_config ( struct driver_settings *driver
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			IB_BOOT_SETTING_TYPE, port_num, sizeof ( *nic_ib_boot_conf ),
 			NULL , nic_ib_boot_conf ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read the InfiniBand boot configurations from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read the InfiniBand boot configurations from the flash (rc = %d)\n", rc );
 		nic_ib_boot_conf->boot_pkey	= defaults->boot_pkey;
 	}
 
@@ -2446,9 +2494,10 @@ static int driver_flash_read_nic_ib_dhcp_config (
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			IB_DHCP_SETTINGS_TYPE, port_num, sizeof ( *ib_dhcp_conf ),
 			NULL , ib_dhcp_conf ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read InfiniBand DHCP settings (rc = %d)."
+		DBGC_DRV_SET ( driver_settings, "Failed to read InfiniBand DHCP settings (rc = %d)."
 				" Using default behavior.\n", rc );
 		ib_dhcp_conf->mac_admin_bit =  defaults->mac_admin_bit;
+		ib_dhcp_conf->client_identifier = defaults->client_identifier;
 	}
 
 	return rc;
@@ -2460,7 +2509,7 @@ static int driver_flash_read_iscsi_initiator_ipv4_addr ( struct driver_settings 
 	uint32_t length = sizeof ( initiator_params->ipv4_addr );
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_IPV4_ADDR, port_num, length, 0 , initiator_params->ipv4_addr ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read iSCSI Initiator 'IPv4' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'IPv4' setting (rc = %d)\n", rc );
 	} else {
 		initiator_params->ipv4_addr[ length - 1] = '\0';
 		initiator_params->valid_mask |= ISCSI_INITIATOR_IP_ADDR_MASK;
@@ -2475,7 +2524,7 @@ static int driver_flash_read_iscsi_initiator_subnet ( struct driver_settings *dr
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_SUBNET, port_num, sizeof ( initiator_params->subnet ), NULL,
 			initiator_params->subnet ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read iSCSI Initiator 'Subnet' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'Subnet' setting (rc = %d)\n", rc );
 	} else {
 		initiator_params->valid_mask |= ISCSI_INITIATOR_SUBNET_MASK;
 	}
@@ -2488,7 +2537,7 @@ static int driver_flash_read_iscsi_initiator_ipv4_gateway ( struct driver_settin
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_IPV4_GATEWAY, port_num, sizeof ( initiator_params->gateway ), NULL , initiator_params->gateway ) ) != 0 )
-			DBGC ( driver_settings, "Failed to read iSCSI Initiator 'Gateway' setting (rc = %d)\n", rc );
+			DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'Gateway' setting (rc = %d)\n", rc );
 		else
 			initiator_params->valid_mask |= ISCSI_INITIATOR_GATEWAY_MASK;
 	return rc;
@@ -2499,7 +2548,7 @@ static int driver_flash_read_iscsi_initiator_ipv4_prim_dns ( struct driver_setti
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_IPV4_PRIM_DNS, port_num, sizeof ( initiator_params->primary_dns ), NULL , initiator_params->primary_dns ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI Initiator 'Primary DNS' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'Primary DNS' setting (rc = %d)\n", rc );
 	else
 		initiator_params->valid_mask |= ISCSI_INITIATOR_PRIME_DNS_MASK;
 	return rc;
@@ -2510,7 +2559,7 @@ static int driver_flash_read_iscsi_initiator_name ( struct driver_settings *driv
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_NAME, port_num, sizeof ( initiator_params->name ), NULL , initiator_params->name ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI Initiator 'Name' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'Name' setting (rc = %d)\n", rc );
 	else
 		initiator_params->valid_mask |= ISCSI_INITIATOR_NAME_MASK;
 	return rc;
@@ -2521,7 +2570,7 @@ static int driver_flash_read_iscsi_initiator_chap_id ( struct driver_settings *d
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_CHAP_ID, port_num, sizeof ( initiator_params->chap_id ), NULL , initiator_params->chap_id ) ) != 0 )
-			DBGC ( driver_settings, "Failed to read iSCSI Initiator 'CHAP ID' setting (rc = %d)\n", rc );
+			DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'CHAP ID' setting (rc = %d)\n", rc );
 	else
 			initiator_params->valid_mask |= ISCSI_INITIATOR_CHAP_ID_MASK;
 	return rc;
@@ -2533,7 +2582,7 @@ static int driver_flash_read_iscsi_initiator_chap_pwd ( struct driver_settings *
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_CHAP_PWD, port_num, sizeof ( initiator_params->chap_pass ), NULL , initiator_params->chap_pass ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI Initiator 'CHAP Password' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI Initiator 'CHAP Password' setting (rc = %d)\n", rc );
 	else
 		initiator_params->valid_mask |= ISCSI_INITIATOR_CHAP_PASS_MASK;
 	return rc;
@@ -2556,7 +2605,7 @@ static int driver_flash_read_iscsi_first_target_connect ( struct driver_settings
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			CONNECT_FIRST_TGT, port_num, sizeof ( first_tgt_params->connect ), NULL , first_tgt_params->connect ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'Connect' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'Connect' setting (rc = %d)\n", rc );
 		strcpy ( first_tgt_params->connect, STR_DISABLE );
 	}
 	first_tgt_params->valid_mask |= ISCSI_TARGET_CONNECT_MASK;
@@ -2569,7 +2618,7 @@ static int driver_flash_read_iscsi_first_target_ip_addr ( struct driver_settings
 	uint32_t length = sizeof ( first_tgt_params->ip_addr );
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_IP_ADDRESS, port_num, length, NULL , first_tgt_params->ip_addr ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'IP' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'IP' setting (rc = %d)\n", rc );
 			else {
 				first_tgt_params->ip_addr[length - 1] = '\0';
 				first_tgt_params->valid_mask |= ISCSI_TARGET_IP_ADDR_MASK;
@@ -2582,7 +2631,7 @@ static int driver_flash_read_iscsi_first_target_tcp_port ( struct driver_setting
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_TCP_PORT, port_num, sizeof ( first_tgt_params->tcp_port ), NULL , first_tgt_params->tcp_port ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'TCP port' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'TCP port' setting (rc = %d)\n", rc );
 			else
 				first_tgt_params->valid_mask |= ISCSI_TARGET_TCP_PORT_MASK;
 	return rc;
@@ -2593,7 +2642,7 @@ static int driver_flash_read_iscsi_first_target_boot_lun ( struct driver_setting
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_BOOT_LUN, port_num, sizeof ( first_tgt_params->lun ), 0 , first_tgt_params->lun ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'LUN' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'LUN' setting (rc = %d)\n", rc );
 			else
 				first_tgt_params->valid_mask |= ISCSI_TARGET_LUN_MASK;
 	return rc;
@@ -2604,7 +2653,7 @@ static int driver_flash_read_iscsi_first_target_iscsi_name ( struct driver_setti
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_ISCSI_NAME, port_num, sizeof ( first_tgt_params->name ), NULL , first_tgt_params->name ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'Name' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'Name' setting (rc = %d)\n", rc );
 			else
 				first_tgt_params->valid_mask |= ISCSI_TARGET_NAME_MASK;
 	return rc;
@@ -2615,7 +2664,7 @@ static int driver_flash_read_iscsi_first_target_chap_id ( struct driver_settings
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_CHAP_ID, port_num, sizeof ( first_tgt_params->chap_id ), NULL , first_tgt_params->chap_id ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'CHAP ID' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'CHAP ID' setting (rc = %d)\n", rc );
 	else
 		first_tgt_params->valid_mask |= ISCSI_TARGET_CHAP_ID_MASK;
 	return rc;
@@ -2626,7 +2675,7 @@ static int driver_flash_read_iscsi_first_target_chap_pwd ( struct driver_setting
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			FIRST_TGT_CHAP_PWD, port_num, sizeof ( first_tgt_params->chap_pass ), NULL , first_tgt_params->chap_pass ) ) != 0 )
-		DBGC ( driver_settings, "Failed to read iSCSI first target 'CHAP Password' setting (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI first target 'CHAP Password' setting (rc = %d)\n", rc );
 	else
 		first_tgt_params->valid_mask |= ISCSI_TARGET_CHAP_PASS_MASK;
 	return rc;
@@ -2677,7 +2726,7 @@ static void driver_flash_read_iscsi_init_dhcp( struct driver_settings *driver_se
 	int rc = 0;
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			ISCSI_INITIATOR_DHCP_CONF_TYPE, port_num, sizeof ( *init_dhcp_conf ), NULL , init_dhcp_conf ) ) != 0 ) {
-			DBGC ( driver_settings, "Failed to read iSCSI initiator DHCP settings (rc = %d)."
+			DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI initiator DHCP settings (rc = %d)."
 					" Using default behavior.\n", rc );
 			driver_iscsi_init_dhcp_no_tlv ( driver_settings, init_dhcp_conf );
 		}
@@ -2704,11 +2753,11 @@ static void driver_flash_read_iscsi_general ( struct driver_settings *driver_set
 			ISCSI_GENERAL_SETTINGS_TYPE, port_num, sizeof ( *gen_conf ), &version , gen_conf );
 	if ( rc || ( !rc && ( version == 0 ) ) ) {
 		if ( rc ) {
-			DBGC ( driver_settings, "Failed to read iSCSI general settings (rc = %d)\n", rc );
+			DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI general settings (rc = %d)\n", rc );
 			gen_conf->chap_mutual_auth_en	= defaults->iscsi_chap_mutual_auth_en;
 			gen_conf->chap_auth_en			= defaults->iscsi_chap_auth_en;
 		} else {
-			DBGC ( driver_settings, "Found iSCSI general settings TLV version 0 \n");
+			DBGC_DRV_SET ( driver_settings, "Found iSCSI general settings TLV version 0 \n");
 			/* TLV version is 0 - Use default behavior */
 			gen_conf->chap_auth_en = ( target->chap_id[0] || target->chap_pass[0] );
 			/* TODO: Verify that mutual chap depends on the regular chap */
@@ -2740,7 +2789,7 @@ static void driver_flash_read_iscsi_general ( struct driver_settings *driver_set
 							ISCSI_GENERAL_SETTINGS_TYPE, sizeof ( swapped ) );
 		gen_conf->boot_to_target = ISCSI_BOOT_TO_TARGET_ONE_TIME_DISABLE;
 		if ( rc ) {
-			DBGC ( driver_settings, "Failed to update boot_to_target (rc = %d)\n", rc );
+			DBGC_DRV_SET ( driver_settings, "Failed to update boot_to_target (rc = %d)\n", rc );
 			return;
 		}
 	}
@@ -2785,7 +2834,7 @@ static int driver_set_nic_settings ( struct driver_settings *driver_settings ) {
 
 	rc = fetch_setting_origin ( menu_settings, &boot_protocol_setting, &origin );
 	if ( rc || ( !rc && !origin ) ) {
-		DBGC ( driver_settings, "Failed to find NIC configuration settings block\n" );
+		DBGC_DRV_SET ( driver_settings, "Failed to find NIC configuration settings block\n" );
 		return rc;
 	}
 
@@ -2862,6 +2911,10 @@ static int driver_set_nic_settings ( struct driver_settings *driver_settings ) {
 		break;
 	}
 
+	DRIVER_STORE_INT_SETTING_EN ( driver_settings, nic_conf->ib_dhcp_conf.client_identifier,
+			netdev_settings ( driver_settings->netdev ),
+			&client_identifier_setting );
+
 	return 0;
 }
 
@@ -2882,7 +2935,7 @@ static int driver_set_iscsi_settings ( struct driver_settings *driver_settings )
 	/* Store general settings */
 	rc = fetch_setting_origin ( main_settings, &ip_ver_setting, &settings );
         if ( rc || ( !rc && !settings ) ) {
-                DBGC ( driver_settings, "Failed to find the iSCSI general settings block\n" );
+                DBGC_DRV_SET ( driver_settings, "Failed to find the iSCSI general settings block\n" );
                 return rc;
         }
 
@@ -2911,7 +2964,7 @@ static int driver_set_iscsi_settings ( struct driver_settings *driver_settings )
 	/* Store initiator's settings */
 	rc = fetch_setting_origin ( main_settings, &ipv4_add_setting, &settings );
 	if ( rc || ( !rc && !settings ) ) {
-		DBGC ( driver_settings, "Failed to find the iSCSI initiator's settings block\n" );
+		DBGC_DRV_SET ( driver_settings, "Failed to find the iSCSI initiator's settings block\n" );
 		return rc;
 	}
 
@@ -2933,7 +2986,7 @@ static int driver_set_iscsi_settings ( struct driver_settings *driver_settings )
 	/* Set target's settings */
 	rc = fetch_setting_origin ( main_settings, &connect_setting, &settings );
 	if ( rc || ( !rc && !settings ) ) {
-		DBGC ( driver_settings, "Failed to find the iSCSI initiator's settings block\n" );
+		DBGC_DRV_SET ( driver_settings, "Failed to find the iSCSI initiator's settings block\n" );
 		return rc;
 	}
 
@@ -2977,32 +3030,32 @@ int driver_settings_get_port_nvdata ( struct driver_settings *driver_settings,
 	int rc;
 	/* Read NIC configuration from NV memory */
 	if ( ( rc = driver_flash_read_nic_boot_config ( driver_settings , port_num ) ) ) {
-		DBGC ( driver_settings, "Failed to read NIC configuration from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read NIC configuration from NV memory (rc = %d)\n", rc );
 	}
 
 	/* Read WOL configuration from NV memory */
 	if ( ( rc = driver_flash_read_nic_wol_config ( driver_settings, port_num ) ) ) {
-		DBGC ( driver_settings, "Failed to read WOL configuration from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read WOL configuration from NV memory (rc = %d)\n", rc );
 	}
 
 	/* Read Infiniband boot configuration from NV memory */
 	if ( ( rc = driver_flash_read_nic_ib_boot_config ( driver_settings, port_num ) ) ) {
-		DBGC ( driver_settings, "Failed to read NIC ib configuration from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read NIC ib configuration from NV memory (rc = %d)\n", rc );
 	}
 
 	/* Read InfiniBand DHCP configuration from NV memory */
 	if ( ( rc = driver_flash_read_nic_ib_dhcp_config ( driver_settings, port_num ) ) ) {
-		DBGC ( driver_settings, "Failed to read InfiniBand DHCP settings from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read InfiniBand DHCP settings from NV memory (rc = %d)\n", rc );
 	}
 
 	/* Read iSCSI configuration from NV memory */
 	if ( ( rc = driver_flash_read_iscsi_config ( driver_settings, port_num) ) ) {
-		DBGC ( driver_settings, "Failed to read iSCSI configuration from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read iSCSI configuration from NV memory (rc = %d)\n", rc );
 	}
 
 	/* Read general settings */
 	if ( ( rc = driver_flash_read_general_settings ( driver_settings ) ) ) {
-		DBGC ( driver_settings, "Failed to read general settings from NV memory (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read general settings from NV memory (rc = %d)\n", rc );
 	}
 
 	return 0;
@@ -3013,17 +3066,17 @@ int driver_register_port_nv_settings ( struct driver_settings *driver_settings )
 
 	/* Register NIC configuration */
 	if ( ( rc = driver_set_nic_settings ( driver_settings ) ) ) {
-		DBGC ( driver_settings, "Failed to register NIC settings (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to register NIC settings (rc = %d)\n", rc );
 	}
 
 	/* Register iSCSI configuration */
 	if ( ( rc = driver_set_iscsi_settings ( driver_settings ) ) ) {
-		DBGC ( driver_settings, "Failed to register iSCSI settings (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to register iSCSI settings (rc = %d)\n", rc );
 	}
 
 	/* Register general configuration */
 	if ( ( rc = driver_set_general_settings ( driver_settings ) ) ) {
-		DBGC ( driver_settings, "Failed to register general settings (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to register general settings (rc = %d)\n", rc );
 	}
 
 	return 0;
@@ -3035,11 +3088,11 @@ static int driver_flash_read_virtualization_settings ( struct driver_settings *d
 
 	if ( op && op->nv_read ) {
 		if ( ( rc = op->nv_read ( driver_settings ) ) != 0 ) {
-			DBGC ( driver_settings, "Failed to read the virtualization"
+			DBGC_DRV_SET ( driver_settings, "Failed to read the virtualization"
 					" configuration from the flash (rc = %d)\n", rc );
 		}
 	} else {
-		DBGC ( driver_settings, "nv_read for virt_mode_setting setting not found.\n" );
+		DBGC_DRV_SET ( driver_settings, "nv_read for virt_mode_setting setting not found.\n" );
 		rc = -EACCES;
 	}
 
@@ -3053,7 +3106,7 @@ static int driver_flash_read_banner_to_settings ( struct driver_settings *driver
 
 	if ( ( rc = driver_settings_read_nv_settings ( driver_settings,
 			BANNER_TO_TYPE, 0, sizeof ( conf->rom_banner_to.dword ), 0, & conf->rom_banner_to.dword ) ) != 0 ) {
-		DBGC ( driver_settings, "Failed to read the rom banner timeout configuration from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( driver_settings, "Failed to read the rom banner timeout configuration from the flash (rc = %d)\n", rc );
 		conf->rom_banner_to.rom_banner_to = defaults->flexboot_menu_to;
 	}
 
@@ -3071,7 +3124,7 @@ static int driver_set_fw_settings (  struct driver_settings *driver_settings ) {
 
 	rc = fetch_setting_origin ( menu_settings, &fw_version_setting, &origin );
 	if ( rc || ( !rc && !origin ) ) {
-		DBGC ( driver_settings, "Failed to find FW image properties settings block\n" );
+		DBGC_DRV_SET ( driver_settings, "Failed to find FW image properties settings block\n" );
 		return rc;
 	}
 
@@ -3086,6 +3139,8 @@ int driver_settings_get_nvdata ( struct driver_settings *driver_settings ) {
 	driver_flash_read_virtualization_settings ( driver_settings );
 	/* Read Banner timeout settings */
 	driver_flash_read_banner_to_settings ( driver_settings );
+	/* Read debug configuration */
+	driver_flash_read_debug_settings ( driver_settings );
 	return 0;
 }
 
@@ -3096,7 +3151,9 @@ int driver_register_nv_settings ( struct driver_settings *driver_settings ) {
 	driver_set_device_settings ( driver_settings );
 	/* Firmware settings were already been saved */
 	if ( ( rc = driver_set_fw_settings ( driver_settings ) ) )
-		DBGC ( driver_settings, "Failed to register FW settings\n" );
+		DBGC_DRV_SET ( driver_settings, "Failed to register debug en settings\n" );
+	rc = driver_register_debug_nv_settings ( driver_settings );
+
 	return rc;
 }
 
@@ -3117,7 +3174,7 @@ int driver_settings_get_nv_boot_en ( void *priv_data, unsigned int port,
 	tlv.data		= ( void* ) &conf;
 
 	if ( ( rc = read_tlv_fn ( priv_data, &tlv ) ) ) {
-		DBGC ( priv_data, "Failed to read the boot TLV from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( priv_data, "Failed to read the boot TLV from the flash (rc = %d)\n", rc );
 		/* This failure could be due to missing TLV - return the default value */
 		option_rom_en		= defaults->boot_option_rom_en;
 		legacy_boot_protocol	= defaults->boot_protocol;
@@ -3154,7 +3211,7 @@ int driver_settings_get_nv_ib_mac_admin_bit ( void *priv_data, unsigned int port
 	tlv.data		= ( void* ) &ib_dhcp_conf;
 
 	if ( ( rc = read_tlv_fn ( priv_data, &tlv ) ) ) {
-		DBGC ( priv_data, "Failed to read the boot TLV from the flash (rc = %d)\n", rc );
+		DBGC_DRV_SET ( priv_data, "Failed to read the boot TLV from the flash (rc = %d)\n", rc );
 		/* This failure could be due to missing TLV - return the default value */
 		*mac_admin_bit		= defaults->mac_admin_bit;
 	} else {

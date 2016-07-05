@@ -30,6 +30,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/iobuf.h>
 #include <ipxe/timer.h>
 #include <ipxe/stp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -40,15 +41,15 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /* Disambiguate the various error causes */
 #define ENOTSUP_PROTOCOL __einfo_error ( EINFO_ENOTSUP_PROTOCOL )
 #define EINFO_ENOTSUP_PROTOCOL					\
-	__einfo_uniqify ( EINFO_ENOTSUP, 0x01,			\
+	__einfo_uniqify ( EINFO_ENOTSUP, 0x02,			\
 			  "Non-STP packet received" )
 #define ENOTSUP_VERSION __einfo_error ( EINFO_ENOTSUP_VERSION )
 #define EINFO_ENOTSUP_VERSION					\
-	__einfo_uniqify ( EINFO_ENOTSUP, 0x01,			\
+	__einfo_uniqify ( EINFO_ENOTSUP, 0x03,			\
 			  "Legacy STP packet received" )
 #define ENOTSUP_TYPE __einfo_error ( EINFO_ENOTSUP_TYPE )
 #define EINFO_ENOTSUP_TYPE					\
-	__einfo_uniqify ( EINFO_ENOTSUP, 0x01,			\
+	__einfo_uniqify ( EINFO_ENOTSUP, 0x04,			\
 			  "Non-RSTP packet received" )
 
 /**
@@ -70,9 +71,9 @@ static int stp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 
 	/* Sanity check */
 	if ( iob_len ( iobuf ) < sizeof ( *stp ) ) {
-		DBGC ( netdev, "STP %s received underlength packet (%zd "
+		DBGC_STP ( netdev, "STP %s received underlength packet (%zd "
 		       "bytes):\n", netdev->name, iob_len ( iobuf ) );
-		DBGC_HDA ( netdev, 0, iobuf->data, iob_len ( iobuf ) );
+		DBGC_HDA_STP ( netdev, 0, iobuf->data, iob_len ( iobuf ) );
 		rc = -EINVAL;
 		goto done;
 	}
@@ -80,33 +81,33 @@ static int stp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 
 	/* Ignore non-RSTP packets */
 	if ( stp->protocol != htons ( STP_PROTOCOL ) ) {
-		DBGC ( netdev, "STP %s ignoring non-STP packet (protocol "
+		DBGC_STP ( netdev, "STP %s ignoring non-STP packet (protocol "
 		       "%#04x)\n", netdev->name, ntohs ( stp->protocol ) );
 		rc = -ENOTSUP_PROTOCOL;
 		goto done;
 	}
 	if ( stp->version < STP_VERSION_RSTP ) {
-		DBGC ( netdev, "STP %s received legacy STP packet (version "
+		DBGC_STP ( netdev, "STP %s received legacy STP packet (version "
 		       "%#02x)\n", netdev->name, stp->version );
 		rc = -ENOTSUP_VERSION;
 		goto done;
 	}
 	if ( stp->type != STP_TYPE_RSTP ) {
-		DBGC ( netdev, "STP %s received non-RSTP packet (type %#02x)\n",
+		DBGC_STP ( netdev, "STP %s received non-RSTP packet (type %#02x)\n",
 		       netdev->name, stp->type );
 		rc = -ENOTSUP_TYPE;
 		goto done;
 	}
 
 	/* Dump information */
-	DBGC2 ( netdev, "STP %s %s port %#04x flags %#02x hello %d delay %d\n",
+	DBGC2_STP ( netdev, "STP %s %s port %#04x flags %#02x hello %d delay %d\n",
 		netdev->name, eth_ntoa ( stp->sender.mac ), ntohs ( stp->port ),
 		stp->flags, ntohs ( stp->hello ), ntohs ( stp->delay ) );
 
 	/* Check if port is forwarding */
 	if ( ! ( stp->flags & STP_FL_FORWARDING ) ) {
 		/* Port is not forwarding: block link for two hello times */
-		DBGC ( netdev, "STP %s %s port %#04x flags %#02x is not "
+		DBGC_STP ( netdev, "STP %s %s port %#04x flags %#02x is not "
 		       "forwarding\n",
 		       netdev->name, eth_ntoa ( stp->sender.mac ),
 		       ntohs ( stp->port ), stp->flags );
@@ -118,7 +119,7 @@ static int stp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 
 	/* Success */
 	if ( netdev_link_blocked ( netdev ) ) {
-		DBGC ( netdev, "STP %s %s port %#04x flags %#02x is "
+		DBGC_STP ( netdev, "STP %s %s port %#04x flags %#02x is "
 		       "forwarding\n",
 		       netdev->name, eth_ntoa ( stp->sender.mac ),
 		       ntohs ( stp->port ), stp->flags );

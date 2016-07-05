@@ -34,6 +34,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/job.h>
 #include <ipxe/monojob.h>
 #include <ipxe/timer.h>
+#include <ipxe/errortab.h>
 #include <usr/ifmgmt.h>
 #include <ipxe/if_ether.h>
 
@@ -48,6 +49,11 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define EINFO_EADDRNOTAVAIL_CONFIG					\
 	__einfo_uniqify ( EINFO_EADDRNOTAVAIL, 0x01,			\
 			  "No configuration methods succeeded" )
+
+/** Human-readable error message */
+struct errortab ifmgmt_errors[] __errortab = {
+	__einfo_errortab ( EINFO_EADDRNOTAVAIL_CONFIG ),
+};
 
 /**
  * Open network device
@@ -267,7 +273,8 @@ int ifnetwork_wait ( struct net_device *netdev, unsigned long link_to,
 	/* WA for Chain-loading - need to sleep for few seconds to give
 	 * the switches the opportunity to settle */
 	if ( ! rc )
-		sleep ( network_to );
+		if ( sleep ( network_to ) > 0 )
+			rc = -ECANCELED;
 
 	return rc;
 }

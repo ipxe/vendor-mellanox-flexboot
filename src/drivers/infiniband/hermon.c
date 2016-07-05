@@ -48,6 +48,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/iscsi.h>
 #include <ipxe/settings.h>
 #include <ipxe/status_updater.h>
+#include <ipxe/ipoib.h>
 #include <usr/ifmgmt.h>
 #include <config/general.h>
 #include <ipxe/boot_menu_ui.h>
@@ -55,11 +56,12 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include "hermon_settings.h"
 #include "flexboot_nodnic.h"
 #include "mlx_port.h"
+#include "flex_debug_log.h"
 
 /*
  * If defined, use interrupts in normal driver
  */
-#undef HERMON_IRQ_ENABLED
+#define HERMON_IRQ_ENABLED
 
 extern void ( * ipoib_hw_guid2mac ) ( const void *hw_addr, void *ll_addr );
 static uint8_t g_mac_admin_bit = 0x00;
@@ -277,14 +279,14 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 	assert ( in_len <= HERMON_MBOX_SIZE );
 	assert ( out_len <= HERMON_MBOX_SIZE );
 
-	DBGC2 ( hermon, "ConnectX3 %p command %02x in %zx%s out %zx%s\n",
+	DBGC2_HERMON ( hermon, "ConnectX3 %p command %02x in %zx%s out %zx%s\n",
 		hermon, opcode, in_len,
 		( ( command & HERMON_HCR_IN_MBOX ) ? "(mbox)" : "" ), out_len,
 		( ( command & HERMON_HCR_OUT_MBOX ) ? "(mbox)" : "" ) );
 
 	/* Check that HCR is free */
 	if ( ( rc = hermon_cmd_wait ( hermon, &hcr ) ) != 0 ) {
-		DBGC ( hermon, "ConnectX3 %p command interface locked\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p command interface locked\n",
 		       hermon );
 		return rc;
 	}
@@ -322,13 +324,13 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 		     go, 1,
 		     t, hermon->toggle );
 
-	DBGC2 ( hermon, "ConnectX3 %p issuing command %04x\n",
+	DBGC2_HERMON ( hermon, "ConnectX3 %p issuing command %04x\n",
 	       hermon, opcode );
-	DBGC2_HDA ( hermon, virt_to_phys ( hermon->config + HERMON_HCR_BASE ),
+	DBGC2_HDA_HERMON ( hermon, virt_to_phys ( hermon->config + HERMON_HCR_BASE ),
 		    &hcr, sizeof ( hcr ) );
 	if ( in_len && ( command & HERMON_HCR_IN_MBOX ) ) {
-		DBGC2 ( hermon, "Input mailbox:\n" );
-		DBGC2_HDA ( hermon, virt_to_phys ( in_buffer ), in_buffer,
+		DBGC2_HERMON ( hermon, "Input mailbox:\n" );
+		DBGC2_HDA_HERMON ( hermon, virt_to_phys ( in_buffer ), in_buffer,
 			    ( ( in_len < 512 ) ? in_len : 512 ) );
 	}
 
@@ -351,9 +353,9 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 
 	/* Wait for command completion */
 	if ( ( rc = hermon_cmd_wait ( hermon, &hcr ) ) != 0 ) {
-		DBGC ( hermon, "ConnectX3 %p timed out waiting for command:\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p timed out waiting for command:\n",
 		       hermon );
-		DBGC_HDA ( hermon,
+		DBGC_HDA_HERMON ( hermon,
 			   virt_to_phys ( hermon->config + HERMON_HCR_BASE ),
 			   &hcr, sizeof ( hcr ) );
 		return rc;
@@ -368,17 +370,17 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 		if ( ( ( opcode == HERMON_HCR_MOD_STAT_CFG ) && ( op_mod == 0xe ) ) ||
 		     ( opcode == HERMON_HCR_INIT_DIAG_BUFFER ) ) {
 			/* Could be as a result of missing TLV - print it as debug */
-			DBGC ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
+			DBGC_HERMON ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
 				hermon, opcode, status );
 		} else if ( opcode == HERMON_HCR_SENSE_PORT ) {
-			DBGC ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
+			DBGC_HERMON ( hermon, "ConnectX3 %p command 0x%x failed with status %02x:\n",
 				hermon, opcode, status );
 			return status;
 		} else {
 			printf ( "ConnectX3 %p command 0x%x failed with status %02x:\n",
 				hermon, opcode, status );
 		}
-		DBGC_HDA ( hermon,
+		DBGC_HDA_HERMON ( hermon,
 			   virt_to_phys ( hermon->config + HERMON_HCR_BASE ),
 			   &hcr, sizeof ( hcr ) );
 		return -EIO;
@@ -389,9 +391,9 @@ static int hermon_cmd ( struct hermon *hermon, unsigned long command,
 	hcr.u.dwords[4] = readl ( hermon->config + HERMON_HCR_REG ( 4 ) );
 	memcpy ( out, out_buffer, out_len );
 	if ( out_len ) {
-		DBGC2 ( hermon, "Output%s:\n",
+		DBGC2_HERMON ( hermon, "Output%s:\n",
 			( command & HERMON_HCR_OUT_MBOX ) ? " mailbox" : "" );
-		DBGC2_HDA ( hermon, virt_to_phys ( out_buffer ), out_buffer,
+		DBGC2_HDA_HERMON ( hermon, virt_to_phys ( out_buffer ), out_buffer,
 			    ( ( out_len < 512 ) ? out_len : 512 ) );
 	}
 
@@ -870,7 +872,7 @@ static int hermon_alloc_mtt ( struct hermon *hermon,
 		mtt_base_addr += hermon->cap.mtt_entry_size;
 	}
 
-	DBGC ( hermon, "ConnectX3 %p MTT entries [%#x,%#x] for "
+	DBGC_HERMON ( hermon, "ConnectX3 %p MTT entries [%#x,%#x] for "
 	       "[%08lx,%08lx,%08lx,%08lx)\n", hermon, mtt->mtt_offset,
 	       ( mtt->mtt_offset + mtt->num_pages - 1 ), start,
 	       ( start + page_offset ), ( start + len ), addr );
@@ -892,7 +894,7 @@ static int hermon_alloc_mtt ( struct hermon *hermon,
 static void hermon_free_mtt ( struct hermon *hermon,
 			      struct hermon_mtt *mtt ) {
 
-	DBGC ( hermon, "ConnectX3 %p MTT entries [%#x,%#x] freed\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p MTT entries [%#x,%#x] freed\n",
 	       hermon, mtt->mtt_offset,
 	       ( mtt->mtt_offset + mtt->num_pages - 1 ) );
 	hermon_bitmask_free ( hermon->mtt_inuse, mtt->mtt_offset,
@@ -992,7 +994,7 @@ static int hermon_mad ( struct ib_device *ibdev, union ib_mad *mad ) {
 	memcpy ( mad, &mad_ifc.mad, sizeof ( *mad ) );
 
 	if ( mad->hdr.status != 0 ) {
-		DBGC ( hermon, "ConnectX3 %p port %d MAD IFC status %04x\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p port %d MAD IFC status %04x\n",
 		       hermon, ibdev->port, ntohs ( mad->hdr.status ) );
 		return -EIO;
 	}
@@ -1026,7 +1028,7 @@ static int hermon_create_cq ( struct ib_device *ibdev,
 	cqn_offset = hermon_bitmask_alloc ( hermon->cq_inuse,
 					    HERMON_MAX_CQS, 1 );
 	if ( cqn_offset < 0 ) {
-		DBGC ( hermon, "ConnectX3 %p out of completion queues\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p out of completion queues\n",
 		       hermon );
 		rc = cqn_offset;
 		goto err_cqn_offset;
@@ -1097,7 +1099,7 @@ static int hermon_create_cq ( struct ib_device *ibdev,
 		goto err_sw2hw_cq;
 	}
 
-	DBGC ( hermon, "ConnectX3 %p CQN %#lx ring [%08lx,%08lx), doorbell "
+	DBGC_HERMON ( hermon, "ConnectX3 %p CQN %#lx ring [%08lx,%08lx), doorbell "
 	       "%08lx\n", hermon, cq->cqn, virt_to_phys ( hermon_cq->cqe ),
 	       ( virt_to_phys ( hermon_cq->cqe ) + hermon_cq->cqe_size ),
 	       virt_to_phys ( hermon_cq->doorbell ) );
@@ -1192,7 +1194,7 @@ static int hermon_alloc_qpn ( struct ib_device *ibdev,
 		qpn_offset = hermon_bitmask_alloc ( hermon->qp_inuse,
 						    HERMON_MAX_QPS, 1 );
 		if ( qpn_offset < 0 ) {
-			DBGC ( hermon, "ConnectX3 %p out of queue pairs\n",
+			DBGC_HERMON ( hermon, "ConnectX3 %p out of queue pairs\n",
 			       hermon );
 			return qpn_offset;
 		}
@@ -1269,6 +1271,8 @@ static int hermon_create_qp ( struct ib_device *ibdev,
 	struct hermon *hermon = ib_get_drvdata ( ibdev );
 	struct hermon_queue_pair *hermon_qp;
 	struct hermonprm_qp_ee_state_transitions qpctx;
+	struct hermonprm_wqe_segment_data_ptr *data;
+	unsigned int i;
 	int rc;
 
 	/* Calculate queue pair number */
@@ -1305,8 +1309,14 @@ static int hermon_create_qp ( struct ib_device *ibdev,
 				     sizeof ( hermon_qp->send.wqe[0] ) );
 	hermon_qp->recv.wqe_size = ( qp->recv.num_wqes *
 				     sizeof ( hermon_qp->recv.wqe[0] ) );
+	if ( ( qp->type == IB_QPT_SMI ) || ( qp->type == IB_QPT_GSI ) ||
+	     ( qp->type == IB_QPT_UD ) ) {
+		hermon_qp->recv.grh_size = ( qp->recv.num_wqes *
+					     sizeof ( hermon_qp->recv.grh[0] ));
+	}
 	hermon_qp->wqe_size = ( hermon_qp->send.wqe_size +
-				hermon_qp->recv.wqe_size );
+				hermon_qp->recv.wqe_size +
+				hermon_qp->recv.grh_size );
 	hermon_qp->wqe = malloc_dma ( hermon_qp->wqe_size,
 				      sizeof ( hermon_qp->send.wqe[0] ) );
 	if ( ! hermon_qp->wqe ) {
@@ -1314,9 +1324,21 @@ static int hermon_create_qp ( struct ib_device *ibdev,
 		goto err_alloc_wqe;
 	}
 	hermon_qp->send.wqe = hermon_qp->wqe;
-	memset ( hermon_qp->send.wqe, 0xff, hermon_qp->send.wqe_size );
 	hermon_qp->recv.wqe = ( hermon_qp->wqe + hermon_qp->send.wqe_size );
+	if ( hermon_qp->recv.grh_size ) {
+		hermon_qp->recv.grh = ( hermon_qp->wqe +
+					hermon_qp->send.wqe_size +
+					hermon_qp->recv.wqe_size );
+	}
+
+	/* Initialise work queue entries */
+	memset ( hermon_qp->send.wqe, 0xff, hermon_qp->send.wqe_size );
 	memset ( hermon_qp->recv.wqe, 0, hermon_qp->recv.wqe_size );
+	data = &hermon_qp->recv.wqe[0].recv.data[0];
+	for ( i = 0 ; i < ( hermon_qp->recv.wqe_size / sizeof ( *data ) ); i++){
+		MLX_FILL_1 ( data, 1, l_key, HERMON_INVALID_LKEY );
+		data++;
+	}
 
 	/* Allocate MTT entries */
 	if ( ( rc = hermon_alloc_mtt ( hermon, hermon_qp->wqe,
@@ -1358,7 +1380,7 @@ static int hermon_create_qp ( struct ib_device *ibdev,
 	MLX_FILL_1 ( &qpctx, 53, qpc_eec_data.mtt_base_addr_l,
 		     ( hermon_qp->mtt.mtt_base_addr >> 3 ) );
 
-	DBGC ( hermon, "ConnectX3 %p QPN %#lx send ring [%08lx,%08lx), doorbell "
+	DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx send ring [%08lx,%08lx), doorbell "
 			"%08lx\n", hermon, qp->qpn,	virt_to_phys ( hermon_qp->send.wqe ),
 			( virt_to_phys ( hermon_qp->send.wqe ) + hermon_qp->send.wqe_size ),
 			virt_to_phys ( hermon_qp->send.doorbell ) );
@@ -1371,19 +1393,19 @@ static int hermon_create_qp ( struct ib_device *ibdev,
 	}
 	hermon_qp->state = HERMON_QP_ST_INIT;
 
-	DBGC ( hermon, "ConnectX3 %p QPN %#lx send ring [%08lx,%08lx), doorbell "
+	DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx send ring [%08lx,%08lx), doorbell "
 	       "%08lx\n", hermon, qp->qpn,
 	       virt_to_phys ( hermon_qp->send.wqe ),
 	       ( virt_to_phys ( hermon_qp->send.wqe ) +
 		 hermon_qp->send.wqe_size ),
 	       virt_to_phys ( hermon_qp->send.doorbell ) );
-	DBGC ( hermon, "ConnectX3 %p QPN %#lx receive ring [%08lx,%08lx), "
+	DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx receive ring [%08lx,%08lx), "
 	       "doorbell %08lx\n", hermon, qp->qpn,
 	       virt_to_phys ( hermon_qp->recv.wqe ),
 	       ( virt_to_phys ( hermon_qp->recv.wqe ) +
 		 hermon_qp->recv.wqe_size ),
 	       virt_to_phys ( hermon_qp->recv.doorbell ) );
-	DBGC ( hermon, "ConnectX3 %p QPN %#lx send CQN %#lx receive CQN %#lx\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx send CQN %#lx receive CQN %#lx\n",
 	       hermon, qp->qpn, qp->send.cq->cqn, qp->recv.cq->cqn );
 	ib_qp_set_drvdata ( qp, hermon_qp );
 	return 0;
@@ -1741,7 +1763,7 @@ static int hermon_post_send ( struct ib_device *ibdev,
 	owner = ( ( wq->next_idx & hermon_send_wq->num_wqes ) ? 1 : 0 );
 	wqe_idx_mask = ( wq->num_wqes - 1 );
 	if ( wq->iobufs[ wqe_idx & wqe_idx_mask ] ) {
-		DBGC ( hermon, "ConnectX3 %p QPN %#lx send queue full",
+		DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx send queue full",
 		       hermon, qp->qpn );
 		return -ENOBUFS;
 	}
@@ -1759,9 +1781,9 @@ static int hermon_post_send ( struct ib_device *ibdev,
 	MLX_FILL_2 ( &wqe->ctrl, 0,
 		     opcode, opcode,
 		     owner, owner );
-	DBGCP ( hermon, "ConnectX3 %p QPN %#lx posting send WQE %#lx:\n",
+	DBGCP_HERMON ( hermon, "ConnectX3 %p QPN %#lx posting send WQE %#lx:\n",
 		hermon, qp->qpn, wqe_idx );
-	DBGCP_HDA ( hermon, virt_to_phys ( wqe ), wqe, sizeof ( *wqe ) );
+	DBGCP_HDA_HERMON ( hermon, virt_to_phys ( wqe ), wqe, sizeof ( *wqe ) );
 
 	/* Ring doorbell register */
 	MLX_FILL_1 ( &db_reg.send, 0, qn, qp->qpn );
@@ -1798,12 +1820,14 @@ static int hermon_post_recv ( struct ib_device *ibdev,
 	struct ib_work_queue *wq = &qp->recv;
 	struct hermon_recv_work_queue *hermon_recv_wq = &hermon_qp->recv;
 	struct hermonprm_recv_wqe *wqe;
+	struct hermonprm_wqe_segment_data_ptr *data;
+	struct ib_global_route_header *grh;
 	unsigned int wqe_idx_mask;
 
 	/* Allocate work queue entry */
 	wqe_idx_mask = ( wq->num_wqes - 1 );
 	if ( wq->iobufs[wq->next_idx & wqe_idx_mask] ) {
-		DBGC ( hermon, "ConnectX3 %p QPN %#lx receive queue full",
+		DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx receive queue full",
 		       hermon, qp->qpn );
 		return -ENOBUFS;
 	}
@@ -1811,12 +1835,19 @@ static int hermon_post_recv ( struct ib_device *ibdev,
 	wqe = &hermon_recv_wq->wqe[wq->next_idx & wqe_idx_mask].recv;
 
 	/* Construct work queue entry */
-	MLX_FILL_1 ( &wqe->data[0], 0, byte_count, iob_tailroom ( iobuf ) );
-	MLX_FILL_1 ( &wqe->data[0], 1, l_key, hermon->lkey );
-	MLX_FILL_H ( &wqe->data[0], 2,
-		     local_address_h, virt_to_bus ( iobuf->data ) );
-	MLX_FILL_1 ( &wqe->data[0], 3,
-		     local_address_l, virt_to_bus ( iobuf->data ) );
+	data = &wqe->data[0];
+	if ( hermon_qp->recv.grh ) {
+		grh = &hermon_qp->recv.grh[wq->next_idx & wqe_idx_mask];
+		MLX_FILL_1 ( data, 0, byte_count, sizeof ( *grh ) );
+		MLX_FILL_1 ( data, 1, l_key, hermon->lkey );
+		MLX_FILL_H ( data, 2, local_address_h, virt_to_bus ( grh ) );
+		MLX_FILL_1 ( data, 3, local_address_l, virt_to_bus ( grh ) );
+		data++;
+	}
+	MLX_FILL_1 ( data, 0, byte_count, iob_tailroom ( iobuf ) );
+	MLX_FILL_1 ( data, 1, l_key, hermon->lkey );
+	MLX_FILL_H ( data, 2, local_address_h, virt_to_bus ( iobuf->data ) );
+	MLX_FILL_1 ( data, 3, local_address_l, virt_to_bus ( iobuf->data ) );
 
 	/* Update work queue's index */
 	wq->next_idx++;
@@ -1841,6 +1872,7 @@ static int hermon_complete ( struct ib_device *ibdev,
 			     struct ib_completion_queue *cq,
 			     union hermonprm_completion_entry *cqe ) {
 	struct hermon *hermon = ib_get_drvdata ( ibdev );
+	struct hermon_queue_pair *hermon_qp;
 	struct ib_work_queue *wq;
 	struct ib_queue_pair *qp;
 	struct io_buffer *iobuf;
@@ -1849,7 +1881,6 @@ static int hermon_complete ( struct ib_device *ibdev,
 	struct ib_global_route_header *grh;
 	struct ib_address_vector *source;
 	struct hermonprm_qp_ee_state_transitions qp_ctx;
-	struct hermon_queue_pair *hermon_qp;
 	unsigned int opcode;
 	unsigned long qpn;
 	int is_send;
@@ -1863,7 +1894,7 @@ static int hermon_complete ( struct ib_device *ibdev,
 	is_send = MLX_GET ( &cqe->normal, s_r );
 	opcode = MLX_GET ( &cqe->normal, opcode );
 	if ( opcode == HERMON_OPCODE_CQE_ERROR ) {
-		DBGC ( hermon, "ConnectX3 %p CQN %#lx syndrome %x vendor %x\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p CQN %#lx syndrome %x vendor %x\n",
 		       hermon, cq->cqn, MLX_GET ( &cqe->error, syndrome ),
 		       MLX_GET ( &cqe->error, vendor_error_syndrome ) );
 		rc = -EIO;
@@ -1873,16 +1904,17 @@ static int hermon_complete ( struct ib_device *ibdev,
 	/* Identify work queue */
 	wq = ib_find_wq ( cq, qpn, is_send );
 	if ( ! wq ) {
-		DBGC ( hermon, "ConnectX3 %p CQN %#lx unknown %s QPN %#lx\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p CQN %#lx unknown %s QPN %#lx\n",
 		       hermon, cq->cqn, ( is_send ? "send" : "recv" ), qpn );
 		return -EIO;
 	}
 	qp = wq->qp;
+	hermon_qp = ib_qp_get_drvdata ( qp );
 
 	/* Identify work queue entry */
 	wqe_idx = MLX_GET ( &cqe->normal, wqe_counter );
 	wqe_idx_mask = ( wq->num_wqes - 1 );
-	DBGCP ( hermon, "ConnectX3 %p CQN %#lx QPN %#lx %s WQE %#lx completed:\n",
+	DBGCP_HERMON ( hermon, "ConnectX3 %p CQN %#lx QPN %#lx %s WQE %#lx completed:\n",
 		hermon, cq->cqn, qp->qpn, ( is_send ? "send" : "recv" ),
 		wqe_idx );
 	DBGCP_HDA ( hermon, virt_to_phys ( cqe ), cqe, sizeof ( *cqe ) );
@@ -1890,7 +1922,7 @@ static int hermon_complete ( struct ib_device *ibdev,
 	/* Identify I/O buffer */
 	iobuf = wq->iobufs[ wqe_idx & wqe_idx_mask ];
 	if ( ! iobuf ) {
-		DBGC ( hermon, "ConnectX3 %p CQN %#lx QPN %#lx empty %s WQE "
+		DBGC_HERMON ( hermon, "ConnectX3 %p CQN %#lx QPN %#lx empty %s WQE "
 		       "%#lx\n", hermon, cq->cqn, qp->qpn,
 		       ( is_send ? "send" : "recv" ), wqe_idx );
 		return -EIO;
@@ -1902,11 +1934,10 @@ static int hermon_complete ( struct ib_device *ibdev,
 		ib_complete_send ( ibdev, qp, iobuf, rc );
 	} else if ( rc ) {
 		/* Query the QP state */
-		hermon_qp = ib_qp_get_drvdata ( qp );
 		memset ( &qp_ctx, 0, sizeof ( qp_ctx ) );
 		if ( 0 == hermon_cmd_query_qp ( hermon, qp->qpn, &qp_ctx ) ) {
 			hermon_qp->state = MLX_GET( &qp_ctx, qpc_eec_data.state );
-			DBGC ( hermon, "ConnectX3 %p QPN %#lx state is %d\n",
+			DBGC_HERMON ( hermon, "ConnectX3 %p QPN %#lx state is %d\n",
 					hermon, qp->qpn, hermon_qp->state );
 		}
 		/* Propogate error to receive completion handler */
@@ -1914,8 +1945,6 @@ static int hermon_complete ( struct ib_device *ibdev,
 	} else {
 		/* Set received length */
 		len = MLX_GET ( &cqe->normal, byte_cnt );
-		assert ( len <= iob_tailroom ( iobuf ) );
-		iob_put ( iobuf, len );
 		memset ( &recv_dest, 0, sizeof ( recv_dest ) );
 		recv_dest.qpn = qpn;
 		memset ( &recv_source, 0, sizeof ( recv_source ) );
@@ -1923,9 +1952,10 @@ static int hermon_complete ( struct ib_device *ibdev,
 		case IB_QPT_SMI:
 		case IB_QPT_GSI:
 		case IB_QPT_UD:
-			assert ( iob_len ( iobuf ) >= sizeof ( *grh ) );
-			grh = iobuf->data;
-			iob_pull ( iobuf, sizeof ( *grh ) );
+			/* Locate corresponding GRH */
+			assert ( hermon_qp->recv.grh != NULL );
+			grh = &hermon_qp->recv.grh[ wqe_idx & wqe_idx_mask ];
+			len -= sizeof ( *grh );
 			/* Construct address vector */
 			source = &recv_source;
 			source->qpn = MLX_GET ( &cqe->normal, srq_rqpn );
@@ -1951,6 +1981,8 @@ static int hermon_complete ( struct ib_device *ibdev,
 			assert ( 0 );
 			return -EINVAL;
 		}
+		assert ( len <= iob_tailroom ( iobuf ) );
+		iob_put ( iobuf, len );
 		/* Hand off to completion handler */
 		ib_complete_recv ( ibdev, qp, &recv_dest, source, iobuf, rc );
 	}
@@ -2011,7 +2043,7 @@ static void hermon_poll_cq ( struct ib_device *ibdev,
 		if ( ( rc = hermon_complete ( ibdev, cq, cqe ) ) != 0 ) {
 			printf ( "ConnectX3 %p CQN %#lx failed to complete:"
 			       " %s\n", hermon, cq->cqn, strerror ( rc ) );
-			DBGC_HDA ( hermon, virt_to_phys ( cqe ),
+			DBGC_HDA_HERMON ( hermon, virt_to_phys ( cqe ),
 				   cqe, sizeof ( *cqe ) );
 		}
 
@@ -2074,7 +2106,7 @@ static int hermon_find_entry ( struct ib_device *ibdev,
 
 		if ( MLX_GET ( mcg, hdr.members_count ) == 0 ) {
 			if ( *index != (int) MLX_GET ( &hash, hash ) ) {
-				DBGC ( hermon, "ConnectX3 %p Found zero MGID"
+				DBGC_HERMON ( hermon, "ConnectX3 %p Found zero MGID"
 					       " in AMGM\n", hermon );
 				return -EBUSY;
 			}
@@ -2086,7 +2118,7 @@ static int hermon_find_entry ( struct ib_device *ibdev,
 		mcg_gid_p += 16;
 		if ( !memcmp ( mcg_gid_p, gid, sizeof ( *gid ) ) &&
 		     ( MLX_GET ( mcg, hdr.protocol ) == ibdev->protocol ) ) {
-			DBGC ( hermon, "ConnectX3 %p Found MCG entry with the"
+			DBGC_HERMON ( hermon, "ConnectX3 %p Found MCG entry with the"
 			       " same GID\n", hermon );
 			return 0;
 		}
@@ -2130,7 +2162,7 @@ static int hermon_mcast_attach ( struct ib_device *ibdev,
 	if ( index == -1 ) {
 		link = 1;
 		index = hermon->mcg_aux_index ++;
-		DBGC ( hermon, "ConnectX3 %p add new entry with index 0x%x\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p add new entry with index 0x%x\n",
 		       hermon, index );
 		memset ( &mcg, 0, sizeof ( mcg ) );
 		memcpy ( &mcg.u.dwords[4], gid, sizeof ( *gid ) );
@@ -2139,14 +2171,14 @@ static int hermon_mcast_attach ( struct ib_device *ibdev,
 	members_count = MLX_GET ( &mcg, hdr.members_count );
 
 	if ( members_count >= HERMON_MAX_MGM_MEMBERS ) {
-		DBGC ( hermon, "ConnectX3 %p MGM is full\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p MGM is full\n",
 		       hermon );
 		return -ENOMEM;
 	}
 
 	for ( i = 0; i < members_count; ++i ) {
 		if ( MLX_GET ( &mcg, qp[i] ) == qp->qpn ) {
-			DBGC ( hermon, "ConnectX3 %p QP 0x%lx already member"
+			DBGC_HERMON ( hermon, "ConnectX3 %p QP 0x%lx already member"
 			       " in MGM\n", hermon, qp->qpn );
 			return 0;
 		}
@@ -2397,7 +2429,7 @@ static int hermon_create_eq ( struct hermon *hermon ) {
 		goto err_map_eq;
 	}
 
-	DBGC ( hermon, "ConnectX3 %p EQN %#lx ring [%08lx,%08lx), doorbell "
+	DBGC_HERMON ( hermon, "ConnectX3 %p EQN %#lx ring [%08lx,%08lx), doorbell "
 	       "%08lx\n", hermon, hermon_eq->eqn,
 	       virt_to_phys ( hermon_eq->eqe ),
 	       ( virt_to_phys ( hermon_eq->eqe ) + hermon_eq->eqe_size ),
@@ -2490,7 +2522,7 @@ static void hermon_event_port_state_change ( struct hermon *hermon,
 	/* Get port and link status */
 	port = ( MLX_GET ( &eqe->port_state_change, data.p ) - 1 );
 	link_up = ( MLX_GET ( &eqe->generic, event_sub_type ) & 0x04 );
-	DBGC ( hermon, "ConnectX3 %p port %d link %s\n", hermon, ( port + 1 ),
+	DBGC_HERMON ( hermon, "ConnectX3 %p port %d link %s\n", hermon, ( port + 1 ),
 	       ( link_up ? "up" : "down" ) );
 
 	/* Sanity check */
@@ -2630,7 +2662,8 @@ static void hermon_clr_int ( struct hermon *hermon ) {
 static void hermon_poll_eq ( struct ib_device *ibdev ) {
 	struct hermon *hermon = ib_get_drvdata ( ibdev );
 	struct hermon_event_queue *hermon_eq = &hermon->eq;
-	struct net_device *netdev = ib_get_ownerdata ( ibdev );
+	struct hermon_port *hermon_port = hermon_get_port_from_ibdev ( ibdev );
+	struct net_device *netdev = hermon_port->netdev;
 	struct hermonprm_query_port_cap query_port;
 	union hermonprm_event_entry *eqe;
 	union hermonprm_doorbell_register db_reg;
@@ -2660,7 +2693,7 @@ static void hermon_poll_eq ( struct ib_device *ibdev ) {
 			/* Entry still owned by hardware; end of poll */
 			break;
 		}
-		DBGCP ( hermon, "ConnectX3 %p EQN %#lx event:\n",
+		DBGCP_HERMON ( hermon, "ConnectX3 %p EQN %#lx event:\n",
 			hermon, hermon_eq->eqn );
 		DBGCP_HDA ( hermon, virt_to_phys ( eqe ),
 			    eqe, sizeof ( *eqe ) );
@@ -2686,10 +2719,10 @@ static void hermon_poll_eq ( struct ib_device *ibdev ) {
 			hermon_opreq_action ( hermon );
 			break;
 		default:
-			DBGC ( hermon, "ConnectX3 %p EQN %#lx unrecognised event "
+			DBGC_HERMON ( hermon, "ConnectX3 %p EQN %#lx unrecognised event "
 			       "type %#x:\n",
 			       hermon, hermon_eq->eqn, event_type );
-			DBGC_HDA ( hermon, virt_to_phys ( eqe ),
+			DBGC_HDA_HERMON ( hermon, virt_to_phys ( eqe ),
 				   eqe, sizeof ( *eqe ) );
 			break;
 		}
@@ -2834,11 +2867,11 @@ static int hermon_start_firmware ( struct hermon *hermon ) {
 		       hermon, strerror ( rc ) );
 		goto err_query_fw;
 	}
-	DBGC ( hermon, "ConnectX3 %p firmware version %d.%d.%d\n", hermon,
+	DBGC_HERMON ( hermon, "ConnectX3 %p firmware version %d.%d.%d\n", hermon,
 	       MLX_GET ( &fw, fw_rev_major ), MLX_GET ( &fw, fw_rev_minor ),
 	       MLX_GET ( &fw, fw_rev_subminor ) );
 	fw_pages = MLX_GET ( &fw, fw_pages );
-	DBGC ( hermon, "ConnectX3 %p requires %d pages (%d kB) for firmware\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p requires %d pages (%d kB) for firmware\n",
 	       hermon, fw_pages, ( fw_pages * 4 ) );
 
 	hermon->clr_int_bar = MLX_GET ( &fw, clr_int_bar );
@@ -2872,7 +2905,7 @@ static int hermon_start_firmware ( struct hermon *hermon ) {
 		assert ( hermon->firmware_len == fw_len );
 	}
 	fw_base = user_to_phys ( hermon->firmware_area, 0 );
-	DBGC ( hermon, "ConnectX3 %p firmware area at physical [%08lx,%08lx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p firmware area at physical [%08lx,%08lx)\n",
 	       hermon, fw_base, ( fw_base + fw_len ) );
 	if ( ( rc = hermon_map_vpm ( hermon, hermon_cmd_map_fa,
 				     0, fw_base, fw_len ) ) != 0 ) {
@@ -2888,7 +2921,7 @@ static int hermon_start_firmware ( struct hermon *hermon ) {
 		goto err_run_fw;
 	}
 
-	DBGC ( hermon, "ConnectX3 %p firmware started\n", hermon );
+	DBGC_HERMON ( hermon, "ConnectX3 %p firmware started\n", hermon );
 	return 0;
 
  err_run_fw:
@@ -2914,7 +2947,7 @@ static void hermon_stop_firmware ( struct hermon *hermon ) {
 		hermon->firmware_area = UNULL;
 		return;
 	}
-	sleep(2);
+	mdelay ( 2000 );
 }
 
 /***************************************************************************
@@ -2936,7 +2969,7 @@ static int hermon_get_cap ( struct hermon *hermon ) {
 	int rc;
 
 	if ( ( rc = hermon_cmd_query_dev_cap ( hermon, &dev_cap ) ) != 0 ) {
-		DBGC ( hermon, "ConnectX3 %p could not get device limits: %s\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p could not get device limits: %s\n",
 		       hermon, strerror ( rc ) );
 		return rc;
 	}
@@ -2972,9 +3005,13 @@ static int hermon_get_cap ( struct hermon *hermon ) {
 	hermon->cap.vep_mc_steering		= MLX_GET ( &dev_cap, vep_mc_steering );
 	hermon->cap.nv_mem_access_supported	= MLX_GET( &dev_cap, flash_nv_config);
 	hermon->cap.ncsi_lag_mode 		= MLX_GET( &dev_cap, ncsi_lag_mode);
+#ifdef __i386__
 	hermon->cap.cmdif_post_doorbell		= MLX_GET ( &dev_cap, cmdif_post_doorbell );
+#else
+	hermon->cap.cmdif_post_doorbell		= 0;
+#endif
 	if ( hermon->cap.cmdif_post_doorbell ) {
-		DBGC ( hermon, "Using the command interface to post doorbells!\n");
+		DBGC_HERMON ( hermon, "Using the command interface to post doorbells!\n");
 	}
 	hermon->cap.num_ports = MLX_GET ( &dev_cap, num_ports );
 	hermon->cap.port_beacon = MLX_GET ( &dev_cap, port_beacon );
@@ -3078,7 +3115,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     ( icm_offset >> 5 ),
 		     qpc_eec_cqc_eqc_rdb_parameters.log_num_of_qp,
 		     log_num_qps );
-	DBGC ( hermon, "ConnectX3 %p ICM QPC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM QPC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_qps ), hermon->cap.qpc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3092,7 +3129,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 	MLX_FILL_1 ( init_hca, 25,
 		     qpc_eec_cqc_eqc_rdb_parameters.altc_base_addr_l,
 		     icm_offset );
-	DBGC ( hermon, "ConnectX3 %p ICM ALTC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM ALTC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_qps ), hermon->cap.altc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3106,7 +3143,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 	MLX_FILL_1 ( init_hca, 29,
 		     qpc_eec_cqc_eqc_rdb_parameters.auxc_base_addr_l,
 		     icm_offset );
-	DBGC ( hermon, "ConnectX3 %p ICM AUXC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM AUXC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_qps ), hermon->cap.auxc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3122,7 +3159,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     ( icm_offset >> 5 ),
 		     qpc_eec_cqc_eqc_rdb_parameters.log_num_of_srq,
 		     log_num_srqs );
-	DBGC ( hermon, "ConnectX3 %p ICM SRQC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM SRQC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_srqs ), hermon->cap.srqc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3138,7 +3175,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     ( icm_offset >> 5 ),
 		     qpc_eec_cqc_eqc_rdb_parameters.log_num_of_cq,
 		     log_num_cqs );
-	DBGC ( hermon, "ConnectX3 %p ICM CQC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM CQC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_cqs ), hermon->cap.cqc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3154,7 +3191,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     ( icm_offset >> 5 ),
 		     qpc_eec_cqc_eqc_rdb_parameters.log_num_of_eq,
 		     log_num_eqs );
-	DBGC ( hermon, "ConnectX3 %p ICM EQC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM EQC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_eqs ), hermon->cap.eqc_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3166,7 +3203,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     tpt_parameters.mtt_base_addr_h, ( icm_offset >> 32 ) );
 	MLX_FILL_1 ( init_hca, 65,
 		     tpt_parameters.mtt_base_addr_l, icm_offset );
-	DBGC ( hermon, "ConnectX3 %p ICM MTT is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM MTT is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_mtts ), hermon->cap.mtt_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3180,7 +3217,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     tpt_parameters.dmpt_base_adr_l, icm_offset );
 	MLX_FILL_1 ( init_hca, 62,
 		     tpt_parameters.log_dmpt_sz, log_num_mpts );
-	DBGC ( hermon, "ConnectX3 %p ICM DMPT is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM DMPT is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_mpts ), hermon->cap.dmpt_entry_size,
 	       icm_offset, ( icm_offset + len ) );
 	icm_offset += len;
@@ -3203,7 +3240,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 		     multicast_parameters.log_mc_table_sz, log_num_mcs,
 		     multicast_parameters.uc_group_steering,
 		     ( hermon->cap.vep_uc_steering ? 1 : 0 ) );
-	DBGC ( hermon, "ConnectX3 %p ICM MC is %d x %#zx at [%08llx,%08llx)\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p ICM MC is %d x %#zx at [%08llx,%08llx)\n",
 	       hermon, ( 1 << log_num_mcs ),
 	       sizeof ( struct hermonprm_mcg_entry ),
 	       icm_offset, ( icm_offset + len ) );
@@ -3241,7 +3278,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 	icm_aux_len = ( MLX_GET ( &icm_aux_size, value ) * HERMON_PAGE_SIZE );
 
 	/* Allocate ICM data and auxiliary area */
-	DBGC ( hermon, "ConnectX3 %p requires %zd kB ICM and %zd kB AUX ICM\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p requires %zd kB ICM and %zd kB AUX ICM\n",
 	       hermon, ( icm_len / 1024 ), ( icm_aux_len / 1024 ) );
 	if ( ! hermon->icm ) {
 		hermon->icm_len = icm_len;
@@ -3260,7 +3297,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 	icm_phys = user_to_phys ( hermon->icm, 0 );
 
 	/* Map ICM auxiliary area */
-	DBGC ( hermon, "ConnectX3 %p mapping ICM AUX => %08lx\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p mapping ICM AUX => %08lx\n",
 	       hermon, icm_phys );
 	if ( ( rc = hermon_map_vpm ( hermon, hermon_cmd_map_icm_aux,
 				     0, icm_phys, icm_aux_len ) ) != 0 ) {
@@ -3272,7 +3309,7 @@ static int hermon_map_icm ( struct hermon *hermon,
 
 	/* MAP ICM area */
 	for ( i = 0 ; i < HERMON_ICM_NUM_REGIONS ; i++ ) {
-		DBGC ( hermon, "ConnectX3 %p mapping ICM %llx+%zx => %08lx\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p mapping ICM %llx+%zx => %08lx\n",
 		       hermon, hermon->icm_map[i].offset,
 		       hermon->icm_map[i].len, icm_phys );
 		if ( ( rc = hermon_map_vpm ( hermon, hermon_cmd_map_icm,
@@ -3434,7 +3471,7 @@ static int hermon_access_tlv ( struct hermon *hermon,
 
 	memset(tlv_header->data, 0, tlv_header->length);
 	if (tlv_header->length < ((length * sizeof(uint32_t)) - pad_cnt)) {
-		DBGC ( hermon, "%s: Buffer overflow. (buffer len = %d ; TLV len = %d ; pad_cnt = %d)\n",
+		DBGC_HERMON ( hermon, "%s: Buffer overflow. (buffer len = %d ; TLV len = %zd ; pad_cnt = %d)\n",
 			__FUNCTION__, tlv_header->length, (length * sizeof(uint32_t)), pad_cnt );
 		return -EINVAL;
 	}
@@ -3475,7 +3512,7 @@ int hermon_flash_write_tlv ( void *priv, void *src,
 	tlv.data        = src;
 
 	if ( ( rc = hermon_write_conf_tlv ( hermon, &tlv ) ) )
-		DBGC ( hermon, "Failed to save tlv type %d in the flash (rc = %d)\n",
+		DBGC_HERMON ( hermon, "Failed to save tlv type %d in the flash (rc = %d)\n",
 			tlv_type, rc );
 	return rc;
 }
@@ -3492,7 +3529,7 @@ int hermon_flash_invalidate_tlv ( void *priv, uint32_t port_num,
 	tlv.version     = driver_settings_get_tlv_version ( tlv_type );
 
 	if ( ( rc = hermon_invalidate_conf_tlv ( hermon, &tlv ) ) ) {
-		DBGC ( hermon, "Failed to invalidate tlv type %d (rc = %d)\n",
+		DBGC_HERMON ( hermon, "Failed to invalidate tlv type %d (rc = %d)\n",
 			tlv_type, rc );
 	}
 
@@ -3516,7 +3553,7 @@ void hermon_get_ro_pci_settings ( void *drv_priv ) {
 	memset ( &fw, 0, sizeof ( fw ) );
 	/* Get firmware version */
 	if ( ( rc = hermon_cmd_query_fw ( hermon, &fw ) ) != 0 ) {
-		DBGC ( hermon, "%s: Failed to query firmware: %d\n", __FUNCTION__, rc );
+		DBGC_HERMON ( hermon, "%s: Failed to query firmware: %d\n", __FUNCTION__, rc );
 	}
 
 	snprintf ( fw_image_props->family_fw_version,
@@ -3538,7 +3575,7 @@ static int hermon_port_get_defaults ( struct hermon *hermon, unsigned int port_n
 
 	memset ( &def, 0, sizeof ( def ) );
 	if ( ( rc = hermon_cmd_query_defparams ( hermon, &def, port_num ) ) ) {
-		DBGC ( hermon, "Failed to get port %d default values (rc = %d)\n", rc, port_num );
+		DBGC_HERMON ( hermon, "Failed to get port %d default values (rc = %d)\n", rc, port_num );
 		return rc;
 	} else {
 		port->defaults.pptx				= MLX_GET ( &def.port, pptx );
@@ -3575,7 +3612,7 @@ static int hermon_get_ini_and_defaults ( struct hermon *hermon ) {
 
 	memset ( &ini, 0, sizeof ( ini ) );
 	if ( ( rc = hermon_cmd_query_romini ( hermon, &ini ) ) ) {
-		DBGC ( hermon, "Failed to get ini values (rc = %d)\n", rc );
+		DBGC_HERMON ( hermon, "Failed to get ini values (rc = %d)\n", rc );
 		return rc;
 	} else {
 		hermon->ini_configurations.dhcp_user_class[0]	= MLX_GET ( &ini, dhcp_user_class_0 );
@@ -3595,7 +3632,7 @@ static int hermon_get_ini_and_defaults ( struct hermon *hermon ) {
 	/* Get the global default values */
 	memset ( &def, 0, sizeof ( def ) );
 	if ( ( rc = hermon_cmd_query_defparams ( hermon, &def, 0 ) ) ) {
-		DBGC ( hermon, "Failed to get global default values (rc = %d)\n", rc );
+		DBGC_HERMON ( hermon, "Failed to get global default values (rc = %d)\n", rc );
 		return rc;
 	} else {
 		hermon->defaults.total_vfs              = MLX_GET ( &def.global, num_vfs );
@@ -3724,7 +3761,7 @@ static int hermon_configure_special_qps ( struct hermon *hermon ) {
 				     & ~( HERMON_NUM_SPECIAL_QPS - 1 ) );
 	hermon->qpn_base = ( hermon->special_qpn_base +
 			     HERMON_NUM_SPECIAL_QPS );
-	DBGC ( hermon, "ConnectX3 %p special QPs at [%lx,%lx]\n", hermon,
+	DBGC_HERMON ( hermon, "ConnectX3 %p special QPs at [%lx,%lx]\n", hermon,
 	       hermon->special_qpn_base, ( hermon->qpn_base - 1 ) );
 
 	/* Issue command to configure special QPs */
@@ -4083,7 +4120,7 @@ static int hermon_register_ibdev ( struct hermon *hermon,
 		return rc;
 	}
 
-	port->netdev = ib_get_ownerdata ( ibdev );
+	port->netdev = ipoib_netdev ( ibdev );
 
 	return 0;
 }
@@ -4246,7 +4283,7 @@ static int hermon_eth_transmit ( struct net_device *netdev,
 	/* Transmit packet */
 	if ( ( rc = ib_post_send ( ibdev, port->eth_qp, NULL,
 				   iobuf ) ) != 0 ) {
-		DBGC ( hermon, "Hermon %p port %d could not transmit: %s\n",
+		DBGC_HERMON ( hermon, "Hermon %p port %d could not transmit: %s\n",
 		       hermon, ibdev->port, strerror ( rc ) );
 		return rc;
 	}
@@ -4290,17 +4327,18 @@ static void hermon_eth_complete_recv ( struct ib_device *ibdev __unused,
 				       struct ib_address_vector *source,
 				       struct io_buffer *iobuf, int rc ) {
 	struct net_device *netdev = ib_qp_get_ownerdata ( qp );
+	struct hermon_port *port;
+	struct hermon *hermon;
 	struct net_device *vlan;
-	int promisc_vlan_enabled;
 
 	if ( rc != 0 ) {
-		DBG ( "Received packet with error\n" );
+		DBG_HERMON ( "Received packet with error\n" );
 		netdev_rx_err ( netdev, iobuf, rc );
 		return;
 	}
 
 	if ( ! source ) {
-		DBG ( "Received packet without address vector\n" );
+		DBG_HERMON ( "Received packet without address vector\n" );
 		netdev_rx_err ( netdev, iobuf, -ENOTTY );
 		return;
 	}
@@ -4309,8 +4347,9 @@ static void hermon_eth_complete_recv ( struct ib_device *ibdev __unused,
 		if ( ( vlan = vlan_find ( netdev, source->vlan ) ) != NULL ) {
 			netdev = vlan;
 		} else {
-			promisc_vlan_enabled = fetch_intz_setting ( netdev_settings ( netdev ), &promisc_vlan_setting );
-			if ( promisc_vlan_enabled == 0 ) {
+			port = ( struct hermon_port * ) netdev->priv;
+			hermon = ( struct hermon * ) port->driver_settings.drv_priv;
+			if ( hermon->ini_configurations.promiscuous_vlan == 0 ) {
 				netdev_rx_err ( netdev, iobuf, -ENODEV );
 				return;
 			}
@@ -4372,7 +4411,7 @@ static int hermon_eth_open ( struct net_device *netdev ) {
 	port->eth_qp = ib_create_qp ( ibdev, IB_QPT_ETH,
 				      HERMON_ETH_NUM_SEND_WQES, port->eth_cq,
 				      HERMON_ETH_NUM_RECV_WQES, port->eth_cq,
-				      &hermon_eth_qp_op );
+				      &hermon_eth_qp_op, netdev->name );
 	if ( ! port->eth_qp ) {
 		printf ( "ConnectX3 %p port %d could not create queue "
 		       "pair\n", hermon, ibdev->port );
@@ -4446,7 +4485,7 @@ static int hermon_eth_open ( struct net_device *netdev ) {
 	}
 
 	if (hermon->cap.ncsi_lag_mode) {
-		sleep(65);
+		mdelay ( 65000 );
 	}
 
 	port->hermon_is_port_open = TRUE;
@@ -4561,7 +4600,6 @@ static int hermon_register_netdev ( struct hermon *hermon,
 	netdev_init ( netdev, &hermon_eth_operations );
 	netdev->dev = ibdev->dev;
 	netdev->priv = port;
-	ib_set_ownerdata ( ibdev, netdev );
 
 	/* Retrieve MAC address */
 	if ( ( rc = hermon_cmd_query_port ( hermon, ibdev->port,
@@ -4668,7 +4706,7 @@ static int hermon_sense_port_type ( struct hermon *hermon,
 	/* If DPDP is not supported, always assume Infiniband */
 	if ( ! hermon->cap.dpdp ) {
 		port_type = HERMON_PORT_TYPE_IB;
-		DBGC ( hermon, "ConnectX3 %p port %d does not support DPDP; "
+		DBGC_HERMON ( hermon, "ConnectX3 %p port %d does not support DPDP; "
 		       "assuming an %s network\n", hermon, ibdev->port,
 		       hermon_name_port_type ( port_type ) );
 		return HERMON_PORT_TYPE_UNKNOWN;
@@ -4683,7 +4721,7 @@ static int hermon_sense_port_type ( struct hermon *hermon,
 	}
 	port_type = MLX_GET ( &sense_port, port_type );
 
-	DBGC ( hermon, "ConnectX3 %p port %d sensed an %s network\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p port %d sensed an %s network\n",
 	       hermon, ibdev->port, hermon_name_port_type ( port_type ) );
 	return port_type;
 }
@@ -4730,11 +4768,11 @@ static int hermon_set_port_type ( struct hermon *hermon,
 
 	ib_supported = MLX_GET ( &query_port, ib );
 	eth_supported = MLX_GET ( &query_port, eth );
-	DBGC ( hermon, "ConnectX3 %p port %d supports%s%s%s\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p port %d supports%s%s%s\n",
 	       hermon, ibdev->port, ( ib_supported ? " Infiniband" : "" ),
 	       ( ( ib_supported && eth_supported ) ? " and" : "" ),
 	       ( eth_supported ? " Ethernet" : "" ) );
-	DBGC ( hermon, "ConnectX3 %p port %d default_link_protocol %s\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p port %d default_link_protocol %s\n",
 			hermon, ibdev->port,
 			( MLX_GET ( &query_port, default_link_type )
 			? "Ethernet" : "Infiniband" ) );
@@ -4742,12 +4780,12 @@ static int hermon_set_port_type ( struct hermon *hermon,
 
 	if ( eth_supported && ( ! ib_supported ) ) {
 		port->type = &hermon_port_type_eth;
-		DBGC ( hermon, "ConnectX3 %p port %d link"
+		DBGC_HERMON ( hermon, "ConnectX3 %p port %d link"
 		       " protocol %s\n", hermon, ibdev->port,
 		       "Ethernet");
 	} else if ( ib_supported && ( ! eth_supported ) ) {
 		port->type = &hermon_port_type_ib;
-		DBGC ( hermon, "ConnectX3 %p port %d link"
+		DBGC_HERMON ( hermon, "ConnectX3 %p port %d link"
 			" protocol %s\n", hermon, ibdev->port,
 			"Infiniband");
 	} else if ( ib_supported && eth_supported ) {
@@ -4767,7 +4805,7 @@ static int hermon_set_port_type ( struct hermon *hermon,
 				       ibdev->port, strerror ( rc ) );
 				return rc;
 			}
-			DBGC ( hermon, "ConnectX3 %p port %d default_link"
+			DBGC_HERMON ( hermon, "ConnectX3 %p port %d default_link"
 			       " protocol %s\n", hermon, ibdev->port,
 			       ( MLX_GET ( &query_port, default_link_type )
 				 ? "Ethernet" : "Infiniband" ) );
@@ -4853,7 +4891,7 @@ int hermon_get_num_supported_veps ( struct hermon *hermon,
 
 
 		supported_veps[port - 1] = MLX_GET ( &stat_cfg, num_veps );
-		DBGC ( hermon, "ConnectX3 %p port %d number supported VEPs %d\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p port %d number supported VEPs %d\n",
 		       hermon, port, hermon->num_veps[port - 1] );
 	}
 
@@ -4885,12 +4923,12 @@ static int hermon_get_num_ports ( struct hermon *hermon ) {
 
 	/* Sanity check */
 	if ( hermon->num_ports > HERMON_MAX_PORTS ) {
-		DBGC ( hermon, "ConnectX3 %p has %d ports (only %d supported)\n",
+		DBGC_HERMON ( hermon, "ConnectX3 %p has %d ports (only %d supported)\n",
 		       hermon, hermon->num_ports, HERMON_MAX_PORTS );
 		hermon->num_ports = HERMON_MAX_PORTS;
 	}
 
-	DBGC ( hermon, "ConnectX3 %p supported number of ports %d\n",
+	DBGC_HERMON ( hermon, "ConnectX3 %p supported number of ports %d\n",
 	       hermon, hermon->num_ports );
 
 	return 0;
@@ -4944,7 +4982,7 @@ int set_port_masking ( struct hermon *hermon ) {
 
 	if ( ! hermon->port_mask ) {
 		/* No port was enabled */
-		DBGC ( hermon, "ConnectX3 %p No port was enabled for "
+		DBGC_HERMON ( hermon, "ConnectX3 %p No port was enabled for "
 		       "booting\n", hermon );
 		return -ENETUNREACH;
 	}
@@ -4970,7 +5008,7 @@ static int hermon_set_ocbb_event_value ( struct hermon *hermon,
 	in_mod |= ( 0 << SEGMENT_DATA_OFFSET_BIT );
 
 	if ( ( rc = hermon_cmd_init_diagnostic_buffer ( hermon, in_mod, &in ) ) ) {
-		DBGC ( hermon, "Failed to send OCBB segment to FW (rc = %d)\n", rc );
+		DBGC_HERMON ( hermon, "Failed to send OCBB segment to FW (rc = %d)\n", rc );
 		return rc;
 	}
 
@@ -4988,7 +5026,7 @@ static void hermon_updater ( void *priv, uint8_t status ) {
 			hermon_set_ocbb_event_value ( hermon, 36, 4 );
 			break;
 		default:
-			DBGC ( hermon, "%s: Unknown status %d\n", __FUNCTION__, status );
+			DBGC_HERMON ( hermon, "%s: Unknown status %d\n", __FUNCTION__, status );
 	}
 };
 
@@ -5090,10 +5128,10 @@ static void hermon_pci_init ( struct hermon *hermon ) {
 #define STORE_INT_SETTING( is_enabled, settings, setting )			\
 	do {									\
 		if ( ( rc = storen_setting ( settings, setting, is_enabled ) ) )\
-			DBGC ( hermon, "Failed to set %s with value %d\n",	\
+			DBGC_HERMON ( hermon, "Failed to set %s with value %d\n",	\
 				( setting )->name, is_enabled );		\
 		else								\
-			DBGC ( hermon, "Successfully stored %s with value %d\n",\
+			DBGC_HERMON ( hermon, "Successfully stored %s with value %d\n",\
 				( setting )->name, is_enabled );		\
 	} while ( 0 )
 
@@ -5212,19 +5250,19 @@ static int hermon_probe_no_nodnic ( struct pci_device *pci, struct hermon *hermo
 			if ( ! ( hermon->port_mask & ( i + HERMON_PORT_BASE ) ) )
 				continue;
 			port = &hermon->port[i];
-			if ( ! port->port_nv_conf.nic.boot_conf.en_vlan )
+			if ( ( ! port->port_nv_conf.nic.boot_conf.en_vlan ) || ( port->type == &hermon_port_type_ib ) )
 				continue;
 			if ( ( rc = vlan_create ( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id, 1 ) ) )
-				DBGC ( hermon, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
+				DBGC_HERMON ( hermon, "Failed to create VLAN device on port %d (rc = %d)\n", rc, i + 1 );
 			else if ( ( vlan = vlan_find( port->netdev, port->port_nv_conf.nic.boot_conf.vlan_id ) ) )
 				move_trunk_settings_to_vlan ( port->netdev, vlan );
 			else
-				DBGC ( hermon, "Failed to find the VLAN device (rc = %d)\n", rc );
+				DBGC_HERMON ( hermon, "Failed to find the VLAN device (rc = %d)\n", rc );
 		}
 
 		/* Register hermon to the status update list */
 		if ( ( rc = status_update_register_device ( hermon, hermon_updater ) ) )
-			DBGC ( hermon, "Failed to register to the status updaters list (rc = %d)\n", rc );
+			DBGC_HERMON ( hermon, "Failed to register to the status updaters list (rc = %d)\n", rc );
 	}
 
 	/* Leave device quiescent until opened */
@@ -5287,6 +5325,8 @@ static void hermon_remove_no_nodnic ( struct pci_device *pci ) {
 			continue;
 		ibdev_put ( hermon->port[i].ibdev );
 	}
+	iounmap ( hermon->config );
+	iounmap ( hermon->uar );
 	hermon_free ( hermon );
 }
 
@@ -5344,7 +5384,7 @@ static int hermon_read_flash_for_nodnic ( struct hermon *hermon ) {
 		}
 	}
 
-	DBGC ( hermon, "NODNIC settings read from flash\n" );
+	DBGC_HERMON ( hermon, "NODNIC settings read from flash\n" );
 	rc = 0;
 err_get_ini:
 err_get_cap:
@@ -5377,7 +5417,7 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon *h
 		for ( num_try = 0; num_try < TRIES; num_try++ ) {
 			if ( ( rc = hermon_cmd_sense_port ( hermon, port_index + 1,
 					&sense_port ) ) != 0 ) {
-					DBGC ( hermon, "Port %d sense failed: %s\n",
+					DBGC_HERMON ( hermon, "Port %d sense failed: %s\n",
 							port_index + 1, strerror ( rc ) );
 					if ( rc == PORT_DISCONNECTED ) {
 						disconnected = 1;
@@ -5389,7 +5429,7 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon *h
 					break;
 				}
 			}
-			sleep(3);
+			mdelay ( 3000 );
 		}
 		if ( ( port_type & ETH_TYPE ) == 0 && !disconnected ) {
 				nodnic_supported = 0;
@@ -5405,7 +5445,7 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon *h
 	if ( flexboot_nodnic_is_supported ( pci ) == 0 ) {
 		rc = -ENOTSUP;
 	} else {
-		DBGC ( hermon, "NODNIC is supported\n" );
+		DBGC_HERMON ( hermon, "NODNIC is supported\n" );
 		hermon_read_flash_for_nodnic ( hermon );
 		rc = 0;
 	}
@@ -5413,7 +5453,7 @@ static int hermon_nodnic_is_supported ( struct pci_device *pci, struct hermon *h
 err_bad_type:
 err_get_num_ports:
 	if ( rc ) {
-		DBGC ( hermon, "NODNIC is not supported\n" );
+		DBGC_HERMON ( hermon, "NODNIC is not supported\n" );
 	}
 	return ( rc == 0 );
 }
@@ -5442,10 +5482,7 @@ static mlx_status hermon_nodnic_fill_eth_send_wqe ( struct ib_device *ibdev,
 		goto err;
 	}
 
-	MLX_FILL_2 ( &eth_wqe->ctrl, 0,
-			     opcode, 0xa,
-			     owner,
-				 ( ( wqe_idx & send_ring->nodnic_ring.num_wqes ) ? 1 : 0 ) );
+
 	MLX_FILL_1 ( &eth_wqe->ctrl, 1, ds,
 		     0x2 );
 	MLX_FILL_2 ( &eth_wqe->ctrl, 2,
@@ -5458,6 +5495,10 @@ static mlx_status hermon_nodnic_fill_eth_send_wqe ( struct ib_device *ibdev,
 		     local_address_h, virt_to_bus ( iobuf->data ) );
 	MLX_FILL_1 ( &eth_wqe->data[0], 3,
 		     local_address_l, virt_to_bus ( iobuf->data ) );
+	MLX_FILL_2 ( &eth_wqe->ctrl, 0,
+			     opcode, 0xa,
+			     owner,
+				 ( ( wqe_idx & send_ring->nodnic_ring.num_wqes ) ? 1 : 0 ) );
 err:
 	return status;
 }
@@ -5551,18 +5592,18 @@ static int hermon_probe ( struct pci_device *pci ) {
 	struct hermon *hermon = NULL;
 	int rc;
 
-	DBG ( "%s: start\n", __FUNCTION__ );
+	DBG_HERMON ( "%s: start\n", __FUNCTION__ );
 
 	if ( ! pci ) {
 		printf ( "%s: PCI is NULL\n", __FUNCTION__ );
 		rc = -EINVAL;
-		goto probe_done;
+		goto probe_err;
 	}
 
 	hermon = hermon_alloc();
 	if ( ! hermon ) {
 		rc = -ENOMEM;
-		goto probe_done;
+		goto probe_err;
 	}
 
 	pci_set_drvdata ( pci, hermon );
@@ -5577,19 +5618,23 @@ static int hermon_probe ( struct pci_device *pci ) {
 		hermon_nodnic_supported = hermon_nodnic_is_supported ( pci, hermon );
 
 	if ( boot_post_shell || ( ! hermon_nodnic_supported ) ) {
-		DBG ( "%s: Using no NODNIC driver\n", __FUNCTION__ );
+		DBG_HERMON ( "%s: Using no NODNIC driver\n", __FUNCTION__ );
 		rc = hermon_probe_no_nodnic ( pci, hermon );
 		goto probe_done;
 	}
 
-	DBG ( "%s: Using NODNIC driver\n", __FUNCTION__ );
+	DBG_HERMON ( "%s: Using NODNIC driver\n", __FUNCTION__ );
 
 	rc = flexboot_nodnic_probe ( pci, &hermon_nodnic_callbacks, hermon );
 
 probe_done:
-	DBG ( "%s: rc = %d\n", __FUNCTION__, rc );
-	if ( rc || hermon_nodnic_supported )
+	if ( rc || hermon_nodnic_supported ) {
+		iounmap ( hermon->config );
+		iounmap ( hermon->uar );
 		hermon_free ( hermon );
+	}
+probe_err:
+	DBG_HERMON ( "%s: rc = %d\n", __FUNCTION__, rc );
 	return rc;
 }
 
@@ -5599,19 +5644,17 @@ probe_done:
  * @v pci		PCI device
  */
 static void hermon_remove ( struct pci_device *pci ) {
-	DBG ( "%s: start\n", __FUNCTION__ );
+	DBG_HERMON ( "%s: start\n", __FUNCTION__ );
 
 	if ( boot_post_shell || ( ! hermon_nodnic_supported ) ) {
-		DBG ( "%s: Using no NODNIC driver remove\n", __FUNCTION__ );
+		DBG_HERMON ( "%s: Using no NODNIC driver remove\n", __FUNCTION__ );
 		hermon_remove_no_nodnic ( pci );
 		return;
 	}
-
-	DBG ( "%s: Using NODNIC driver remove\n", __FUNCTION__ );
-
+	DBG_HERMON ( "%s: Using NODNIC driver remove\n", __FUNCTION__ );
 	flexboot_nodnic_remove ( pci );
 
-	DBG ( "%s: end\n", __FUNCTION__ );
+	DBG_HERMON ( "%s: end\n", __FUNCTION__ );
 }
 
 static struct pci_device_id hermon_nics[] = {

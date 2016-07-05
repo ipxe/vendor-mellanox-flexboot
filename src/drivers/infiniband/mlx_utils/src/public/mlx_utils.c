@@ -44,11 +44,12 @@ bail:
 
 mlx_status
 mlx_utils_teardown(
-				IN mlx_utils *utils __attribute__ ((unused))
+				IN mlx_utils *utils
 				)
 {
 	mlx_status status = MLX_SUCCESS;
 	mlx_utils_free_lock(utils);
+	mlx_pci_teardown(utils);
 	return status;
 }
 

@@ -45,6 +45,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/dhcp.h>
 #include <ipxe/uri.h>
 #include <ipxe/tftp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -181,7 +182,7 @@ static void tftp_free ( struct refcnt *refcnt ) {
  */
 static void tftp_done ( struct tftp_request *tftp, int rc ) {
 
-	DBGC ( tftp, "TFTP %p finished with status %d (%s)\n",
+	DBGC_TFTP ( tftp, "TFTP %p finished with status %d (%s)\n",
 	       tftp, rc, strerror ( rc ) );
 
 	/* Stop the retry timer */
@@ -218,7 +219,7 @@ static int tftp_reopen ( struct tftp_request *tftp ) {
 	if ( ( rc = xfer_open_named_socket ( &tftp->socket, SOCK_DGRAM,
 					     ( struct sockaddr * ) &server,
 					     tftp->uri->host, NULL ) ) != 0 ) {
-		DBGC ( tftp, "TFTP %p could not open socket: %s\n",
+		DBGC_TFTP ( tftp, "TFTP %p could not open socket: %s\n",
 		       tftp, strerror ( rc ) );
 		return rc;
 	}
@@ -246,7 +247,7 @@ static int tftp_reopen_mc ( struct tftp_request *tftp,
 	 */
 	if ( ( rc = xfer_open_socket ( &tftp->mc_socket, SOCK_DGRAM,
 				       local, local ) ) != 0 ) {
-		DBGC ( tftp, "TFTP %p could not open multicast "
+		DBGC_TFTP ( tftp, "TFTP %p could not open multicast "
 		       "socket: %s\n", tftp, strerror ( rc ) );
 		return rc;
 	}
@@ -282,7 +283,7 @@ static int tftp_presize ( struct tftp_request *tftp, size_t filesize ) {
 	 */
 	num_blocks = ( ( filesize / tftp->blksize ) + 1 );
 	if ( ( rc = bitmap_resize ( &tftp->bitmap, num_blocks ) ) != 0 ) {
-		DBGC ( tftp, "TFTP %p could not resize bitmap to %d blocks: "
+		DBGC_TFTP ( tftp, "TFTP %p could not resize bitmap to %d blocks: "
 		       "%s\n", tftp, num_blocks, strerror ( rc ) );
 		return rc;
 	}
@@ -332,13 +333,13 @@ static int tftp_send_rrq ( struct tftp_request *tftp ) {
 	struct io_buffer *iobuf;
 	size_t blksize;
 
-	DBGC ( tftp, "TFTP %p requesting \"%s\"\n", tftp, path );
+	DBGC_TFTP ( tftp, "TFTP %p requesting \"%s\"\n", tftp, path );
 
 	/* Allocate buffer */
 	len = ( sizeof ( *rrq ) + strlen ( path ) + 1 /* NUL */
 		+ 5 + 1 /* "octet" + NUL */
 		+ 7 + 1 + 5 + 1 /* "blksize" + NUL + ddddd + NUL */
-		+ 5 + 1 + 1 + 1 /* "tsize" + NUL + "0" + NUL */ 
+		+ 5 + 1 + 1 + 1 /* "tsize" + NUL + "0" + NUL */
 		+ 9 + 1 + 1 /* "multicast" + NUL + NUL */ );
 	iobuf = xfer_alloc_iob ( &tftp->socket, len );
 	if ( ! iobuf )
@@ -388,7 +389,7 @@ static int tftp_send_ack ( struct tftp_request *tftp ) {
 
 	/* Determine next required block number */
 	block = bitmap_first_gap ( &tftp->bitmap );
-	DBGC2 ( tftp, "TFTP %p sending ACK for block %d\n", tftp, block );
+	DBGC2_TFTP ( tftp, "TFTP %p sending ACK for block %d\n", tftp, block );
 
 	/* Allocate buffer */
 	iobuf = xfer_alloc_iob ( &tftp->socket, sizeof ( *ack ) );
@@ -421,7 +422,7 @@ static int tftp_send_error ( struct tftp_request *tftp, int errcode,
 	};
 	size_t msglen;
 
-	DBGC2 ( tftp, "TFTP %p sending ERROR %d: %s\n", tftp, errcode,
+	DBGC2_TFTP ( tftp, "TFTP %p sending ERROR %d: %s\n", tftp, errcode,
 		errmsg );
 
 	/* Allocate buffer */
@@ -488,17 +489,17 @@ static void tftp_timer_expired ( struct retry_timer *timer, int fail ) {
 			/* If we have received any response from the server,
 			 * try resending the RRQ to restart the download.
 			 */
-			DBGC ( tftp, "TFTP %p attempting reopen\n", tftp );
+			DBGC_TFTP ( tftp, "TFTP %p attempting reopen\n", tftp );
 			if ( ( rc = tftp_reopen ( tftp ) ) != 0 )
 				goto err;
 		} else {
 			/* Fall back to plain TFTP after several attempts */
 			tftp->mtftp_timeouts++;
-			DBGC ( tftp, "TFTP %p timeout %d waiting for MTFTP "
+			DBGC_TFTP ( tftp, "TFTP %p timeout %d waiting for MTFTP "
 			       "open\n", tftp, tftp->mtftp_timeouts );
 
 			if ( tftp->mtftp_timeouts > MTFTP_MAX_TIMEOUTS ) {
-				DBGC ( tftp, "TFTP %p falling back to plain "
+				DBGC_TFTP ( tftp, "TFTP %p falling back to plain "
 				       "TFTP\n", tftp );
 				tftp->flags = TFTP_FL_RRQ_SIZES;
 
@@ -550,11 +551,11 @@ static int tftp_process_blksize ( struct tftp_request *tftp,
 
 	tftp->blksize = strtoul ( value, &end, 10 );
 	if ( *end ) {
-		DBGC ( tftp, "TFTP %p got invalid blksize \"%s\"\n",
+		DBGC_TFTP ( tftp, "TFTP %p got invalid blksize \"%s\"\n",
 		       tftp, value );
 		return -EINVAL_BLKSIZE;
 	}
-	DBGC ( tftp, "TFTP %p blksize=%d\n", tftp, tftp->blksize );
+	DBGC_TFTP ( tftp, "TFTP %p blksize=%d\n", tftp, tftp->blksize );
 
 	return 0;
 }
@@ -572,11 +573,11 @@ static int tftp_process_tsize ( struct tftp_request *tftp,
 
 	tftp->tsize = strtoul ( value, &end, 10 );
 	if ( *end ) {
-		DBGC ( tftp, "TFTP %p got invalid tsize \"%s\"\n",
+		DBGC_TFTP ( tftp, "TFTP %p got invalid tsize \"%s\"\n",
 		       tftp, value );
 		return -EINVAL_TSIZE;
 	}
-	DBGC ( tftp, "TFTP %p tsize=%ld\n", tftp, tftp->tsize );
+	DBGC_TFTP ( tftp, "TFTP %p tsize=%ld\n", tftp, tftp->tsize );
 
 	return 0;
 }
@@ -607,13 +608,13 @@ static int tftp_process_multicast ( struct tftp_request *tftp,
 	addr = buf;
 	port = strchr ( addr, ',' );
 	if ( ! port ) {
-		DBGC ( tftp, "TFTP %p multicast missing port,mc\n", tftp );
+		DBGC_TFTP ( tftp, "TFTP %p multicast missing port,mc\n", tftp );
 		return -EINVAL_MC_NO_PORT;
 	}
 	*(port++) = '\0';
 	mc = strchr ( port, ',' );
 	if ( ! mc ) {
-		DBGC ( tftp, "TFTP %p multicast missing mc\n", tftp );
+		DBGC_TFTP ( tftp, "TFTP %p multicast missing mc\n", tftp );
 		return -EINVAL_MC_NO_MC;
 	}
 	*(mc++) = '\0';
@@ -622,27 +623,27 @@ static int tftp_process_multicast ( struct tftp_request *tftp,
 	if ( strtoul ( mc, &mc_end, 0 ) == 0 )
 		tftp->flags &= ~TFTP_FL_SEND_ACK;
 	if ( *mc_end ) {
-		DBGC ( tftp, "TFTP %p multicast invalid mc %s\n", tftp, mc );
+		DBGC_TFTP ( tftp, "TFTP %p multicast invalid mc %s\n", tftp, mc );
 		return -EINVAL_MC_INVALID_MC;
 	}
-	DBGC ( tftp, "TFTP %p is%s the master client\n",
+	DBGC_TFTP ( tftp, "TFTP %p is%s the master client\n",
 	       tftp, ( ( tftp->flags & TFTP_FL_SEND_ACK ) ? "" : " not" ) );
 	if ( *addr && *port ) {
 		socket.sin.sin_family = AF_INET;
 		if ( inet_aton ( addr, &socket.sin.sin_addr ) == 0 ) {
-			DBGC ( tftp, "TFTP %p multicast invalid IP address "
+			DBGC_TFTP ( tftp, "TFTP %p multicast invalid IP address "
 			       "%s\n", tftp, addr );
 			return -EINVAL_MC_INVALID_IP;
 		}
-		DBGC ( tftp, "TFTP %p multicast IP address %s\n",
+		DBGC_TFTP ( tftp, "TFTP %p multicast IP address %s\n",
 		       tftp, inet_ntoa ( socket.sin.sin_addr ) );
 		socket.sin.sin_port = htons ( strtoul ( port, &port_end, 0 ) );
 		if ( *port_end ) {
-			DBGC ( tftp, "TFTP %p multicast invalid port %s\n",
+			DBGC_TFTP ( tftp, "TFTP %p multicast invalid port %s\n",
 			       tftp, port );
 			return -EINVAL_MC_INVALID_PORT;
 		}
-		DBGC ( tftp, "TFTP %p multicast port %d\n",
+		DBGC_TFTP ( tftp, "TFTP %p multicast port %d\n",
 		       tftp, ntohs ( socket.sin.sin_port ) );
 		if ( ( rc = tftp_reopen_mc ( tftp, &socket.sa ) ) != 0 )
 			return rc;
@@ -689,7 +690,7 @@ static int tftp_process_option ( struct tftp_request *tftp,
 			return option->process ( tftp, value );
 	}
 
-	DBGC ( tftp, "TFTP %p received unknown option \"%s\" = \"%s\"\n",
+	DBGC_TFTP ( tftp, "TFTP %p received unknown option \"%s\" = \"%s\"\n",
 	       tftp, name, value );
 
 	/* Unknown options should be silently ignored */
@@ -714,7 +715,7 @@ static int tftp_rx_oack ( struct tftp_request *tftp, void *buf, size_t len ) {
 
 	/* Sanity check */
 	if ( len < sizeof ( *oack ) ) {
-		DBGC ( tftp, "TFTP %p received underlength OACK packet "
+		DBGC_TFTP ( tftp, "TFTP %p received underlength OACK packet "
 		       "length %zd\n", tftp, len );
 		rc = -EINVAL;
 		goto done;
@@ -732,22 +733,22 @@ static int tftp_rx_oack ( struct tftp_request *tftp, void *buf, size_t len ) {
 		 */
 		value = ( name + strnlen ( name, ( end - name ) ) + 1 );
 		if ( value > end ) {
-			DBGC ( tftp, "TFTP %p received OACK with malformed "
+			DBGC_TFTP ( tftp, "TFTP %p received OACK with malformed "
 			       "option name:\n", tftp );
-			DBGC_HD ( tftp, oack, len );
+			DBGC_HD_TFTP ( tftp, oack, len );
 			break;
 		}
 		if ( value == end ) {
-			DBGC ( tftp, "TFTP %p received OACK missing value "
+			DBGC_TFTP ( tftp, "TFTP %p received OACK missing value "
 			       "for option \"%s\"\n", tftp, name );
-			DBGC_HD ( tftp, oack, len );
+			DBGC_HD_TFTP ( tftp, oack, len );
 			break;
 		}
 		next = ( value + strnlen ( value, ( end - value ) ) + 1 );
 		if ( next > end ) {
-			DBGC ( tftp, "TFTP %p received OACK with malformed "
+			DBGC_TFTP ( tftp, "TFTP %p received OACK with malformed "
 			       "value for option \"%s\":\n", tftp, name );
-			DBGC_HD ( tftp, oack, len );
+			DBGC_HD_TFTP ( tftp, oack, len );
 			break;
 		}
 
@@ -791,7 +792,7 @@ static int tftp_rx_data ( struct tftp_request *tftp,
 
 	/* Sanity check */
 	if ( iob_len ( iobuf ) < sizeof ( *data ) ) {
-		DBGC ( tftp, "TFTP %p received underlength DATA packet "
+		DBGC_TFTP ( tftp, "TFTP %p received underlength DATA packet "
 		       "length %zd\n", tftp, iob_len ( iobuf ) );
 		rc = -EINVAL;
 		goto done;
@@ -800,7 +801,7 @@ static int tftp_rx_data ( struct tftp_request *tftp,
 	/* Calculate block number */
 	block = ( ( bitmap_first_gap ( &tftp->bitmap ) + 1 ) & ~0xffff );
 	if ( data->block == 0 && block == 0 ) {
-		DBGC ( tftp, "TFTP %p received data block 0\n", tftp );
+		DBGC_TFTP ( tftp, "TFTP %p received data block 0\n", tftp );
 		rc = -EINVAL;
 		goto done;
 	}
@@ -811,7 +812,7 @@ static int tftp_rx_data ( struct tftp_request *tftp,
 	iob_pull ( iobuf, sizeof ( *data ) );
 	data_len = iob_len ( iobuf );
 	if ( data_len > tftp->blksize ) {
-		DBGC ( tftp, "TFTP %p received overlength DATA packet "
+		DBGC_TFTP ( tftp, "TFTP %p received overlength DATA packet "
 		       "length %zd\n", tftp, data_len );
 		rc = -EINVAL;
 		goto done;
@@ -823,7 +824,7 @@ static int tftp_rx_data ( struct tftp_request *tftp,
 	meta.offset = offset;
 	if ( ( rc = xfer_deliver ( &tftp->xfer, iob_disown ( iobuf ),
 				   &meta ) ) != 0 ) {
-		DBGC ( tftp, "TFTP %p could not deliver data: %s\n",
+		DBGC_TFTP ( tftp, "TFTP %p could not deliver data: %s\n",
 		       tftp, strerror ( rc ) );
 		goto done;
 	}
@@ -878,14 +879,14 @@ static int tftp_rx_error ( struct tftp_request *tftp, void *buf, size_t len ) {
 
 	/* Sanity check */
 	if ( len < sizeof ( *error ) ) {
-		DBGC ( tftp, "TFTP %p received underlength ERROR packet "
+		DBGC_TFTP ( tftp, "TFTP %p received underlength ERROR packet "
 		       "length %zd\n", tftp, len );
 		return -EINVAL;
 	}
 
-	DBGC ( tftp, "TFTP %p received ERROR packet with code %d, message "
+	DBGC_TFTP ( tftp, "TFTP %p received ERROR packet with code %d, message "
 	       "\"%s\"\n", tftp, ntohs ( error->errcode ), error->errmsg );
-	
+
 	/* Determine final operation result */
 	rc = tftp_errcode_to_rc ( ntohs ( error->errcode ) );
 
@@ -910,15 +911,15 @@ static int tftp_rx ( struct tftp_request *tftp,
 	struct tftp_common *common = iobuf->data;
 	size_t len = iob_len ( iobuf );
 	int rc = -EINVAL;
-	
+
 	/* Sanity checks */
 	if ( len < sizeof ( *common ) ) {
-		DBGC ( tftp, "TFTP %p received underlength packet length "
+		DBGC_TFTP ( tftp, "TFTP %p received underlength packet length "
 		       "%zd\n", tftp, len );
 		goto done;
 	}
 	if ( ! meta->src ) {
-		DBGC ( tftp, "TFTP %p received packet without source port\n",
+		DBGC_TFTP ( tftp, "TFTP %p received packet without source port\n",
 		       tftp );
 		goto done;
 	}
@@ -927,11 +928,11 @@ static int tftp_rx ( struct tftp_request *tftp,
 	st_src = ( struct sockaddr_tcpip * ) meta->src;
 	if ( ! tftp->peer.st_family ) {
 		memcpy ( &tftp->peer, st_src, sizeof ( tftp->peer ) );
-		DBGC ( tftp, "TFTP %p using remote port %d\n", tftp,
+		DBGC_TFTP ( tftp, "TFTP %p using remote port %d\n", tftp,
 		       ntohs ( tftp->peer.st_port ) );
 	} else if ( memcmp ( &tftp->peer, st_src,
 			     sizeof ( tftp->peer ) ) != 0 ) {
-		DBGC ( tftp, "TFTP %p received packet from wrong source (got "
+		DBGC_TFTP ( tftp, "TFTP %p received packet from wrong source (got "
 		       "%d, wanted %d)\n", tftp, ntohs ( st_src->st_port ),
 		       ntohs ( tftp->peer.st_port ) );
 		goto done;
@@ -948,7 +949,7 @@ static int tftp_rx ( struct tftp_request *tftp,
 		rc = tftp_rx_error ( tftp, iobuf->data, len );
 		break;
 	default:
-		DBGC ( tftp, "TFTP %p received strange packet type %d\n",
+		DBGC_TFTP ( tftp, "TFTP %p received strange packet type %d\n",
 		       tftp, ntohs ( common->opcode ) );
 		break;
 	};
@@ -1104,7 +1105,7 @@ static int tftp_core_open ( struct interface *xfer, struct uri *uri,
 	return 0;
 
  err:
-	DBGC ( tftp, "TFTP %p could not create request: %s\n",
+	DBGC_TFTP ( tftp, "TFTP %p could not create request: %s\n",
 	       tftp, strerror ( rc ) );
 	tftp_done ( tftp, rc );
 	ref_put ( &tftp->refcnt );
@@ -1183,13 +1184,12 @@ struct uri_opener mtftp_uri_opener __uri_opener = {
  */
 static int tftp_apply_settings ( void ) {
 	static struct in_addr tftp_server = { 0 };
-	struct in_addr last_tftp_server;
+	struct in_addr new_tftp_server;
 	char uri_string[32];
 	struct uri *uri;
 
 	/* Retrieve TFTP server setting */
-	last_tftp_server = tftp_server;
-	fetch_ipv4_setting ( NULL, &next_server_setting, &tftp_server );
+	fetch_ipv4_setting ( NULL, &next_server_setting, &new_tftp_server );
 
 	/* If TFTP server setting has changed, set the current working
 	 * URI to match.  Do it only when the TFTP server has changed
@@ -1198,18 +1198,19 @@ static int tftp_apply_settings ( void ) {
 	 * an unrelated setting and triggered all the settings
 	 * applicators.
 	 */
-	if ( tftp_server.s_addr != last_tftp_server.s_addr ) {
-		if ( tftp_server.s_addr ) {
-			snprintf ( uri_string, sizeof ( uri_string ),
-				   "tftp://%s/", inet_ntoa ( tftp_server ) );
-			uri = parse_uri ( uri_string );
-			if ( ! uri )
-				return -ENOMEM;
-		} else {
-			uri = NULL;
-		}
+	if ( new_tftp_server.s_addr &&
+	     ( new_tftp_server.s_addr != tftp_server.s_addr ) ) {
+		DBGC_TFTP ( &tftp_server, "TFTP server changed %s => ",
+		       inet_ntoa ( tftp_server ) );
+		DBGC_TFTP ( &tftp_server, "%s\n", inet_ntoa ( new_tftp_server ) );
+		snprintf ( uri_string, sizeof ( uri_string ),
+			   "tftp://%s/", inet_ntoa ( new_tftp_server ) );
+		uri = parse_uri ( uri_string );
+		if ( ! uri )
+			return -ENOMEM;
 		churi ( uri );
 		uri_put ( uri );
+		tftp_server = new_tftp_server;
 	}
 
 	return 0;

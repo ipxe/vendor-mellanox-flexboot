@@ -34,6 +34,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/netdevice.h>
 #include <ipxe/neighbour.h>
 #include <ipxe/arp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -90,7 +91,7 @@ int arp_tx_request ( struct net_device *netdev,
 	/* Transmit ARP request */
 	if ( ( rc = net_tx ( iobuf, netdev, &arp_protocol,
 			     netdev->ll_broadcast, netdev->ll_addr ) ) != 0 ) {
-		DBGC ( netdev, "ARP %s %s %s could not transmit request: %s\n",
+		DBGC_ARP ( netdev, "ARP %s %s %s could not transmit request: %s\n",
 		       netdev->name, net_protocol->name,
 		       net_protocol->ntoa ( net_dest ), strerror ( rc ) );
 		return rc;
@@ -139,7 +140,14 @@ static int arp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	struct arp_net_protocol *arp_net_protocol;
 	struct net_protocol *net_protocol;
 	struct ll_protocol *ll_protocol;
+	size_t len = iob_len ( iobuf );
 	int rc;
+
+	/* Sanity check */
+	if ( ( len < sizeof ( *arphdr ) ) || ( len < arp_len ( arphdr ) ) ) {
+		rc = -EINVAL;
+		goto done;
+	}
 
 	/* Identify network-layer and link-layer protocols */
 	arp_net_protocol = arp_find_protocol ( arphdr->ar_pro );
@@ -175,7 +183,7 @@ static int arp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	}
 
 	/* Change request to a reply */
-	DBGC2 ( netdev, "ARP %s %s %s reply => %s %s\n",
+	DBGC2_ARP ( netdev, "ARP %s %s %s reply => %s %s\n",
 		netdev->name, net_protocol->name,
 		net_protocol->ntoa ( arp_target_pa ( arphdr ) ),
 		ll_protocol->name, ll_protocol->ntoa ( netdev->ll_addr ) );
@@ -188,7 +196,7 @@ static int arp_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	if ( ( rc = net_tx ( iob_disown ( iobuf ), netdev, &arp_protocol,
 			     arp_target_ha ( arphdr ),
 			     netdev->ll_addr ) ) != 0 ) {
-		DBGC ( netdev, "ARP %s %s %s could not transmit reply: %s\n",
+		DBGC_ARP ( netdev, "ARP %s %s %s could not transmit reply: %s\n",
 		       netdev->name, net_protocol->name,
 		       net_protocol->ntoa ( arp_target_pa ( arphdr ) ),
 		       strerror ( rc ) );

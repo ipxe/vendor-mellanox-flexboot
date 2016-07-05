@@ -60,6 +60,7 @@ struct nvconfig_tlv_mapping nvconfig_tlv_mapping[] = {
 		TlvMappingEntry(0x2204, 0x244, NVRAM_TLV_CLASS_HOST, FALSE),
 		TlvMappingEntry(0x2205, 0x245, NVRAM_TLV_CLASS_HOST, FALSE),
 		TlvMappingEntry(0x2207, 0x247, NVRAM_TLV_CLASS_HOST, FALSE),
+		TlvMappingEntry(0x2002, 0x202, NVRAM_TLV_CLASS_HOST, FALSE),
 		TlvMappingEntry(0, 0, 0, 0),
 };
 

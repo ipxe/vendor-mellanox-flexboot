@@ -37,16 +37,10 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 #define GOLAN_PAS_SIZE	sizeof(uint64_t)
 
+#define GOLAN_INVALID_LKEY 0x00000100UL
+
 #define GOLAN_MAX_PORTS	2
 #define GOLAN_PORT_BASE 1
-
-#undef	mb
-#undef rmb
-#undef wmb
-
-#define mb()    asm volatile ("mfence":::"memory")
-#define rmb()   asm volatile ("lfence":::"memory")
-#define wmb()   asm volatile ("sfence":::"memory")
 
 #define MELLANOX_VID	0x15b3
 #define GOLAN_HCA_BAR	PCI_BASE_ADDRESS_0	//BAR 0
@@ -82,9 +76,6 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define GET_INBOX(golan, idx)		(&(((struct mbox *)(golan->mboxes.inbox))[idx]))
 #define GET_OUTBOX(golan, idx)		(&(((struct mbox *)(golan->mboxes.outbox))[idx]))
 
-#define INBOX_CMD( cmd )	user_to_virt(phys_to_user(be32_to_cpu(((uint32_t *)cmd->in_ptr) + 1)))	// Only true for 32 bit sys
-#define OUTBOX_CMD( cmd )	user_to_virt(phys_to_user(be32_to_cpu(((uint32_t *)cmd->out_ptr) + 1)))	// Only true for 32 bit sys
-
 #define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
 
 /* Fw status fields */
@@ -109,16 +100,16 @@ struct golan_cmdq_md {
 };
 
 struct golan_uar {
-    uint32_t    index;
-    void        *virt;
-    uint32_t    phys;
+    uint32_t    	index;
+    void        	*virt;
+    unsigned long	phys;
 };
 
 /* Queue Pair */
-#define GOLAN_SEND_WQE_BB_SIZE		64
-#define GOLAN_SEND_WQE_SIZE			sizeof(struct golan_send_wqe_ud)
-#define GOLAN_RECV_WQE_SIZE			sizeof(struct golan_recv_wqe_ud)
-#define GOLAN_WQEBBS_PER_SEND_WQE	DIV_ROUND_UP(GOLAN_SEND_WQE_SIZE, GOLAN_SEND_WQE_BB_SIZE)
+#define GOLAN_SEND_WQE_BB_SIZE			64
+#define GOLAN_SEND_UD_WQE_SIZE			sizeof(struct golan_send_wqe_ud)
+#define GOLAN_RECV_WQE_SIZE				sizeof(struct golan_recv_wqe_ud)
+#define GOLAN_WQEBBS_PER_SEND_UD_WQE	DIV_ROUND_UP(GOLAN_SEND_UD_WQE_SIZE, GOLAN_SEND_WQE_BB_SIZE)
 #define GOLAN_SEND_OPCODE			0x0a
 #define GOLAN_WQE_CTRL_WQE_IDX_BIT	8
 
@@ -132,43 +123,49 @@ enum golan_ib_qp_state {
 	GOLAN_IB_QPS_ERR
 };
 
-/*
-const char *golan_qp_state_as_string[] = {
-	"RESET",
-	"INIT",
-	"RTR",
-	"RTS",
-	"SQD",
-	"SQE",
-	"ERR"
-};
-*/
 struct golan_send_wqe_ud {
-	struct golan_wqe_ctrl_seg	ctrl;
-	struct golan_av			datagram;
-	struct golan_wqe_data_seg	data;
+	struct golan_wqe_ctrl_seg ctrl;
+	struct golan_av datagram;
+	struct golan_wqe_data_seg data;
+};
+
+union golan_send_wqe {
+	struct golan_send_wqe_ud ud;
+	uint8_t pad[GOLAN_WQEBBS_PER_SEND_UD_WQE * GOLAN_SEND_WQE_BB_SIZE];
 };
 
 struct golan_recv_wqe_ud {
-	struct golan_wqe_data_seg	data;
+	struct golan_wqe_data_seg data[2];
 };
 
-struct golan_wq {
-	void	*wqes;
+struct golan_recv_wq {
+	struct golan_recv_wqe_ud *wqes;
 	/* WQ size in bytes */
-	int		size;
+	int	size;
 	/* In SQ, it will be increased in wqe_size (number of WQEBBs per WQE) */
-	u16		next_idx;
+	u16 next_idx;
+	/** GRH buffers (if applicable) */
+	struct ib_global_route_header *grh;
+	/** Size of GRH buffers */
+	size_t grh_size;
+};
+
+struct golan_send_wq {
+	union golan_send_wqe *wqes;
+	/* WQ size in bytes */
+	int size;
+	/* In SQ, it will be increased in wqe_size (number of WQEBBs per WQE) */
+	u16 next_idx;
 };
 
 struct golan_queue_pair {
-	void			*wqes;
-	int			size;
-	struct golan_wq		rq;
-	struct golan_wq		sq;
-	struct golan_qp_db	*doorbell_record;
-	u32			doorbell_qpn;
-	enum golan_ib_qp_state	state;
+	void *wqes;
+	int size;
+	struct golan_recv_wq rq;
+	struct golan_send_wq sq;
+	struct golan_qp_db *doorbell_record;
+	u32 doorbell_qpn;
+	enum golan_ib_qp_state state;
 };
 
 /* Completion Queue */

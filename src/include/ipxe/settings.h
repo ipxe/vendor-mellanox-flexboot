@@ -460,6 +460,16 @@ extern const struct setting
 busid_setting __setting ( SETTING_NETDEV, busid );
 extern const struct setting
 user_class_setting __setting ( SETTING_HOST_EXTRA, user-class );
+extern const struct setting
+manufacturer_setting __setting ( SETTING_HOST_EXTRA, manufacturer );
+extern const struct setting
+product_setting __setting ( SETTING_HOST_EXTRA, product );
+extern const struct setting
+serial_setting __setting ( SETTING_HOST_EXTRA, serial );
+extern const struct setting
+asset_setting __setting ( SETTING_HOST_EXTRA, asset );
+extern const struct setting
+board_serial_setting __setting ( SETTING_HOST_EXTRA, board-serial );
 
 extern const struct setting
 uriboot_retry_delay_setting __setting ( SETTING_BOOT_EXTRA, uriboot_retry_delay );
@@ -473,6 +483,8 @@ extern const struct setting
 dhcpv4_disabled_setting __setting ( SETTING_FLEXBOOT, dhcpv4_disabled );
 extern const struct setting
 dhcpv6_disabled_setting __setting ( SETTING_FLEXBOOT, dhcpv6_disabled );
+extern const struct setting
+client_identifier_setting __setting ( SETTING_FLEXBOOT, client_identifier );
 
 /**
  * Initialise a settings block

@@ -36,6 +36,7 @@ typedef struct _nodnic_device_capabilites 		nodnic_device_capabilites;
 typedef struct _nodnic_qp 						nodnic_qp;
 typedef struct _nodnic_cq 						nodnic_cq;
 typedef struct _nodnic_eq						nodnic_eq;
+typedef struct _nodnic_qp_db					nodnic_qp_db;
 
 /* NODNIC Port states
  * Bit 0 - port open/close
@@ -91,7 +92,11 @@ struct nodnic_ring {
 	mlx_uint32 num_wqes;
 	mlx_uint32 qpn;
 	mlx_uint32 next_idx;
-	mlx_uint32	ring_pi;
+	struct nodnic_recv_doorbell {
+		mlx_physical_address doorbell_physical;
+		mlx_void *map;
+		nodnic_qp_db *doorbell_record;
+	} recv_doorbell;
 };
 
 struct nodnic_send_ring{
@@ -136,6 +141,7 @@ struct _nodnic_device_capabilites{
 #ifdef DEVICE_CX3
 	mlx_uint8					crspace_doorbells;
 #endif
+	mlx_uint8					support_rx_pi_dma;
 };
 
 #ifdef DEVICE_CX3
@@ -197,5 +203,8 @@ struct _nodnic_port_priv{
 #endif
 };
 
-
+struct _nodnic_qp_db {
+	mlx_uint32	recv_db;
+	mlx_uint32	send_db;
+} __attribute ( ( packed ) );
 #endif /* STUB_NODNIC_NODNICDATASTRUCTURES_H_ */

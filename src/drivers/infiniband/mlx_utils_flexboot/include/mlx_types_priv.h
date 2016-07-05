@@ -49,8 +49,12 @@ typedef void		mlx_void;
 
 #define MAC_ADDR_LEN 6
 typedef unsigned long	mlx_physical_address;
-typedef struct {
-	uint8_t Addr[MAC_ADDR_LEN];
+typedef union {
+	struct {
+		uint32_t low;
+		uint32_t high;
+	} __attribute__ (( packed ));
+	uint8_t addr[MAC_ADDR_LEN];
 } mlx_mac_address;
 
 #endif /* A_MLXUTILS_INCLUDE_PUBLIC_TYPES_H_ */

@@ -41,6 +41,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/errortab.h>
 #include <ipxe/ipv6.h>
 #include <ipxe/dhcpv6.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -518,7 +519,7 @@ static void dhcpv6_finished ( struct dhcpv6_session *dhcpv6, int rc ) {
 static void dhcpv6_set_state ( struct dhcpv6_session *dhcpv6,
 			       struct dhcpv6_session_state *state ) {
 
-	DBGC ( dhcpv6, "DHCPv6 %s entering %s state\n", dhcpv6->netdev->name,
+	DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s entering %s state\n", dhcpv6->netdev->name,
 	       dhcpv6_type_name ( state->tx_type ) );
 
 	/* Record state */
@@ -682,7 +683,7 @@ static int dhcpv6_tx ( struct dhcpv6_session *dhcpv6 ) {
 
 	/* Transmit packet */
 	if ( ( rc = xfer_deliver_iob ( &dhcpv6->xfer, iobuf ) ) != 0 ) {
-		DBGC ( dhcpv6, "DHCPv6 %s could not transmit: %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s could not transmit: %s\n",
 		       dhcpv6->netdev->name, strerror ( rc ) );
 		return rc;
 	}
@@ -733,7 +734,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 
 	/* Sanity checks */
 	if ( iob_len ( iobuf ) < sizeof ( *dhcphdr ) ) {
-		DBGC ( dhcpv6, "DHCPv6 %s received packet too short (%zd "
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received packet too short (%zd "
 		       "bytes, min %zd bytes)\n", dhcpv6->netdev->name,
 		       iob_len ( iobuf ), sizeof ( *dhcphdr ) );
 		rc = -EINVAL;
@@ -741,7 +742,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 	}
 	assert ( src != NULL );
 	assert ( src->sin6_family == AF_INET6 );
-	DBGC ( dhcpv6, "DHCPv6 %s received %s from %s\n",
+	DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s from %s\n",
 	       dhcpv6->netdev->name, dhcpv6_type_name ( dhcphdr->type ),
 	       inet6_ntoa ( &src->sin6_addr ) );
 
@@ -754,7 +755,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 	if ( ( rc = dhcpv6_check_duid ( &options, DHCPV6_CLIENT_ID,
 					&dhcpv6->client_duid,
 					sizeof ( dhcpv6->client_duid ) ) ) !=0){
-		DBGC ( dhcpv6, "DHCPv6 %s received %s without correct client "
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s without correct client "
 		       "ID: %s\n", dhcpv6->netdev->name,
 		       dhcpv6_type_name ( dhcphdr->type ), strerror ( rc ) );
 		goto done;
@@ -765,7 +766,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 	     ( ( rc = dhcpv6_check_duid ( &options, DHCPV6_SERVER_ID,
 					  dhcpv6->server_duid,
 					  dhcpv6->server_duid_len ) ) != 0 ) ) {
-		DBGC ( dhcpv6, "DHCPv6 %s received %s without correct server "
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s without correct server "
 		       "ID: %s\n", dhcpv6->netdev->name,
 		       dhcpv6_type_name ( dhcphdr->type ), strerror ( rc ) );
 		goto done;
@@ -773,7 +774,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 
 	/* Check message type */
 	if ( dhcphdr->type != dhcpv6->state->rx_type ) {
-		DBGC ( dhcpv6, "DHCPv6 %s received %s while expecting %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s while expecting %s\n",
 		       dhcpv6->netdev->name, dhcpv6_type_name ( dhcphdr->type ),
 		       dhcpv6_type_name ( dhcpv6->state->rx_type ) );
 		rc = -ENOTTY;
@@ -782,7 +783,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 
 	/* Fetch status code, if present */
 	if ( ( rc = dhcpv6_status_code ( &options ) ) != 0 ) {
-		DBGC ( dhcpv6, "DHCPv6 %s received %s with error status: %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s with error status: %s\n",
 		       dhcpv6->netdev->name, dhcpv6_type_name ( dhcphdr->type ),
 		       strerror ( rc ) );
 		/* This is plausibly the error we want to return */
@@ -794,7 +795,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 	if ( dhcpv6->state->flags & DHCPV6_RX_RECORD_IAADDR ) {
 		if ( ( rc = dhcpv6_iaaddr ( &options, dhcpv6->iaid,
 					    &dhcpv6->lease ) ) != 0 ) {
-			DBGC ( dhcpv6, "DHCPv6 %s received %s with unusable "
+			DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s with unusable "
 			       "IAADDR: %s\n", dhcpv6->netdev->name,
 			       dhcpv6_type_name ( dhcphdr->type ),
 			       strerror ( rc ) );
@@ -802,7 +803,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 			dhcpv6->rc = rc;
 			goto done;
 		}
-		DBGC ( dhcpv6, "DHCPv6 %s received %s is for %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s is for %s\n",
 		       dhcpv6->netdev->name, dhcpv6_type_name ( dhcphdr->type ),
 		       inet6_ntoa ( &dhcpv6->lease ) );
 	}
@@ -812,7 +813,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 		assert ( dhcpv6->server_duid == NULL );
 		option = dhcpv6_option ( &options, DHCPV6_SERVER_ID );
 		if ( ! option ) {
-			DBGC ( dhcpv6, "DHCPv6 %s received %s missing server "
+			DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s received %s missing server "
 			       "ID\n", dhcpv6->netdev->name,
 			       dhcpv6_type_name ( dhcphdr->type ) );
 			rc = -EINVAL;
@@ -832,7 +833,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 	if ( dhcpv6->state->flags & DHCPV6_RX_APPLY_IAADDR ) {
 		if ( ( rc = ipv6_set_address ( dhcpv6->netdev,
 					       &dhcpv6->lease ) ) != 0 ) {
-			DBGC ( dhcpv6, "DHCPv6 %s could not apply %s: %s\n",
+			DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s could not apply %s: %s\n",
 			       dhcpv6->netdev->name,
 			       inet6_ntoa ( &dhcpv6->lease ), strerror ( rc ) );
 			/* This is plausibly the error we want to return */
@@ -852,7 +853,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 
 		/* Register settings */
 		if ( ( rc = dhcpv6_register ( &options, parent ) ) != 0 ) {
-			DBGC ( dhcpv6, "DHCPv6 %s could not register "
+			DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s could not register "
 			       "settings: %s\n", dhcpv6->netdev->name,
 			       strerror ( rc ) );
 			goto done;
@@ -860,7 +861,7 @@ static int dhcpv6_rx ( struct dhcpv6_session *dhcpv6,
 
 		/* Mark as complete */
 		dhcpv6_finished ( dhcpv6, 0 );
-		DBGC ( dhcpv6, "DHCPv6 %s complete\n", dhcpv6->netdev->name );
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s complete\n", dhcpv6->netdev->name );
 	}
 
  done:
@@ -939,14 +940,14 @@ int start_dhcpv6 ( struct interface *job, struct net_device *netdev,
 	if ( ( len = fetch_uuid_setting ( NULL, &uuid_setting,
 					  &dhcpv6->client_duid.uuid ) ) < 0 ) {
 		rc = len;
-		DBGC ( dhcpv6, "DHCPv6 %s could not create DUID-UUID: %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s could not create DUID-UUID: %s\n",
 		       dhcpv6->netdev->name, strerror ( rc ) );
 		goto err_client_duid;
 	}
 
 	/* Construct IAID from link-layer address */
 	dhcpv6->iaid = crc32_le ( 0, netdev->ll_addr, ll_protocol->ll_addr_len);
-	DBGC ( dhcpv6, "DHCPv6 %s has XID %02x%02x%02x\n", dhcpv6->netdev->name,
+	DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s has XID %02x%02x%02x\n", dhcpv6->netdev->name,
 	       dhcpv6->xid[0], dhcpv6->xid[1], dhcpv6->xid[2] );
 
 	/* Enter initial state */
@@ -957,7 +958,7 @@ int start_dhcpv6 ( struct interface *job, struct net_device *netdev,
 	if ( ( rc = xfer_open_socket ( &dhcpv6->xfer, SOCK_DGRAM,
 				       &addresses.server.sa,
 				       &addresses.client.sa ) ) != 0 ) {
-		DBGC ( dhcpv6, "DHCPv6 %s could not open socket: %s\n",
+		DBGC_DHCPV6 ( dhcpv6, "DHCPv6 %s could not open socket: %s\n",
 		       dhcpv6->netdev->name, strerror ( rc ) );
 		goto err_open_socket;
 	}

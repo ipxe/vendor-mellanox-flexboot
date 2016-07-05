@@ -26,7 +26,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
  */
 #define PRODUCT_NAME "FlexBoot v" __BUILD_VERSION__
 #define PRODUCT_SHORT_NAME "FlexBoot"
-#define PRODUCT_URI "http://mellanox.com"
+#define PRODUCT_URI ""
 
 /*
  * Tag line

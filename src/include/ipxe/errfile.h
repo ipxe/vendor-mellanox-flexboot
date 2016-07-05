@@ -72,6 +72,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_blocktrans	       ( ERRFILE_CORE | 0x00200000 )
 #define ERRFILE_driver_settings	       ( ERRFILE_CORE | 0x00210000 )
 #define ERRFILE_status_updater	       ( ERRFILE_CORE | 0x00220000 )
+#define ERRFILE_flex_debug_log         ( ERRFILE_CORE | 0x00230000 )
 
 #define ERRFILE_eisa		     ( ERRFILE_DRIVER | 0x00000000 )
 #define ERRFILE_isa		     ( ERRFILE_DRIVER | 0x00010000 )
@@ -185,9 +186,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_smsc75xx	     ( ERRFILE_DRIVER | 0x00770000 )
 #define ERRFILE_intelvf		     ( ERRFILE_DRIVER | 0x00780000 )
 #define ERRFILE_intelxvf	     ( ERRFILE_DRIVER | 0x00790000 )
-#define ERRFILE_golan		     ( ERRFILE_DRIVER | 0x007a0000 )
-#define ERRFILE_hermon_settings	     ( ERRFILE_DRIVER | 0x007b0000 )
-#define ERRFILE_flexboot_nodnic	     ( ERRFILE_DRIVER | 0x007c0000 )
+#define ERRFILE_smsc95xx	     ( ERRFILE_DRIVER | 0x007a0000 )
+#define ERRFILE_acm		     ( ERRFILE_DRIVER | 0x007b0000 )
+#define ERRFILE_eoib		     ( ERRFILE_DRIVER | 0x007c0000 )
+#define ERRFILE_golan		     ( ERRFILE_DRIVER | 0x007d0000 )
+#define ERRFILE_hermon_settings	     ( ERRFILE_DRIVER | 0x007e0000 )
+#define ERRFILE_flexboot_nodnic	     ( ERRFILE_DRIVER | 0x007f0000 )
 
 #define ERRFILE_aoe			( ERRFILE_NET | 0x00000000 )
 #define ERRFILE_arp			( ERRFILE_NET | 0x00010000 )
@@ -261,6 +265,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_peerdisc		( ERRFILE_NET | 0x00450000 )
 #define ERRFILE_peerblk			( ERRFILE_NET | 0x00460000 )
 #define ERRFILE_peermux			( ERRFILE_NET | 0x00470000 )
+#define ERRFILE_xsigo			( ERRFILE_NET | 0x00480000 )
 
 #define ERRFILE_image		      ( ERRFILE_IMAGE | 0x00000000 )
 #define ERRFILE_elf		      ( ERRFILE_IMAGE | 0x00010000 )
@@ -347,7 +352,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ERRFILE_efi_watchdog	      ( ERRFILE_OTHER | 0x00490000 )
 #define ERRFILE_efi_pxe		      ( ERRFILE_OTHER | 0x004a0000 )
 #define ERRFILE_efi_usb		      ( ERRFILE_OTHER | 0x004b0000 )
-#define ERRFILE_boot_menu_ui	      ( ERRFILE_OTHER | 0x004c0000 )
+#define ERRFILE_efi_fbcon	      ( ERRFILE_OTHER | 0x004c0000 )
+#define ERRFILE_boot_menu_ui	      ( ERRFILE_OTHER | 0x004d0000 )
 
 /** @} */
 

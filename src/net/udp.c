@@ -11,6 +11,7 @@
 #include <ipxe/uri.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/udp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -85,7 +86,7 @@ static int udp_open_common ( struct interface *xfer,
 	udp = zalloc ( sizeof ( *udp ) );
 	if ( ! udp )
 		return -ENOMEM;
-	DBGC ( udp, "UDP %p allocated\n", udp );
+	DBGC_UDP ( udp, "UDP %p allocated\n", udp );
 	ref_init ( &udp->refcnt, NULL );
 	intf_init ( &udp->xfer, &udp_xfer_desc, &udp->refcnt );
 	if ( st_peer )
@@ -98,12 +99,12 @@ static int udp_open_common ( struct interface *xfer,
 		port = tcpip_bind ( st_local, udp_port_available );
 		if ( port < 0 ) {
 			rc = port;
-			DBGC ( udp, "UDP %p could not bind: %s\n",
+			DBGC_UDP ( udp, "UDP %p could not bind: %s\n",
 			       udp, strerror ( rc ) );
 			goto err;
 		}
 		udp->local.st_port = htons ( port );
-		DBGC ( udp, "UDP %p bound to port %d\n",
+		DBGC_UDP ( udp, "UDP %p bound to port %d\n",
 		       udp, ntohs ( udp->local.st_port ) );
 	}
 
@@ -160,7 +161,7 @@ static void udp_close ( struct udp_connection *udp, int rc ) {
 	list_del ( &udp->list );
 	ref_put ( &udp->refcnt );
 
-	DBGC ( udp, "UDP %p closed\n", udp );
+	DBGC_UDP ( udp, "UDP %p closed\n", udp );
 }
 
 /**
@@ -203,14 +204,14 @@ static int udp_tx ( struct udp_connection *udp, struct io_buffer *iobuf,
 	udphdr->chksum = tcpip_chksum ( udphdr, len );
 
 	/* Dump debugging information */
-	DBGC2 ( udp, "UDP %p TX %d->%d len %d\n", udp,
+	DBGC2_UDP ( udp, "UDP %p TX %d->%d len %d\n", udp,
 		ntohs ( udphdr->src ), ntohs ( udphdr->dest ),
 		ntohs ( udphdr->len ) );
 
 	/* Send it to the next layer for processing */
 	if ( ( rc = tcpip_tx ( iobuf, &udp_protocol, src, dest, netdev,
 			       &udphdr->chksum ) ) != 0 ) {
-		DBGC ( udp, "UDP %p could not transmit packet: %s\n",
+		DBGC_UDP ( udp, "UDP %p could not transmit packet: %s\n",
 		       udp, strerror ( rc ) );
 		return rc;
 	}
@@ -261,21 +262,21 @@ static int udp_rx ( struct io_buffer *iobuf,
 
 	/* Sanity check packet */
 	if ( iob_len ( iobuf ) < sizeof ( *udphdr ) ) {
-		DBG ( "UDP packet too short at %zd bytes (min %zd bytes)\n",
+		DBG_UDP ( "UDP packet too short at %zd bytes (min %zd bytes)\n",
 		      iob_len ( iobuf ), sizeof ( *udphdr ) );
-		
+
 		rc = -EINVAL;
 		goto done;
 	}
 	ulen = ntohs ( udphdr->len );
 	if ( ulen < sizeof ( *udphdr ) ) {
-		DBG ( "UDP length too short at %zd bytes "
+		DBG_UDP ( "UDP length too short at %zd bytes "
 		      "(header is %zd bytes)\n", ulen, sizeof ( *udphdr ) );
 		rc = -EINVAL;
 		goto done;
 	}
 	if ( ulen > iob_len ( iobuf ) ) {
-		DBG ( "UDP length too long at %zd bytes (packet is %zd "
+		DBG_UDP ( "UDP length too long at %zd bytes (packet is %zd "
 		      "bytes)\n", ulen, iob_len ( iobuf ) );
 		rc = -EINVAL;
 		goto done;
@@ -283,7 +284,7 @@ static int udp_rx ( struct io_buffer *iobuf,
 	if ( udphdr->chksum ) {
 		csum = tcpip_continue_chksum ( pshdr_csum, iobuf->data, ulen );
 		if ( csum != 0 ) {
-			DBG ( "UDP checksum incorrect (is %04x including "
+			DBG_UDP ( "UDP checksum incorrect (is %04x including "
 			      "checksum field, should be 0000)\n", csum );
 			rc = -EINVAL;
 			goto done;
@@ -298,12 +299,12 @@ static int udp_rx ( struct io_buffer *iobuf,
 	iob_pull ( iobuf, sizeof ( *udphdr ) );
 
 	/* Dump debugging information */
-	DBGC2 ( udp, "UDP %p RX %d<-%d len %zd\n", udp,
+	DBGC2_UDP ( udp, "UDP %p RX %d<-%d len %zd\n", udp,
 		ntohs ( udphdr->dest ), ntohs ( udphdr->src ), ulen );
 
 	/* Ignore if no matching connection found */
 	if ( ! udp ) {
-		DBG ( "No UDP connection listening on port %d\n",
+		DBG_UDP ( "No UDP connection listening on port %d\n",
 		      ntohs ( udphdr->dest ) );
 		rc = -ENOTCONN;
 		goto done;
@@ -347,7 +348,7 @@ static struct io_buffer * udp_xfer_alloc_iob ( struct udp_connection *udp,
 
 	iobuf = alloc_iob ( MAX_LL_NET_HEADER_LEN + len );
 	if ( ! iobuf ) {
-		DBGC ( udp, "UDP %p cannot allocate buffer of length %zd\n",
+		DBGC_UDP ( udp, "UDP %p cannot allocate buffer of length %zd\n",
 		       udp, len );
 		return NULL;
 	}

@@ -174,7 +174,7 @@ nodnic_device_clear_int (
 	MLX_CHECK_STATUS(device_priv, status, clear_int_done, "failed writing to disable_bit");
 #else
 	mlx_utils *utils = device_priv->utils;
-	mlx_uint64 clear_int = (mlx_uint64)(mlx_uint32)(device_priv->crspace_clear_int);
+	mlx_uint64 clear_int = (mlx_uint64)(device_priv->crspace_clear_int);
 	mlx_uint32 swapped = 0;
 
 	if (device_priv->device_cap.crspace_doorbells == 0) {
@@ -304,6 +304,13 @@ nodnic_device_get_cap(
 	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x14, (mlx_uint32*)&guid_l);
 	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic guid_l");
 	device_priv->device_guid = guid_l | (guid_h << 32);
+
+#define NODNIC_DEVICE_SUPPORT_RX_PI_DMA_OFFSET 31
+#define NODNIC_DEVICE_SUPPORT_RX_PI_DMA_MASK 0x1
+	status = nodnic_cmd_read(device_priv, device_priv->device_offset + 0x1c, &buffer);
+	MLX_FATAL_CHECK_STATUS(status, read_err, "failed to read nodnic support_rx_pi_dma");
+	device_cap->support_rx_pi_dma = ( buffer >> NODNIC_DEVICE_SUPPORT_RX_PI_DMA_OFFSET) & NODNIC_DEVICE_SUPPORT_RX_PI_DMA_MASK;
+
 read_err:
 parm_err:
 	return status;

@@ -43,6 +43,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/fault.h>
 #include <ipxe/vlan.h>
 #include <ipxe/netdevice.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -169,9 +170,9 @@ void netdev_link_err ( struct net_device *netdev, int rc ) {
 	/* Record link state */
 	netdev->link_rc = rc;
 	if ( netdev->link_rc == 0 ) {
-		DBGC ( netdev, "NETDEV %s link is up\n", netdev->name );
+		DBGC_NET_DEV ( netdev, "NETDEV %s link is up\n", netdev->name );
 	} else {
-		DBGC ( netdev, "NETDEV %s link is down: %s\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s link is down: %s\n",
 		       netdev->name, strerror ( netdev->link_rc ) );
 	}
 
@@ -205,7 +206,7 @@ void netdev_link_block ( struct net_device *netdev, unsigned long timeout ) {
 
 	/* Start link block timer */
 	if ( ! netdev_link_blocked ( netdev ) ) {
-		DBGC ( netdev, "NETDEV %s link blocked for %ld ticks\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s link blocked for %ld ticks\n",
 		       netdev->name, timeout );
 	}
 	start_timer_fixed ( &netdev->link_block, timeout );
@@ -220,7 +221,7 @@ void netdev_link_unblock ( struct net_device *netdev ) {
 
 	/* Stop link block timer */
 	if ( netdev_link_blocked ( netdev ) )
-		DBGC ( netdev, "NETDEV %s link unblocked\n", netdev->name );
+		DBGC_NET_DEV ( netdev, "NETDEV %s link unblocked\n", netdev->name );
 	stop_timer ( &netdev->link_block );
 }
 
@@ -236,7 +237,7 @@ static void netdev_link_block_expired ( struct retry_timer *timer,
 		container_of ( timer, struct net_device, link_block );
 
 	/* Assume link is no longer blocked */
-	DBGC ( netdev, "NETDEV %s link block expired\n", netdev->name );
+	DBGC_NET_DEV ( netdev, "NETDEV %s link block expired\n", netdev->name );
 }
 
 /**
@@ -291,7 +292,7 @@ static void netdev_record_stat ( struct net_device_stats *stats, int rc ) {
 int netdev_tx ( struct net_device *netdev, struct io_buffer *iobuf ) {
 	int rc;
 
-	DBGC2 ( netdev, "NETDEV %s transmitting %p (%p+%zx)\n",
+	DBGC2_NET_DEV ( netdev, "NETDEV %s transmitting %p (%p+%zx)\n",
 		netdev->name, iobuf, iobuf->data, iob_len ( iobuf ) );
 	profile_start ( &net_tx_profiler );
 
@@ -373,10 +374,10 @@ void netdev_tx_err ( struct net_device *netdev,
 	/* Update statistics counter */
 	netdev_record_stat ( &netdev->tx_stats, rc );
 	if ( rc == 0 ) {
-		DBGC2 ( netdev, "NETDEV %s transmission %p complete\n",
+		DBGC2_NET_DEV ( netdev, "NETDEV %s transmission %p complete\n",
 			netdev->name, iobuf );
 	} else {
-		DBGC ( netdev, "NETDEV %s transmission %p failed: %s\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s transmission %p failed: %s\n",
 		       netdev->name, iobuf, strerror ( rc ) );
 	}
 
@@ -458,7 +459,7 @@ static void netdev_tx_flush ( struct net_device *netdev ) {
 void netdev_rx ( struct net_device *netdev, struct io_buffer *iobuf ) {
 	int rc;
 
-	DBGC2 ( netdev, "NETDEV %s received %p (%p+%zx)\n",
+	DBGC2_NET_DEV ( netdev, "NETDEV %s received %p (%p+%zx)\n",
 		netdev->name, iobuf, iobuf->data, iob_len ( iobuf ) );
 
 	/* Discard packet (for test purposes) if applicable */
@@ -489,7 +490,7 @@ void netdev_rx ( struct net_device *netdev, struct io_buffer *iobuf ) {
 void netdev_rx_err ( struct net_device *netdev,
 		     struct io_buffer *iobuf, int rc ) {
 
-	DBGC ( netdev, "NETDEV %s failed to receive %p: %s\n",
+	DBGC_NET_DEV ( netdev, "NETDEV %s failed to receive %p: %s\n",
 	       netdev->name, iobuf, strerror ( rc ) );
 
 	/* Discard packet */
@@ -565,10 +566,10 @@ static void netdev_config_close ( struct net_device_configuration *config,
 	/* Record configuration result */
 	config->rc = rc;
 	if ( rc == 0 ) {
-		DBGC ( netdev, "NETDEV %s configured via %s\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s configured via %s\n",
 		       netdev->name, configurator->name );
 	} else {
-		DBGC ( netdev, "NETDEV %s configuration via %s failed: %s\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s configuration via %s failed: %s\n",
 		       netdev->name, configurator->name, strerror ( rc ) );
 	}
 }
@@ -672,9 +673,17 @@ int register_netdev ( struct net_device *netdev ) {
 	 */
 	duplicate = find_netdev_by_ll_addr ( ll_protocol, netdev->ll_addr );
 	if ( duplicate && ( duplicate->dev != netdev->dev ) ) {
-		DBGC ( netdev, "NETDEV rejecting duplicate (phys %s) of %s "
+		DBGC_NET_DEV ( netdev, "NETDEV rejecting duplicate (phys %s) of %s "
 		       "(phys %s)\n", netdev->dev->name, duplicate->name,
 		       duplicate->dev->name );
+		rc = -EEXIST;
+		goto err_duplicate;
+	}
+
+	/* Reject named network devices that already exist */
+	if ( netdev->name[0] && ( duplicate = find_netdev ( netdev->name ) ) ) {
+		DBGC_NET_DEV ( netdev, "NETDEV rejecting duplicate name %s\n",
+		       duplicate->name );
 		rc = -EEXIST;
 		goto err_duplicate;
 	}
@@ -697,14 +706,14 @@ int register_netdev ( struct net_device *netdev ) {
 	/* Add to device list */
 	netdev_get ( netdev );
 	list_add_tail ( &netdev->list, &net_devices );
-	DBGC ( netdev, "NETDEV %s registered (phys %s hwaddr %s)\n",
+	DBGC_NET_DEV ( netdev, "NETDEV %s registered (phys %s hwaddr %s)\n",
 	       netdev->name, netdev->dev->name,
 	       netdev_addr ( netdev ) );
 
 	/* Register per-netdev configuration settings */
 	if ( ( rc = register_settings ( netdev_settings ( netdev ),
 					NULL, netdev->name ) ) != 0 ) {
-		DBGC ( netdev, "NETDEV %s could not register settings: %s\n",
+		DBGC_NET_DEV ( netdev, "NETDEV %s could not register settings: %s\n",
 		       netdev->name, strerror ( rc ) );
 		goto err_register_settings;
 	}
@@ -712,7 +721,7 @@ int register_netdev ( struct net_device *netdev ) {
 	/* Probe device */
 	for_each_table_entry ( driver, NET_DRIVERS ) {
 		if ( driver->probe && ( rc = driver->probe ( netdev ) ) != 0 ) {
-			DBGC ( netdev, "NETDEV %s could not add %s device: "
+			DBGC_NET_DEV ( netdev, "NETDEV %s could not add %s device: "
 			       "%s\n", netdev->name, driver->name,
 			       strerror ( rc ) );
 			goto err_probe;
@@ -746,7 +755,7 @@ int netdev_open ( struct net_device *netdev ) {
 	if ( netdev->state & NETDEV_OPEN )
 		return 0;
 
-	DBGC ( netdev, "NETDEV %s opening\n", netdev->name );
+	DBGC_NET_DEV ( netdev, "NETDEV %s opening\n", netdev->name );
 
 	/* Mark as opened */
 	netdev->state |= NETDEV_OPEN;
@@ -781,7 +790,7 @@ void netdev_close ( struct net_device *netdev ) {
 	if ( ! ( netdev->state & NETDEV_OPEN ) )
 		return;
 
-	DBGC ( netdev, "NETDEV %s closing\n", netdev->name );
+	DBGC_NET_DEV ( netdev, "NETDEV %s closing\n", netdev->name );
 
 	/* Terminate any ongoing configurations.  Use intf_close()
 	 * rather than intf_restart() to allow the cancellation to be
@@ -833,7 +842,7 @@ void unregister_netdev ( struct net_device *netdev ) {
 	unregister_settings ( netdev_settings ( netdev ) );
 
 	/* Remove from device list */
-	DBGC ( netdev, "NETDEV %s unregistered\n", netdev->name );
+	DBGC_NET_DEV ( netdev, "NETDEV %s unregistered\n", netdev->name );
 	list_del ( &netdev->list );
 	netdev_put ( netdev );
 
@@ -1015,7 +1024,7 @@ int net_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 						  ll_source, flags );
 	}
 
-	DBGC ( netdev, "NETDEV %s unknown network protocol %04x\n",
+	DBGC_NET_DEV ( netdev, "NETDEV %s unknown network protocol %04x\n",
 	       netdev->name, ntohs ( net_proto ) );
 	free_iob ( iobuf );
 	return -ENOTSUP;
@@ -1057,7 +1066,7 @@ void net_poll ( void ) {
 		/* Process all received packets */
 		if ( ( iobuf = netdev_rx_dequeue ( netdev ) ) ) {
 
-			DBGC2 ( netdev, "NETDEV %s processing %p (%p+%zx)\n",
+			DBGC2_NET_DEV ( netdev, "NETDEV %s processing %p (%p+%zx)\n",
 				netdev->name, iobuf, iobuf->data,
 				iob_len ( iobuf ) );
 			profile_start ( &net_rx_profiler );
@@ -1182,7 +1191,7 @@ int netdev_configure ( struct net_device *netdev,
 
 	/* Check applicability of configurator */
 	if ( ! netdev_configurator_applies ( netdev, configurator ) ) {
-		DBGC ( netdev, "NETDEV %s does not support configuration via "
+		DBGC_NET_DEV ( netdev, "NETDEV %s does not support configuration via "
 		       "%s\n", netdev->name, configurator->name );
 		return -ENOTSUP;
 	}
@@ -1193,12 +1202,12 @@ int netdev_configure ( struct net_device *netdev,
 	/* Mark configuration as being in progress */
 	config->rc = -EINPROGRESS_CONFIG;
 
-	DBGC ( netdev, "NETDEV %s starting configuration via %s\n",
+	DBGC_NET_DEV ( netdev, "NETDEV %s starting configuration via %s\n",
 	       netdev->name, configurator->name );
 
 	/* Start configuration */
 	if ( ( rc = configurator->start ( &config->job, netdev ) ) != 0 ) {
-		DBGC ( netdev, "NETDEV %s could not start configuration via "
+		DBGC_NET_DEV ( netdev, "NETDEV %s could not start configuration via "
 		       "%s: %s\n", netdev->name, configurator->name,
 		       strerror ( rc ) );
 		config->rc = rc;

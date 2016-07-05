@@ -29,6 +29,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 
 #define NV_CONFIG __table( struct extended_setting, "nv_config")
 
+#define MAX_SETTING_STR 128
 #define DRIVER_MAX_STR_LEN_SETTING	255
 
 #define STR_ENABLE		"Enabled"
@@ -43,6 +44,9 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #define STR_IPV6_IPV4	"IPv6/IPv4"
 #define STR_ONE_TIME_DISABLED "One time disabled"
 #define STR_FACTORY_MAC	"Use factory MAC"
+#define STR_BASIC	"Basic"
+#define STR_ADVANCED	"Advanced"
+#define STR_ALL	"All"
 
 #define VAL_IPV4		0
 #define VAL_IPV6		1
@@ -303,6 +307,7 @@ struct nv_conf {
 	unsigned int desc_dev_id;
 	const char *driver_name;
 	uint8_t max_num_of_vfs_supported;
+	union mlx_nvconfig_debug_conf debug_conf;
 };
 
 struct nv_port_conf {
@@ -332,6 +337,12 @@ enum {
 	MAC_ADMIN_BIT_OFF	= 0x01,
 	MAC_ADMIN_BIT_ON	= 0x02,
 	MAC_ADMIN_BIT_FACTORY_MAC	= 0x03,
+};
+
+enum {
+	CLIENT_IDENTIFIER_DEFAULT	= 0x0,
+	CLIENT_IDENTIFIER_REMOVE 	= 0x01,
+	CLIENT_IDENTIFIER_ADD	= 0x02,
 };
 
 struct options_list {
@@ -435,6 +446,7 @@ extern const struct settings_scope iscsi_scope;
 extern const struct settings_scope iscsi_general_scope;
 extern const struct settings_scope iscsi_init_scope;
 extern const struct settings_scope iscsi_target_scope;
+extern const struct settings_scope debug_scope;
 
 extern struct setting virt_mode_setting __setting( SETTING_FLEXBOOT, virt_mode );
 extern struct setting virt_num_setting __setting( SETTING_FLEXBOOT, virt_num );
@@ -553,4 +565,7 @@ int driver_settings_get_nv_ib_mac_admin_bit ( void *priv_data, unsigned int port
 		uint8_t *mac_admin_bit );
 void driver_setting_update_setting_ops ( struct driver_setting_operation setting_ops[],
 		uint32_t setting_ops_len );
+int driver_settings_read_nv_settings ( struct driver_settings *driver_settings,
+		uint32_t type, uint32_t type_mod, uint32_t length,
+		uint32_t *version, void *data );
 #endif /*DRIVER_SETTINGS_H_*/

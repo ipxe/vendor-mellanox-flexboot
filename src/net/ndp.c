@@ -31,6 +31,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/neighbour.h>
 #include <ipxe/dhcpv6.h>
 #include <ipxe/ndp.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -90,7 +91,7 @@ static int ndp_tx_ll_addr ( struct net_device *netdev,
 	/* Transmit packet */
 	if ( ( rc = tcpip_tx ( iobuf, &icmpv6_protocol, st_src, st_dest,
 			       netdev, &ndp->icmp.chksum ) ) != 0 ) {
-		DBGC ( netdev, "NDP %s could not transmit packet: %s\n",
+		DBGC_NDP ( netdev, "NDP %s could not transmit packet: %s\n",
 		       netdev->name, strerror ( rc ) );
 		return rc;
 	}
@@ -206,7 +207,7 @@ ndp_rx_neighbour_solicitation_ll_source ( struct net_device *netdev,
 	/* Sanity check */
 	if ( offsetof ( typeof ( *ll_addr_opt ),
 			ll_addr[ll_protocol->ll_addr_len] ) > len ) {
-		DBGC ( netdev, "NDP %s neighbour solicitation link-layer "
+		DBGC_NDP ( netdev, "NDP %s neighbour solicitation link-layer "
 		       "address option too short at %zd bytes\n",
 		       netdev->name, len );
 		return -EINVAL;
@@ -216,7 +217,7 @@ ndp_rx_neighbour_solicitation_ll_source ( struct net_device *netdev,
 	if ( ( rc = neighbour_define ( netdev, &ipv6_protocol,
 				       &sin6_src->sin6_addr,
 				       ll_addr_opt->ll_addr ) ) != 0 ) {
-		DBGC ( netdev, "NDP %s could not define %s => %s: %s\n",
+		DBGC_NDP ( netdev, "NDP %s could not define %s => %s: %s\n",
 		       netdev->name, inet6_ntoa ( &sin6_src->sin6_addr ),
 		       ll_protocol->ntoa ( ll_addr_opt->ll_addr ),
 		       strerror ( rc ) );
@@ -262,7 +263,7 @@ ndp_rx_neighbour_advertisement_ll_target ( struct net_device *netdev,
 	/* Sanity check */
 	if ( offsetof ( typeof ( *ll_addr_opt ),
 			ll_addr[ll_protocol->ll_addr_len] ) > len ) {
-		DBGC ( netdev, "NDP %s neighbour advertisement link-layer "
+		DBGC_NDP ( netdev, "NDP %s neighbour advertisement link-layer "
 		       "address option too short at %zd bytes\n",
 		       netdev->name, len );
 		return -EINVAL;
@@ -271,7 +272,7 @@ ndp_rx_neighbour_advertisement_ll_target ( struct net_device *netdev,
 	/* Update neighbour cache entry, if any */
 	if ( ( rc = neighbour_update ( netdev, &ipv6_protocol, &neigh->target,
 				       ll_addr_opt->ll_addr ) ) != 0 ) {
-		DBGC ( netdev, "NDP %s could not update %s => %s: %s\n",
+		DBGC_NDP ( netdev, "NDP %s could not update %s => %s: %s\n",
 		       netdev->name, inet6_ntoa ( &neigh->target ),
 		       ll_protocol->ntoa ( ll_addr_opt->ll_addr ),
 		       strerror ( rc ) );
@@ -303,7 +304,7 @@ ndp_rx_router_advertisement_ll_source ( struct net_device *netdev,
 	/* Sanity check */
 	if ( offsetof ( typeof ( *ll_addr_opt ),
 			ll_addr[ll_protocol->ll_addr_len] ) > len ) {
-		DBGC ( netdev, "NDP %s router advertisement link-layer address "
+		DBGC_NDP ( netdev, "NDP %s router advertisement link-layer address "
 		       "option too short at %zd bytes\n", netdev->name, len );
 		return -EINVAL;
 	}
@@ -312,7 +313,7 @@ ndp_rx_router_advertisement_ll_source ( struct net_device *netdev,
 	if ( ( rc = neighbour_define ( netdev, &ipv6_protocol,
 				       &sin6_src->sin6_addr,
 				       ll_addr_opt->ll_addr ) ) != 0 ) {
-		DBGC ( netdev, "NDP %s could not define %s => %s: %s\n",
+		DBGC_NDP ( netdev, "NDP %s could not define %s => %s: %s\n",
 		       netdev->name, inet6_ntoa ( &sin6_src->sin6_addr ),
 		       ll_protocol->ntoa ( ll_addr_opt->ll_addr ),
 		       strerror ( rc ) );
@@ -346,14 +347,14 @@ ndp_rx_router_advertisement_prefix ( struct net_device *netdev,
 
 	/* Sanity check */
 	if ( sizeof ( *prefix_opt ) > len ) {
-		DBGC ( netdev, "NDP %s router advertisement prefix option too "
+		DBGC_NDP ( netdev, "NDP %s router advertisement prefix option too "
 		       "short at %zd bytes\n", netdev->name, len );
 		return -EINVAL;
 	}
-	DBGC ( netdev, "NDP %s found %sdefault router %s ",
+	DBGC_NDP ( netdev, "NDP %s found %sdefault router %s ",
 	       netdev->name, ( radv->lifetime ? "" : "non-" ),
 	       inet6_ntoa ( &sin6_src->sin6_addr ) );
-	DBGC ( netdev, "for %s-link %sautonomous prefix %s/%d\n",
+	DBGC_NDP ( netdev, "for %s-link %sautonomous prefix %s/%d\n",
 	       ( ( prefix_opt->flags & NDP_PREFIX_ON_LINK ) ? "on" : "off" ),
 	       ( ( prefix_opt->flags & NDP_PREFIX_AUTONOMOUS ) ? "" : "non-" ),
 	       inet6_ntoa ( &prefix_opt->prefix ),
@@ -368,7 +369,7 @@ ndp_rx_router_advertisement_prefix ( struct net_device *netdev,
 				      prefix_opt->prefix_len,
 				      ( radv->lifetime ?
 					router : NULL ) ) ) != 0 ) {
-		DBGC ( netdev, "NDP %s could not define prefix %s/%d: %s\n",
+		DBGC_NDP ( netdev, "NDP %s could not define prefix %s/%d: %s\n",
 		       netdev->name, inet6_ntoa ( &prefix_opt->prefix ),
 		       prefix_opt->prefix_len, strerror ( rc ) );
 		return rc;
@@ -380,18 +381,18 @@ ndp_rx_router_advertisement_prefix ( struct net_device *netdev,
 		prefix_len = ipv6_eui64 ( &address, netdev );
 		if ( prefix_len < 0 ) {
 			rc = prefix_len;
-			DBGC ( netdev, "NDP %s could not construct SLAAC "
+			DBGC_NDP ( netdev, "NDP %s could not construct SLAAC "
 			       "address: %s\n", netdev->name, strerror ( rc ) );
 			return rc;
 		}
 		if ( prefix_len != prefix_opt->prefix_len ) {
-			DBGC ( netdev, "NDP %s incorrect SLAAC prefix length "
+			DBGC_NDP ( netdev, "NDP %s incorrect SLAAC prefix length "
 			       "%d (expected %d)\n", netdev->name,
 			       prefix_opt->prefix_len, prefix_len );
 			return -EINVAL;
 		}
 		if ( ( rc = ipv6_set_address ( netdev, &address ) ) != 0 ) {
-			DBGC ( netdev, "NDP %s could not set address %s: %s\n",
+			DBGC_NDP ( netdev, "NDP %s could not set address %s: %s\n",
 			       netdev->name, inet6_ntoa ( &address ),
 			       strerror ( rc ) );
 			return rc;
@@ -496,7 +497,7 @@ static int ndp_rx_options ( struct net_device *netdev,
 
 	/* Sanity check */
 	if ( len < offset ) {
-		DBGC ( netdev, "NDP %s packet too short at %zd bytes (min %zd "
+		DBGC_NDP ( netdev, "NDP %s packet too short at %zd bytes (min %zd "
 		       "bytes)\n", netdev->name, len, offset );
 		return -EINVAL;
 	}
@@ -511,7 +512,7 @@ static int ndp_rx_options ( struct net_device *netdev,
 		     ( option->header.blocks == 0 ) ||
 		     ( remaining < ( option->header.blocks *
 				     NDP_OPTION_BLKSZ ) ) ) {
-			DBGC ( netdev, "NDP %s bad option length:\n",
+			DBGC_NDP ( netdev, "NDP %s bad option length:\n",
 			       netdev->name );
 			DBGC_HDA ( netdev, 0, option, remaining );
 			return -EINVAL;
@@ -711,7 +712,7 @@ static int ndp_fetch ( struct settings *settings,
 
 			/* Sanity check */
 			if ( offset > option_len ) {
-				DBGC ( netdev, "NDP %s option %d too short\n",
+				DBGC_NDP ( netdev, "NDP %s option %d too short\n",
 				       netdev->name, type );
 				return -EINVAL;
 			}
@@ -941,7 +942,7 @@ ipv6conf_rx_router_advertisement ( struct net_device *netdev,
 		stateful = ( radv->flags & NDP_ROUTER_MANAGED );
 		if ( ( rc = start_dhcpv6 ( &ipv6conf->dhcp, netdev,
 					   stateful ) ) != 0 ) {
-			DBGC ( netdev, "NDP %s could not start state%s DHCPv6: "
+			DBGC_NDP ( netdev, "NDP %s could not start state%s DHCPv6: "
 			       "%s\n", netdev->name,
 			       ( stateful ? "ful" : "less" ), strerror ( rc ) );
 			ipv6conf_done ( ipv6conf, rc );
@@ -1026,7 +1027,7 @@ static int dhcpv6_configurator_applies ( struct net_device *netdev ) {
 	rc = fetchf_setting ( netdev_settings ( netdev ), &dhcpv6_disabled_setting,
 			NULL, NULL, buf, sizeof ( buf ) );
 
-	DBGC ( netdev, "NETDEV %s will %sbe configured via DHCPv6\n", netdev->name,
+	DBGC_NDP ( netdev, "NETDEV %s will %sbe configured via DHCPv6\n", netdev->name,
 			( ( rc < 0 ) ? "" : "not " ) );
 
 	return ( rc < 0 );

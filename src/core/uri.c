@@ -38,6 +38,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/params.h>
 #include <ipxe/tcpip.h>
 #include <ipxe/uri.h>
+#include "flex_debug_log.h"
 
 /**
  * Decode URI field
@@ -249,25 +250,25 @@ static void uri_dump ( const struct uri *uri ) {
 	if ( ! uri )
 		return;
 	if ( uri->scheme )
-		DBGC ( uri, " scheme \"%s\"", uri->scheme );
+		DBGC_URI ( uri, " scheme \"%s\"", uri->scheme );
 	if ( uri->opaque )
-		DBGC ( uri, " opaque \"%s\"", uri->opaque );
+		DBGC_URI ( uri, " opaque \"%s\"", uri->opaque );
 	if ( uri->user )
-		DBGC ( uri, " user \"%s\"", uri->user );
+		DBGC_URI ( uri, " user \"%s\"", uri->user );
 	if ( uri->password )
-		DBGC ( uri, " password \"%s\"", uri->password );
+		DBGC_URI ( uri, " password \"%s\"", uri->password );
 	if ( uri->host )
-		DBGC ( uri, " host \"%s\"", uri->host );
+		DBGC_URI ( uri, " host \"%s\"", uri->host );
 	if ( uri->port )
-		DBGC ( uri, " port \"%s\"", uri->port );
+		DBGC_URI ( uri, " port \"%s\"", uri->port );
 	if ( uri->path )
-		DBGC ( uri, " path \"%s\"", uri->path );
+		DBGC_URI ( uri, " path \"%s\"", uri->path );
 	if ( uri->query )
-		DBGC ( uri, " query \"%s\"", uri->query );
+		DBGC_URI ( uri, " query \"%s\"", uri->query );
 	if ( uri->fragment )
-		DBGC ( uri, " fragment \"%s\"", uri->fragment );
+		DBGC_URI ( uri, " fragment \"%s\"", uri->fragment );
 	if ( uri->params )
-		DBGC ( uri, " params \"%s\"", uri->params->name );
+		DBGC_URI ( uri, " params \"%s\"", uri->params->name );
 }
 
 /**
@@ -419,14 +420,14 @@ struct uri * parse_uri ( const char *uri_string ) {
 		uri->port = tmp;
 	}
 
+ done:
 	/* Decode fields in-place */
 	for ( field = 0 ; field < URI_FIELDS ; field++ )
 		uri_decode_inplace ( uri, field );
 
- done:
-	DBGC ( uri, "URI parsed \"%s\" to", uri_string );
+	DBGC_URI ( uri, "URI parsed \"%s\" to", uri_string );
 	uri_dump ( uri );
-	DBGC ( uri, "\n" );
+	DBGC_URI ( uri, "\n" );
 
 	return uri;
 }
@@ -502,9 +503,9 @@ size_t format_uri ( const struct uri *uri, char *buf, size_t len ) {
 	}
 
 	if ( len ) {
-		DBGC ( uri, "URI formatted" );
+		DBGC_URI ( uri, "URI formatted" );
 		uri_dump ( uri );
-		DBGC ( uri, " to \"%s%s\"\n", buf,
+		DBGC_URI ( uri, " to \"%s%s\"\n", buf,
 		       ( ( used > len ) ? "<TRUNCATED>" : "" ) );
 	}
 
@@ -591,9 +592,9 @@ struct uri * uri_dup ( const struct uri *uri ) {
 	/* Copy parameters */
 	dup->params = params_get ( uri->params );
 
-	DBGC ( uri, "URI duplicated" );
+	DBGC_URI ( uri, "URI duplicated" );
 	uri_dump ( uri );
-	DBGC ( uri, "\n" );
+	DBGC_URI ( uri, "\n" );
 
 	return dup;
 }

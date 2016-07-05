@@ -34,6 +34,8 @@ typedef uint16_t		__be16;
 #define GOLAN_PCI_CMD_XPORT			7
 #define CMD_OWNER_HW				0x1
 
+#define IB_NUM_PKEYS		0x20
+
 struct health_buffer {
 	__be32          assert_var[5];
 	__be32          rsvd0[3];
@@ -46,7 +48,7 @@ struct health_buffer {
 	u8              irisc_index;
 	u8              synd;
 	__be16          ext_sync;
-};
+} __attribute ( ( packed ) );
 
 struct golan_hca_init_seg {
 	__be32                  fw_rev;
@@ -63,7 +65,7 @@ struct golan_hca_init_seg {
 	__be64                  ieee1588_clk;
 	__be32                  ieee1588_clk_type;
 	__be32                  clr_intx;
-};
+} __attribute ( ( packed ) );
 
 enum golan_manage_pages_mode {
 	GOLAN_PAGES_CANT_GIVE    = 0,
@@ -151,6 +153,10 @@ enum {
 	GOLAN_CMD_OP_ARM_RQ			= 0x703,
 	GOLAN_CMD_OP_RESIZE_SRQ			= 0x704,
 
+	GOLAN_CMD_OP_QUERY_HCA_VPORT_CONTEXT	= 0x762,
+	GOLAN_CMD_OP_QUERY_HCA_VPORT_GID		= 0x764,
+	GOLAN_CMD_OP_QUERY_HCA_VPORT_PKEY	= 0x765,
+
 	GOLAN_CMD_OP_ALLOC_PD			= 0x800,
 	GOLAN_CMD_OP_DEALLOC_PD			= 0x801,
 	GOLAN_CMD_OP_ALLOC_UAR			= 0x802,
@@ -170,7 +176,7 @@ struct golan_inbox_hdr {
 	__be16		opcode;
 	u8		rsvd[4];
 	__be16		opmod;
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_layout {
 	u8		type;
@@ -191,13 +197,13 @@ struct golan_cmd_layout {
 	u8		sig;
 	u8		rsvd1;
 	volatile u8	status_own;
-};
+} __attribute ( ( packed ) );
 
 struct golan_outbox_hdr {
 	u8		status;
 	u8		rsvd[3];
 	__be32		syndrome;
-};
+} __attribute ( ( packed ) );
 
 enum {
     GOLAN_DEV_CAP_FLAG_RC		= 1LL <<  0,
@@ -250,7 +256,7 @@ struct golan_hca_cap {
 	u8		log_max_ra_res_qp;
 	u8		rsvd11[4];
 	__be16		max_qp_count;
-	__be16		rsvd12;
+	__be16		pkey_table_size;
 	u8		rsvd13;
 	u8		local_ca_ack_delay;
 	u8		rsvd14;
@@ -286,53 +292,53 @@ struct golan_hca_cap {
 	u8		rsvd28[2];
 	u8		log_msx_atomic_size_dc;
 	u8		rsvd29[76];
-};
+} __attribute ( ( packed ) );
 
 struct golan_query_pages_inbox {
 	struct golan_inbox_hdr	hdr;
 	u8                      rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_query_pages_outbox {
 	struct golan_outbox_hdr hdr;
 	u8                  	rsvd[2];
 	__be16                  func_id;
 	__be32                  num_pages;
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_query_hca_cap_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	u8						rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_query_hca_cap_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd0[8];
 	struct golan_hca_cap    hca_cap;
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_set_hca_cap_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	u8						rsvd[8];
 	struct golan_hca_cap    hca_cap;
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_set_hca_cap_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd0[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_init_hca_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	u8						rsvd0[2];
 	__be16					profile;
 	u8						rsvd1[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_init_hca_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 enum golan_teardown {
 	GOLAN_TEARDOWN_GRACEFUL = 0x0,
@@ -344,37 +350,37 @@ struct golan_cmd_teardown_hca_mbox_in {
     u8         				rsvd0[2];
     __be16          		profile;
     u8          			rsvd1[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_teardown_hca_mbox_out {
     struct golan_outbox_hdr hdr;
     u8          			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_enable_hca_mbox_in {
 	struct golan_inbox_hdr  hdr;
 	u8                      rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_enable_hca_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8                      rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_disable_hca_mbox_in {
     struct golan_inbox_hdr  hdr;
     u8          			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_disable_hca_mbox_out {
     struct golan_outbox_hdr	hdr;
     u8          			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_manage_pages_inbox_data {
 	u8                      rsvd2[16];
 	__be64                  pas[0];
-};
+} __attribute ( ( packed ) );
 
 struct golan_manage_pages_inbox {
 	struct golan_inbox_hdr	hdr;
@@ -382,23 +388,23 @@ struct golan_manage_pages_inbox {
 	__be16			func_id;
 	__be32			num_entries;
 	struct golan_manage_pages_inbox_data 	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_manage_pages_outbox_data {
 	__be64                  pas[0];
-};
+} __attribute ( ( packed ) );
 
 struct golan_manage_pages_outbox {
 	struct golan_outbox_hdr 		hdr;
 	__be32                			num_entries;
 	__be32					rsrvd;
 	struct golan_manage_pages_outbox_data	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_reg_host_endianess {
 	u8      he;
 	u8      rsvd[15];
-};
+} __attribute ( ( packed ) );
 
 struct golan_cmd_prot_block {
 	union {
@@ -412,7 +418,7 @@ struct golan_cmd_prot_block {
 	u8              token;
 	u8              ctrl_sig;
 	u8              sig;
-};
+} __attribute ( ( packed ) );
 
 /* MAD IFC structures */
 #define GOLAN_MAD_SIZE						256
@@ -426,36 +432,36 @@ struct golan_mad_ifc_mbox_in {
     u8          			port;
     u8          			rsvd1[4];
     u8 						mad[GOLAN_MAD_SIZE];
-};
+} __attribute ( ( packed ) );
 
 struct golan_mad_ifc_mbox_out {
     struct golan_outbox_hdr	hdr;
     u8          			rsvd[8];
     u8 						mad[GOLAN_MAD_SIZE];
-};
+} __attribute ( ( packed ) );
 
 /* UAR Structures */
 struct golan_alloc_uar_mbox_in {
     struct golan_inbox_hdr  hdr;
     u8                      rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_alloc_uar_mbox_out {
     struct golan_outbox_hdr hdr;
     __be32                  uarn;
     u8                      rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_free_uar_mbox_in {
     struct golan_inbox_hdr  hdr;
     __be32                  uarn;
     u8                      rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_free_uar_mbox_out {
     struct golan_outbox_hdr hdr;
     u8                      rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 /* Event Queue Structures */
 enum {
@@ -479,7 +485,7 @@ struct golan_eq_context {
 	__be32		consumer_counter;
 	__be32		produser_counter;
 	u8			rsvd5[16];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_eq_mbox_in_data {
 	struct golan_eq_context	ctx;
@@ -487,49 +493,150 @@ struct golan_create_eq_mbox_in_data {
 	__be64					events_mask;
 	u8						rsvd3[176];
 	__be64					pas[0];
-};
+} __attribute ( ( packed ) );
+
 struct golan_create_eq_mbox_in {
 	struct golan_inbox_hdr				hdr;
 	u8									rsvd0[3];
 	u8									input_eqn;
 	u8									rsvd1[4];
 	struct golan_create_eq_mbox_in_data data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_eq_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd0[3];
 	u8						eq_number;
 	u8						rsvd1[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_eq_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	u8						rsvd0[3];
 	u8						eqn;
 	u8						rsvd1[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_eq_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd[8];
-};
+} __attribute ( ( packed ) );
+
+/***********************************************/
+/************** Query Vport ****************/
+struct golan_query_hca_vport_context_inbox {
+	struct golan_inbox_hdr	hdr;
+	__be16			other_vport	: 1;
+	__be16			rsvd1		: 7;
+	__be16			port_num		: 4;
+	__be16			rsvd2		: 4;
+	__be16			vport_number;
+	u8			rsvd[4];
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_context_data {
+	__be32			field_select;
+	__be32			rsvd1[7];
+	//****
+	__be16			sm_virt_aware			: 1;
+	__be16			has_smi				: 1;
+	__be16			has_raw				: 1;
+	__be16			grh_required			: 1;
+	__be16			rsvd2				: 12;
+	u8			port_physical_state	: 4;
+	u8			vport_state_policy	: 4;
+	u8			port_state			: 4;
+	u8			vport_state			: 4;
+	//****
+	u8			rsvd3[4];
+	//****
+	__be32			system_image_guid[2];
+	//****
+	__be32			port_guid[2];
+	//****
+	__be32			node_guid[2];
+	//****
+	__be32			cap_mask1;
+	__be32			cap_mask1_field_select;
+	__be32			cap_mask2;
+	__be32			cap_mask2_field_select;
+	u8			rsvd4[16];
+	__be16			lid;
+	u8			rsvd5				: 4;
+	u8			init_type_reply		: 4;
+	u8			lmc					: 3;
+	u8			subnet_timeout		: 5;
+	__be16			sm_lid;
+	u8			sm_sl				: 4;
+	u8			rsvd6				: 4;
+	u8			rsvd7;
+	__be16			qkey_violation_counter;
+	__be16			pkey_violation_counter;
+	u8			rsvd8[100];
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_context_outbox {
+	struct golan_outbox_hdr	hdr;
+	u8			rsvd[8];
+	struct golan_query_hca_vport_context_data context_data;
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_gid_inbox {
+	struct golan_inbox_hdr	hdr;
+	u8			other_vport	: 1;
+	u8			rsvd1		: 7;
+	u8			port_num		: 4;
+	u8			rsvd2		: 4;
+	__be16			vport_number;
+	__be16			rsvd3;
+	__be16			gid_index;
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_gid_outbox {
+	struct golan_outbox_hdr	hdr;
+	u8			rsvd0[4];
+	__be16			gids_num;
+	u8			rsvd1[2];
+	__be32 		gid0[4];
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_pkey_inbox {
+	struct golan_inbox_hdr	hdr;
+	u8			other_vport	: 1;
+	u8			rsvd1		: 7;
+	u8			port_num		: 4;
+	u8			rsvd2		: 4;
+	__be16			vport_number;
+	__be16			rsvd3;
+	__be16			pkey_index;
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_pkey_data {
+	__be16			rsvd1;
+	__be16			pkey0;
+} __attribute ( ( packed ) );
+
+struct golan_query_hca_vport_pkey_outbox {
+	struct golan_outbox_hdr	hdr;
+	u8			rsvd[8];
+	struct golan_query_hca_vport_pkey_data *pkey_data;
+} __attribute ( ( packed ) );
 
 struct golan_eqe_comp {
 	__be32	reserved[6];
 	__be32	cqn;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_qp_srq {
 	__be32	reserved[6];
 	__be32	qp_srq_n;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_cq_err {
 	__be32	cqn;
 	u8	reserved1[7];
 	u8	syndrome;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_dropped_packet {
 };
@@ -537,28 +644,28 @@ struct golan_eqe_dropped_packet {
 struct golan_eqe_port_state {
 	u8	reserved0[8];
 	u8	port;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_gpio {
 	__be32	reserved0[2];
 	__be64	gpio_event;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_congestion {
 	u8	type;
 	u8	rsvd0;
 	u8	congestion_level;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_stall_vl {
 	u8	rsvd0[3];
 	u8	port_vl;
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_cmd {
 	__be32	vector;
 	__be32	rsvd[6];
-};
+} __attribute ( ( packed ) );
 
 struct golan_eqe_page_req {
 	u8		rsvd0[2];
@@ -566,7 +673,7 @@ struct golan_eqe_page_req {
 	u8		rsvd1[2];
 	__be16		num_pages;
 	__be32		rsvd2[5];
-};
+} __attribute ( ( packed ) );
 
 union ev_data {
 	__be32				raw[7];
@@ -598,24 +705,24 @@ struct golan_eqe {
 struct golan_alloc_pd_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	u8			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_alloc_pd_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	__be32			pdn;
 	u8			rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_dealloc_pd_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	__be32			pdn;
 	u8			rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_dealloc_pd_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 /* Memory key structures */
 #define GOLAN_IB_ACCESS_LOCAL_READ	(1 << 2)
@@ -644,7 +751,7 @@ struct golan_mkey_seg {
 	u8		rsvd3[3];
 	u8		log2_page_size;
 	u8		rsvd4[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_mkey_mbox_in_data {
 	struct golan_mkey_seg	seg;
@@ -653,31 +760,31 @@ struct golan_create_mkey_mbox_in_data {
 	__be32			bsf_coto_act_size;
 	u8			rsvd2[168];
 	__be64			pas[0];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_mkey_mbox_in {
 	struct golan_inbox_hdr			hdr;
 	__be32					input_mkey_index;
 	u8					rsvd0[4];
 	struct golan_create_mkey_mbox_in_data	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_mkey_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	__be32			mkey;
 	u8			rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_mkey_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	__be32			mkey;
 	u8			rsvd[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_mkey_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8			rsvd[8];
-};
+} __attribute ( ( packed ) );
 
 /* Completion Queue Structures */
 enum {
@@ -717,38 +824,38 @@ struct golan_cq_context {
 	__be32		producer_counter;
 	u8		rsvd48[8];
 	__be64		db_record_addr;
-};
+} __attribute ( ( packed ) );
 
 
 struct golan_create_cq_mbox_in_data	{
 	struct golan_cq_context	ctx;
 	u8						rsvd6[192];
 	__be64					pas[0];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_cq_mbox_in {
 	struct golan_inbox_hdr				hdr;
 	__be32								input_cqn;
 	u8									rsvdx[4];
 	struct golan_create_cq_mbox_in_data	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_cq_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	__be32					cqn;
 	u8						rsvd0[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_cq_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	__be32					cqn;
 	u8						rsvd0[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_cq_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8						rsvd0[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_err_cqe {
 	u8		rsvd0[32];
@@ -762,7 +869,7 @@ struct golan_err_cqe {
 	__be16	wqe_counter;
 	u8		signature;
 	u8		op_own;
-};
+} __attribute ( ( packed ) );
 
 struct golan_cqe64 {
 	u8		rsvd0[17];
@@ -780,7 +887,7 @@ struct golan_cqe64 {
 	__be16	wqe_counter;
 	u8		signature;
 	u8		op_own;
-};
+} __attribute ( ( packed ) );
 
 /* Queue Pair Structures */
 #define GOLAN_QP_CTX_ST_BIT			16
@@ -870,7 +977,7 @@ struct golan_qp_db {
 	__be16	recv_db;
 	u8		rsvd1[2];
 	__be16	send_db;
-};
+} __attribute ( ( packed ) );
 
 enum {
 	GOLAN_WQE_CTRL_CQ_UPDATE     = 2 << 2, /*Wissam, wtf?*/
@@ -884,7 +991,7 @@ struct golan_wqe_ctrl_seg {
 	u8			rsvd[2];
 	u8			fm_ce_se;
 	__be32		imm;
-};
+} __attribute ( ( packed ) );
 
 struct golan_av {
 	union {
@@ -903,23 +1010,23 @@ struct golan_av {
 	u8		hop_limit;
 	__be32	grh_gid_fl;
 	u8		rgid[16];
-};
+} __attribute ( ( packed ) );
 
 struct golan_wqe_data_seg {
 	__be32	byte_count;
 	__be32	lkey;
 	__be64	addr;
-};
+} __attribute ( ( packed ) );
 
 struct golan_wqe_signature_seg {
 	u8	rsvd0[4];
 	u8	signature;
 	u8	rsvd1[11];
-};
+} __attribute ( ( packed ) );
 
 struct golan_wqe_inline_seg {
 	__be32	byte_count;
-};
+} __attribute ( ( packed ) );
 
 struct golan_qp_path {
 	u8			fl;
@@ -939,39 +1046,8 @@ struct golan_qp_path {
 	u8			sl;
 	u8			port;
 	u8			rsvd2[6];
-};
-////////////////// Little Endian Defenition ////////////
-struct golan_qp_ctx_00 {
-	uint32_t	rsrvd0	:11,
-			pm_state:2,
-			rsrvd1	:3,
-			st	:8,	/*R QP C*/
-			rsrvd2	:4,
-			state	:4;
-};
+} __attribute ( ( packed ) );
 
-struct golan_qp_ctx_04 {
-	uint32_t	pd	:24,	/*R QP C*/
-			rsrvd0	:4,
-			latency	:1,
-			alwn	:1,
-			rsrvd1	:1,
-			wq_sig	:1;
-};
-
-struct golan_qp_ctx_08 {
-	uint32_t	rsrvd0	:4,
-			rlky	:1,	/*R QP C*/
-			log_strq:5,
-			rsrvd1	:2,
-			log_sq	:4,	/*R QP C*/
-			no_sq	:1,	/*R QP C*/
-			log_rq	:3,	/*R QP C*/
-			log_rqsz:4,	/*R QP C*/
-			log_msg	:5,
-			mtu	:3;
-};
-///////////////////////////////////////////////////////
 struct golan_qp_context {
 	__be32			flags;
 	__be32			flags_pd;
@@ -1010,7 +1086,7 @@ struct golan_qp_context {
 	u8			cs_res;
 	__be64			dc_access_key;
 	u8			rsvd1[24];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_qp_mbox_in_data {
 	__be32				opt_param_mask;
@@ -1018,73 +1094,73 @@ struct golan_create_qp_mbox_in_data {
 	struct golan_qp_context		ctx;
 	u8				rsvd3[16];
 	__be64				pas[0];
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_qp_mbox_in {
 	struct golan_inbox_hdr			hdr;
 	__be32					input_qpn;
 	u8					rsvd0[4];
 	struct golan_create_qp_mbox_in_data	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_create_qp_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	__be32			qpn;
 	u8			rsvd0[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_qp_mbox_in {
 	struct golan_inbox_hdr	hdr;
 	__be32			qpn;
 	u8			rsvd0[4];
-};
+} __attribute ( ( packed ) );
 
 struct golan_destroy_qp_mbox_out {
 	struct golan_outbox_hdr	hdr;
 	u8			rsvd0[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_modify_qp_mbox_in_data {
 	__be32			optparam;
 	u8			rsvd0[4];
 	struct golan_qp_context	ctx;
-};
+} __attribute ( ( packed ) );
 
 struct golan_modify_qp_mbox_in {
 	struct golan_inbox_hdr		hdr;
 	__be32				qpn;
 	u8				rsvd1[4];
 	struct golan_modify_qp_mbox_in_data	data;
-};
+} __attribute ( ( packed ) );
 
 struct golan_modify_qp_mbox_out {
 	struct golan_outbox_hdr		hdr;
 	u8				rsvd0[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_attach_mcg_mbox_in {
     struct golan_inbox_hdr	hdr;
     __be32          		qpn;
     __be32          		rsvd;
     u8          		gid[16];
-};
+} __attribute ( ( packed ) );
 
 struct golan_attach_mcg_mbox_out {
     struct golan_outbox_hdr	hdr;
     u8          		rsvf[8];
-};
+} __attribute ( ( packed ) );
 
 struct golan_detach_mcg_mbox_in {
     struct golan_inbox_hdr	hdr;
     __be32         		qpn;
     __be32          		rsvd;
     u8          		gid[16];
-};
+} __attribute ( ( packed ) );
 
 struct golan_detach_mcg_mbox_out {
     struct golan_outbox_hdr	hdr;
     u8          			rsvf[8];
-};
+} __attribute ( ( packed ) );
 
 
 #define MAILBOX_SIZE   sizeof(struct golan_cmd_prot_block)

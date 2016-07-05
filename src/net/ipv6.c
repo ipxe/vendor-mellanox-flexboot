@@ -34,6 +34,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
 #include <ipxe/ipstat.h>
 #include <ipxe/ndp.h>
 #include <ipxe/ipv6.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -87,13 +88,13 @@ static inline __attribute__ (( always_inline )) void
 ipv6_dump_miniroute ( struct ipv6_miniroute *miniroute ) {
 	struct net_device *netdev = miniroute->netdev;
 
-	DBGC ( netdev, "IPv6 %s has %s %s/%d", netdev->name,
+	DBGC_IPV6 ( netdev, "IPv6 %s has %s %s/%d", netdev->name,
 	       ( ( miniroute->flags & IPV6_HAS_ADDRESS ) ?
 		 "address" : "prefix" ),
 	       inet6_ntoa ( &miniroute->address ), miniroute->prefix_len );
 	if ( miniroute->flags & IPV6_HAS_ROUTER )
-		DBGC ( netdev, " router %s", inet6_ntoa ( &miniroute->router ));
-	DBGC ( netdev, "\n" );
+		DBGC_IPV6 ( netdev, " router %s", inet6_ntoa ( &miniroute->router ));
+	DBGC_IPV6 ( netdev, "\n" );
 }
 
 /**
@@ -355,9 +356,9 @@ static int ipv6_check_options ( struct ipv6_header *iphdr,
 
 	while ( option < end ) {
 		if ( ! IPV6_CAN_IGNORE_OPT ( option->type ) ) {
-			DBGC ( ipv6col ( &iphdr->src ), "IPv6 unrecognised "
+			DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 unrecognised "
 			       "option type %#02x:\n", option->type );
-			DBGC_HDA ( ipv6col ( &iphdr->src ), 0,
+			DBGC_HDA_IPV6 ( ipv6col ( &iphdr->src ), 0,
 				   options, len );
 			return -ENOTSUP_OPT;
 		}
@@ -506,7 +507,7 @@ static int ipv6_tx ( struct io_buffer *iobuf,
 		netdev = miniroute->netdev;
 	}
 	if ( ! netdev ) {
-		DBGC ( ipv6col ( &iphdr->dest ), "IPv6 has no route to %s\n",
+		DBGC_IPV6 ( ipv6col ( &iphdr->dest ), "IPv6 has no route to %s\n",
 		       inet6_ntoa ( &iphdr->dest ) );
 		ipv6_stats.out_no_routes++;
 		rc = -ENETUNREACH;
@@ -527,9 +528,9 @@ static int ipv6_tx ( struct io_buffer *iobuf,
 	}
 
 	/* Print IPv6 header for debugging */
-	DBGC2 ( ipv6col ( &iphdr->dest ), "IPv6 TX %s->",
+	DBGC2_IPV6 ( ipv6col ( &iphdr->dest ), "IPv6 TX %s->",
 		inet6_ntoa ( &iphdr->src ) );
-	DBGC2 ( ipv6col ( &iphdr->dest ), "%s len %zd next %d\n",
+	DBGC2_IPV6 ( ipv6col ( &iphdr->dest ), "%s len %zd next %d\n",
 		inet6_ntoa ( &iphdr->dest ), len, iphdr->next_header );
 
 	/* Calculate link-layer destination address, if possible */
@@ -538,7 +539,7 @@ static int ipv6_tx ( struct io_buffer *iobuf,
 		ipv6_stats.out_mcast_pkts++;
 		if ( ( rc = netdev->ll_protocol->mc_hash ( AF_INET6, next_hop,
 							   ll_dest_buf ) ) !=0){
-			DBGC ( ipv6col ( &iphdr->dest ), "IPv6 could not hash "
+			DBGC_IPV6 ( ipv6col ( &iphdr->dest ), "IPv6 could not hash "
 			       "multicast %s: %s\n", inet6_ntoa ( next_hop ),
 			       strerror ( rc ) );
 			goto err;
@@ -557,7 +558,7 @@ static int ipv6_tx ( struct io_buffer *iobuf,
 	if ( ll_dest ) {
 		if ( ( rc = net_tx ( iobuf, netdev, &ipv6_protocol, ll_dest,
 				     netdev->ll_addr ) ) != 0 ) {
-			DBGC ( ipv6col ( &iphdr->dest ), "IPv6 could not "
+			DBGC_IPV6 ( ipv6col ( &iphdr->dest ), "IPv6 could not "
 			       "transmit packet via %s: %s\n",
 			       netdev->name, strerror ( rc ) );
 			return rc;
@@ -565,7 +566,7 @@ static int ipv6_tx ( struct io_buffer *iobuf,
 	} else {
 		if ( ( rc = ndp_tx ( iobuf, netdev, next_hop, &iphdr->src,
 				     netdev->ll_addr ) ) != 0 ) {
-			DBGC ( ipv6col ( &iphdr->dest ), "IPv6 could not "
+			DBGC_IPV6 ( ipv6col ( &iphdr->dest ), "IPv6 could not "
 			       "transmit packet via %s: %s\n",
 			       netdev->name, strerror ( rc ) );
 			return rc;
@@ -621,7 +622,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 
 	/* Sanity check the IPv6 header */
 	if ( iob_len ( iobuf ) < sizeof ( *iphdr ) ) {
-		DBGC ( ipv6col ( &iphdr->src ), "IPv6 packet too short at %zd "
+		DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 packet too short at %zd "
 		       "bytes (min %zd bytes)\n", iob_len ( iobuf ),
 		       sizeof ( *iphdr ) );
 		rc = -EINVAL_LEN;
@@ -629,7 +630,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	}
 	if ( ( iphdr->ver_tc_label & htonl ( IPV6_MASK_VER ) ) !=
 	     htonl ( IPV6_VER ) ) {
-		DBGC ( ipv6col ( &iphdr->src ), "IPv6 version %#08x not "
+		DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 version %#08x not "
 		       "supported\n", ntohl ( iphdr->ver_tc_label ) );
 		rc = -ENOTSUP_VER;
 		goto err_header;
@@ -638,7 +639,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	/* Truncate packet to specified length */
 	len = ntohs ( iphdr->len );
 	if ( len > iob_len ( iobuf ) ) {
-		DBGC ( ipv6col ( &iphdr->src ), "IPv6 length too long at %zd "
+		DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 length too long at %zd "
 		       "bytes (packet is %zd bytes)\n", len, iob_len ( iobuf ));
 		ipv6_stats.in_truncated_pkts++;
 		rc = -EINVAL_LEN;
@@ -648,15 +649,15 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	hdrlen = sizeof ( *iphdr );
 
 	/* Print IPv6 header for debugging */
-	DBGC2 ( ipv6col ( &iphdr->src ), "IPv6 RX %s<-",
+	DBGC2_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 RX %s<-",
 		inet6_ntoa ( &iphdr->dest ) );
-	DBGC2 ( ipv6col ( &iphdr->src ), "%s len %zd next %d\n",
+	DBGC2_IPV6 ( ipv6col ( &iphdr->src ), "%s len %zd next %d\n",
 		inet6_ntoa ( &iphdr->src ), len, iphdr->next_header );
 
 	/* Discard unicast packets not destined for us */
 	if ( ( ! ( flags & LL_MULTICAST ) ) &&
 	     ( ! ipv6_has_addr ( netdev, &iphdr->dest ) ) ) {
-		DBGC ( ipv6col ( &iphdr->src ), "IPv6 discarding non-local "
+		DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 discarding non-local "
 		       "unicast packet for %s\n", inet6_ntoa ( &iphdr->dest ) );
 		ipv6_stats.in_addr_errors++;
 		rc = -EPIPE;
@@ -672,7 +673,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 		ext = ( iobuf->data + hdrlen );
 		extlen = sizeof ( ext->pad );
 		if ( iob_len ( iobuf ) < ( hdrlen + extlen ) ) {
-			DBGC ( ipv6col ( &iphdr->src ), "IPv6 too short for "
+			DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 too short for "
 			       "extension header type %d at %zd bytes (min "
 			       "%zd bytes)\n", this_header,
 			       ( iob_len ( iobuf ) - hdrlen ), extlen );
@@ -693,7 +694,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 			break;
 		}
 		if ( iob_len ( iobuf ) < ( hdrlen + extlen ) ) {
-			DBGC ( ipv6col ( &iphdr->src ), "IPv6 too short for "
+			DBGC_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 too short for "
 			       "extension header type %d at %zd bytes (min "
 			       "%zd bytes)\n", this_header,
 			       ( iob_len ( iobuf ) - hdrlen ), extlen );
@@ -702,9 +703,9 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 		}
 		hdrlen += extlen;
 		next_header = ext->common.next_header;
-		DBGC2 ( ipv6col ( &iphdr->src ), "IPv6 RX %s<-",
+		DBGC2_IPV6 ( ipv6col ( &iphdr->src ), "IPv6 RX %s<-",
 			inet6_ntoa ( &iphdr->dest ) );
-		DBGC2 ( ipv6col ( &iphdr->src ), "%s ext type %d len %zd next "
+		DBGC2_IPV6 ( ipv6col ( &iphdr->src ), "%s ext type %d len %zd next "
 			"%d\n", inet6_ntoa ( &iphdr->src ), this_header,
 			extlen, next_header );
 
@@ -746,7 +747,7 @@ static int ipv6_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 					 next_header, TCPIP_EMPTY_CSUM );
 	if ( ( rc = tcpip_rx ( iobuf, netdev, next_header, &src.st, &dest.st,
 			       pshdr_csum, &ipv6_stats ) ) != 0 ) {
-		DBGC ( ipv6col ( &src.sin6.sin6_addr ), "IPv6 received packet "
+		DBGC_IPV6 ( ipv6col ( &src.sin6.sin6_addr ), "IPv6 received packet "
 				"rejected by stack: %s\n", strerror ( rc ) );
 		return rc;
 	}
@@ -784,7 +785,7 @@ int inet6_aton ( const char *string, struct in6_addr *in ) {
 		/* Parse current word */
 		value = strtoul ( nptr, &endptr, 16 );
 		if ( value > 0xffff ) {
-			DBG ( "IPv6 invalid word value %#lx in \"%s\"\n",
+			DBG_IPV6 ( "IPv6 invalid word value %#lx in \"%s\"\n",
 			      value, string );
 			return -EINVAL;
 		}
@@ -794,13 +795,13 @@ int inet6_aton ( const char *string, struct in6_addr *in ) {
 		if ( ! *endptr )
 			break;
 		if ( *endptr != ':' ) {
-			DBG ( "IPv6 invalid separator '%c' in \"%s\"\n",
+			DBG_IPV6 ( "IPv6 invalid separator '%c' in \"%s\"\n",
 			      *endptr, string );
 			return -EINVAL;
 		}
 		if ( ( endptr == nptr ) && ( nptr != string ) ) {
 			if ( pad ) {
-				DBG ( "IPv6 invalid multiple \"::\" in "
+				DBG_IPV6 ( "IPv6 invalid multiple \"::\" in "
 				      "\"%s\"\n", string );
 				return -EINVAL;
 			}
@@ -810,7 +811,7 @@ int inet6_aton ( const char *string, struct in6_addr *in ) {
 
 		/* Check for overrun */
 		if ( word == end ) {
-			DBG ( "IPv6 too many words in \"%s\"\n", string );
+			DBG_IPV6 ( "IPv6 too many words in \"%s\"\n", string );
 			return -EINVAL;
 		}
 	}
@@ -822,7 +823,7 @@ int inet6_aton ( const char *string, struct in6_addr *in ) {
 		memmove ( ( ( ( void * ) pad ) + pad_len ), pad, move_len );
 		memset ( pad, 0, pad_len );
 	} else if ( word != end ) {
-		DBG ( "IPv6 underlength address \"%s\"\n", string );
+		DBG_IPV6 ( "IPv6 underlength address \"%s\"\n", string );
 		return -EINVAL;
 	}
 
@@ -1078,7 +1079,7 @@ static int ipv6_probe ( struct net_device *netdev ) {
 	prefix_len = ipv6_link_local ( &address, netdev );
 	if ( prefix_len < 0 ) {
 		rc = prefix_len;
-		DBGC ( netdev, "IPv6 %s could not construct link-local "
+		DBGC_IPV6 ( netdev, "IPv6 %s could not construct link-local "
 		       "address: %s\n", netdev->name, strerror ( rc ) );
 		return rc;
 	}

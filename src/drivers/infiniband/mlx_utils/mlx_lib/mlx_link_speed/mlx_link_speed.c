@@ -128,8 +128,16 @@ mlx_get_max_speed(
 	if ( type == LINK_SPEED_ETH ) {
 		if ( link_speed.eth_proto_capability & LINK_SPEED_100GB_MASK ) {
 			speed_giga = 100;
+		} else if ( link_speed.eth_proto_capability & LINK_SPEED_56GB_MASK ) {
+			speed_giga = 56;
+		} else if ( link_speed.eth_proto_capability & LINK_SPEED_50GB_MASK ) {
+			speed_giga = 50;
 		} else if ( link_speed.eth_proto_capability & LINK_SPEED_40GB_MASK ) {
 			speed_giga = 40;
+		} else if (link_speed.eth_proto_capability & LINK_SPEED_25GB_MASK) {
+			speed_giga = 25;
+		} else if ( link_speed.eth_proto_capability & LINK_SPEED_20GB_MASK ) {
+			speed_giga = 20;
 		} else if ( link_speed.eth_proto_capability & LINK_SPEED_10GB_MASK) {
 			speed_giga = 10;
 		} else if ( link_speed.eth_proto_capability & LINK_SPEED_1GB_MASK ) {

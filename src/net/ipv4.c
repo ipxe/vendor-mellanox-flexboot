@@ -41,6 +41,7 @@
 #include <ipxe/fragment.h>
 #include <ipxe/ipstat.h>
 #include <ipxe/profile.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -86,16 +87,16 @@ add_ipv4_miniroute ( struct net_device *netdev, struct in_addr address,
 		     struct in_addr netmask, struct in_addr gateway ) {
 	struct ipv4_miniroute *miniroute;
 
-	DBGC ( netdev, "IPv4 add %s", inet_ntoa ( address ) );
-	DBGC ( netdev, "/%s ", inet_ntoa ( netmask ) );
+	DBGC_IPV4 ( netdev, "IPv4 add %s", inet_ntoa ( address ) );
+	DBGC_IPV4 ( netdev, "/%s ", inet_ntoa ( netmask ) );
 	if ( gateway.s_addr )
-		DBGC ( netdev, "gw %s ", inet_ntoa ( gateway ) );
-	DBGC ( netdev, "via %s\n", netdev->name );
+		DBGC_IPV4 ( netdev, "gw %s ", inet_ntoa ( gateway ) );
+	DBGC_IPV4 ( netdev, "via %s\n", netdev->name );
 
 	/* Allocate and populate miniroute structure */
 	miniroute = malloc ( sizeof ( *miniroute ) );
 	if ( ! miniroute ) {
-		DBGC ( netdev, "IPv4 could not add miniroute\n" );
+		DBGC_IPV4 ( netdev, "IPv4 could not add miniroute\n" );
 		return NULL;
 	}
 
@@ -104,7 +105,7 @@ add_ipv4_miniroute ( struct net_device *netdev, struct in_addr address,
 	miniroute->address = address;
 	miniroute->netmask = netmask;
 	miniroute->gateway = gateway;
-		
+
 	/* Add to end of list if we have a gateway, otherwise
 	 * to start of list.
 	 */
@@ -125,11 +126,11 @@ add_ipv4_miniroute ( struct net_device *netdev, struct in_addr address,
 static void del_ipv4_miniroute ( struct ipv4_miniroute *miniroute ) {
 	struct net_device *netdev = miniroute->netdev;
 
-	DBGC ( netdev, "IPv4 del %s", inet_ntoa ( miniroute->address ) );
-	DBGC ( netdev, "/%s ", inet_ntoa ( miniroute->netmask ) );
+	DBGC_IPV4 ( netdev, "IPv4 del %s", inet_ntoa ( miniroute->address ) );
+	DBGC_IPV4 ( netdev, "/%s ", inet_ntoa ( miniroute->netmask ) );
 	if ( miniroute->gateway.s_addr )
-		DBGC ( netdev, "gw %s ", inet_ntoa ( miniroute->gateway ) );
-	DBGC ( netdev, "via %s\n", miniroute->netdev->name );
+		DBGC_IPV4 ( netdev, "gw %s ", inet_ntoa ( miniroute->gateway ) );
+	DBGC_IPV4 ( netdev, "via %s\n", miniroute->netdev->name );
 
 	netdev_put ( miniroute->netdev );
 	list_del ( &miniroute->list );
@@ -342,7 +343,7 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 		netdev = miniroute->netdev;
 	}
 	if ( ! netdev ) {
-		DBGC ( sin_dest->sin_addr, "IPv4 has no route to %s\n",
+		DBGC_IPV4 ( sin_dest->sin_addr, "IPv4 has no route to %s\n",
 		       inet_ntoa ( iphdr->dest ) );
 		ipv4_stats.out_no_routes++;
 		rc = -ENETUNREACH;
@@ -366,8 +367,8 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 	iphdr->chksum = tcpip_chksum ( iphdr, sizeof ( *iphdr ) );
 
 	/* Print IP4 header for debugging */
-	DBGC2 ( sin_dest->sin_addr, "IPv4 TX %s->", inet_ntoa ( iphdr->src ) );
-	DBGC2 ( sin_dest->sin_addr, "%s len %d proto %d id %04x csum %04x\n",
+	DBGC2_IPV4 ( sin_dest->sin_addr, "IPv4 TX %s->", inet_ntoa ( iphdr->src ) );
+	DBGC2_IPV4 ( sin_dest->sin_addr, "%s len %d proto %d id %04x csum %04x\n",
 		inet_ntoa ( iphdr->dest ), ntohs ( iphdr->len ),
 		iphdr->protocol, ntohs ( iphdr->ident ),
 		ntohs ( iphdr->chksum ) );
@@ -382,7 +383,7 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 		ipv4_stats.out_mcast_pkts++;
 		if ( ( rc = netdev->ll_protocol->mc_hash ( AF_INET, &next_hop,
 							   ll_dest_buf ) ) !=0){
-			DBGC ( sin_dest->sin_addr, "IPv4 could not hash "
+			DBGC_IPV4 ( sin_dest->sin_addr, "IPv4 could not hash "
 			       "multicast %s: %s\n",
 			       inet_ntoa ( next_hop ), strerror ( rc ) );
 			goto err;
@@ -401,7 +402,7 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 	if ( ll_dest ) {
 		if ( ( rc = net_tx ( iobuf, netdev, &ipv4_protocol, ll_dest,
 				     netdev->ll_addr ) ) != 0 ) {
-			DBGC ( sin_dest->sin_addr, "IPv4 could not transmit "
+			DBGC_IPV4 ( sin_dest->sin_addr, "IPv4 could not transmit "
 			       "packet via %s: %s\n",
 			       netdev->name, strerror ( rc ) );
 			return rc;
@@ -409,7 +410,7 @@ static int ipv4_tx ( struct io_buffer *iobuf,
 	} else {
 		if ( ( rc = arp_tx ( iobuf, netdev, &ipv4_protocol, &next_hop,
 				     &iphdr->src, netdev->ll_addr ) ) != 0 ) {
-			DBGC ( sin_dest->sin_addr, "IPv4 could not transmit "
+			DBGC_IPV4 ( sin_dest->sin_addr, "IPv4 could not transmit "
 			       "packet via %s: %s\n",
 			       netdev->name, strerror ( rc ) );
 			return rc;
@@ -503,39 +504,39 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 
 	/* Sanity check the IPv4 header */
 	if ( iob_len ( iobuf ) < sizeof ( *iphdr ) ) {
-		DBGC ( iphdr->src, "IPv4 packet too short at %zd bytes (min "
+		DBGC_IPV4 ( iphdr->src, "IPv4 packet too short at %zd bytes (min "
 		       "%zd bytes)\n", iob_len ( iobuf ), sizeof ( *iphdr ) );
 		goto err_header;
 	}
 	if ( ( iphdr->verhdrlen & IP_MASK_VER ) != IP_VER ) {
-		DBGC ( iphdr->src, "IPv4 version %#02x not supported\n",
+		DBGC_IPV4 ( iphdr->src, "IPv4 version %#02x not supported\n",
 		       iphdr->verhdrlen );
 		goto err_header;
 	}
 	hdrlen = ( ( iphdr->verhdrlen & IP_MASK_HLEN ) * 4 );
 	if ( hdrlen < sizeof ( *iphdr ) ) {
-		DBGC ( iphdr->src, "IPv4 header too short at %zd bytes (min "
+		DBGC_IPV4 ( iphdr->src, "IPv4 header too short at %zd bytes (min "
 		       "%zd bytes)\n", hdrlen, sizeof ( *iphdr ) );
 		goto err_header;
 	}
 	if ( hdrlen > iob_len ( iobuf ) ) {
-		DBGC ( iphdr->src, "IPv4 header too long at %zd bytes "
+		DBGC_IPV4 ( iphdr->src, "IPv4 header too long at %zd bytes "
 		       "(packet is %zd bytes)\n", hdrlen, iob_len ( iobuf ) );
 		goto err_header;
 	}
 	if ( ( csum = tcpip_chksum ( iphdr, hdrlen ) ) != 0 ) {
-		DBGC ( iphdr->src, "IPv4 checksum incorrect (is %04x "
+		DBGC_IPV4 ( iphdr->src, "IPv4 checksum incorrect (is %04x "
 		       "including checksum field, should be 0000)\n", csum );
 		goto err_header;
 	}
 	len = ntohs ( iphdr->len );
 	if ( len < hdrlen ) {
-		DBGC ( iphdr->src, "IPv4 length too short at %zd bytes "
+		DBGC_IPV4 ( iphdr->src, "IPv4 length too short at %zd bytes "
 		       "(header is %zd bytes)\n", len, hdrlen );
 		goto err_header;
 	}
 	if ( len > iob_len ( iobuf ) ) {
-		DBGC ( iphdr->src, "IPv4 length too long at %zd bytes "
+		DBGC_IPV4 ( iphdr->src, "IPv4 length too long at %zd bytes "
 		       "(packet is %zd bytes)\n", len, iob_len ( iobuf ) );
 		ipv4_stats.in_truncated_pkts++;
 		goto err_other;
@@ -545,8 +546,8 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 	iob_unput ( iobuf, ( iob_len ( iobuf ) - len ) );
 
 	/* Print IPv4 header for debugging */
-	DBGC2 ( iphdr->src, "IPv4 RX %s<-", inet_ntoa ( iphdr->dest ) );
-	DBGC2 ( iphdr->src, "%s len %d proto %d id %04x csum %04x\n",
+	DBGC2_IPV4 ( iphdr->src, "IPv4 RX %s<-", inet_ntoa ( iphdr->dest ) );
+	DBGC2_IPV4 ( iphdr->src, "%s len %d proto %d id %04x csum %04x\n",
 		inet_ntoa ( iphdr->src ), ntohs ( iphdr->len ), iphdr->protocol,
 		ntohs ( iphdr->ident ), ntohs ( iphdr->chksum ) );
 
@@ -554,7 +555,7 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 	if ( ( ! ( flags & LL_MULTICAST ) ) &&
 	     ipv4_has_any_addr ( netdev ) &&
 	     ( ! ipv4_has_addr ( netdev, iphdr->dest ) ) ) {
-		DBGC ( iphdr->src, "IPv4 discarding non-local unicast packet "
+		DBGC_IPV4 ( iphdr->src, "IPv4 discarding non-local unicast packet "
 		       "for %s\n", inet_ntoa ( iphdr->dest ) );
 		ipv4_stats.in_addr_errors++;
 		goto err_other;
@@ -585,7 +586,7 @@ static int ipv4_rx ( struct io_buffer *iobuf,
 	iob_pull ( iobuf, hdrlen );
 	if ( ( rc = tcpip_rx ( iobuf, netdev, iphdr->protocol, &src.st,
 			       &dest.st, pshdr_csum, &ipv4_stats ) ) != 0 ) {
-		DBGC ( src.sin.sin_addr, "IPv4 received packet rejected by "
+		DBGC_IPV4 ( src.sin.sin_addr, "IPv4 received packet rejected by "
 		       "stack: %s\n", strerror ( rc ) );
 		return rc;
 	}

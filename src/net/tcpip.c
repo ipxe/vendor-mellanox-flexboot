@@ -8,6 +8,7 @@
 #include <ipxe/ipstat.h>
 #include <ipxe/netdevice.h>
 #include <ipxe/tcpip.h>
+#include "flex_debug_log.h"
 
 /** @file
  *
@@ -46,14 +47,14 @@ int tcpip_rx ( struct io_buffer *iobuf, struct net_device *netdev,
 	/* Hand off packet to the appropriate transport-layer protocol */
 	for_each_table_entry ( tcpip, TCPIP_PROTOCOLS ) {
 		if ( tcpip->tcpip_proto == tcpip_proto ) {
-			DBG ( "TCP/IP received %s packet\n", tcpip->name );
+			DBG_TCPIP ( "TCP/IP received %s packet\n", tcpip->name );
 			stats->in_delivers++;
 			return tcpip->rx ( iobuf, netdev, st_src, st_dest,
 					   pshdr_csum );
 		}
 	}
 
-	DBG ( "Unrecognised TCP/IP protocol %d\n", tcpip_proto );
+	DBG_TCPIP ( "Unrecognised TCP/IP protocol %d\n", tcpip_proto );
 	stats->in_unknown_protos++;
 	free_iob ( iobuf );
 	return -EPROTONOSUPPORT;
@@ -73,7 +74,7 @@ struct tcpip_net_protocol * tcpip_net_protocol ( sa_family_t sa_family ) {
 			return tcpip_net;
 	}
 
-	DBG ( "Unrecognised TCP/IP address family %d\n", sa_family );
+	DBG_TCPIP ( "Unrecognised TCP/IP address family %d\n", sa_family );
 	return NULL;
 }
 
@@ -96,7 +97,7 @@ int tcpip_tx ( struct io_buffer *iobuf, struct tcpip_protocol *tcpip_protocol,
 	/* Hand off packet to the appropriate network-layer protocol */
 	tcpip_net = tcpip_net_protocol ( st_dest->st_family );
 	if ( tcpip_net ) {
-		DBG ( "TCP/IP sending %s packet\n", tcpip_net->name );
+		DBG_TCPIP ( "TCP/IP sending %s packet\n", tcpip_net->name );
 		return tcpip_net->tx ( iobuf, tcpip_protocol, st_src, st_dest,
 				       netdev, trans_csum );
 	}

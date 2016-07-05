@@ -734,8 +734,8 @@ $(DBGCOL_LIST) : $(MAKEDEPS)
 VERYCLEANUP += $(DBGCOL_LIST)
 
 DBGCOL_COLOURS := $(subst -, ,$(DBGCOL))
-DBGCOL_MIN := $(word 1,$(DBGCOL_COLOURS))
-DBGCOL_MAX := $(word 2,$(DBGCOL_COLOURS))
+DBGCOL_MIN := $(firstword $(DBGCOL_COLOURS))
+DBGCOL_MAX := $(lastword $(DBGCOL_COLOURS))
 
 debug_DEPS += $(DBGCOL_LIST)
 
@@ -960,13 +960,13 @@ DRIVERS_ipxe	= $(DRIVERS_net) $(DRIVERS_infiniband) \
 # TGT_DRIVERS  : the driver for each element (e.g. "rtl8139 prism2_pci")
 # TGT_ROM_NAME : the ROM name (e.g. "dfe538")
 #
-CARD_DRIVER	= $(firstword $(DRIVER_$(1)) $(1))
 TGT_ELEMENTS	= $(subst --, ,$(firstword $(subst ., ,$(notdir $@))))
 TGT_ROM_NAME	= $(firstword $(TGT_ELEMENTS))
-TGT_DRIVERS	= $(strip $(if $(DRIVERS_$(TGT_ROM_NAME)), \
-			       $(DRIVERS_$(TGT_ROM_NAME)), \
-			       $(foreach TGT_ELEMENT,$(TGT_ELEMENTS), \
-			         $(call CARD_DRIVER,$(TGT_ELEMENT))) ))
+TGT_DRIVERS	= $(strip $(foreach TGT_ELEMENT,$(TGT_ELEMENTS), \
+				    $(if $(DRIVERS_$(TGT_ELEMENT)), \
+					 $(DRIVERS_$(TGT_ELEMENT)), \
+					 $(firstword $(DRIVER_$(TGT_ELEMENT)) \
+						     $(TGT_ELEMENT)))))
 TGT_PREFIX_NAME	= $(word 2,$(subst ., ,$(notdir $@)))
 TGT_PREFIX	= $(strip $(if $(filter rom,$(TGT_PREFIX_NAME)), \
 			       $(ROM_TYPE_$(TGT_ROM_NAME))rom, \
@@ -1005,7 +1005,7 @@ TGT_LD_ENTRY	= _$(TGT_PREFIX)_start
 #		  --defsym pci_vendor=0x1186 --defsym pci_device=0x1300")
 #
 TGT_LD_FLAGS	= $(foreach SYM,$(TGT_LD_ENTRY) $(TGT_LD_DRIVERS) \
-		    $(TGT_LD_DEVLIST) obj_config,\
+		    $(TGT_LD_DEVLIST) obj_config obj_config_$(PLATFORM),\
 		    -u $(SYM) --defsym check_$(SYM)=$(SYM) ) \
 		  $(patsubst %,--defsym %,$(TGT_LD_IDS)) \
 		  -e $(TGT_LD_ENTRY)
